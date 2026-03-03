@@ -669,25 +669,33 @@ class RegimeMasterBot:
                 of_sig = self._orderflow.get_signal(symbol, df_15m)
                 if of_sig is not None:
                     orderflow_score = of_sig.score
-                    # Export detailed metrics for dashboard
+                    # Export detailed metrics for dashboard (v2 — multi-exchange + OB)
                     self._coin_states[symbol]["orderflow_details"] = {
                         "score": round(of_sig.score, 2),
                         "imbalance": round(of_sig.book_imbalance, 2),
                         "taker_buy_ratio": round(of_sig.taker_buy_ratio, 2),
                         "cumulative_delta": round(of_sig.cumulative_delta, 2),
                         "ls_ratio": round(of_sig.ls_ratio, 2),
+                        "exchange_count": of_sig.exchange_count,
+                        "aggregated_bid_usd": round(of_sig.aggregated_bid_usd, 0),
+                        "aggregated_ask_usd": round(of_sig.aggregated_ask_usd, 0),
                         "bid_walls": [
-                            {"price": w.price, "size": w.size_usd, "multiple": round(w.multiple, 1)} 
+                            {"price": w.price, "size": w.size_usd, "multiple": round(w.multiple, 1), "exchange": w.exchange} 
                             for w in of_sig.bid_walls
                         ],
                         "ask_walls": [
-                            {"price": w.price, "size": w.size_usd, "multiple": round(w.multiple, 1)} 
+                            {"price": w.price, "size": w.size_usd, "multiple": round(w.multiple, 1), "exchange": w.exchange} 
                             for w in of_sig.ask_walls
-                        ]
+                        ],
+                        "order_blocks": [ob.to_dict() for ob in of_sig.order_blocks],
+                        "nearest_bullish_ob": of_sig.nearest_bullish_ob,
+                        "nearest_bearish_ob": of_sig.nearest_bearish_ob,
                     }
 
                     if of_sig.bid_walls or of_sig.ask_walls:
                         logger.info("🧱 %s order walls: %s", symbol, of_sig.note)
+                    if of_sig.order_blocks:
+                        logger.info("📦 %s order blocks: %d detected", symbol, len(of_sig.order_blocks))
             except Exception as _oe:
                 logger.debug("OrderFlow fetch failed for %s: %s", symbol, _oe)
 
@@ -975,30 +983,36 @@ class RegimeMasterBot:
             logger.debug("Failed to save multi_bot_state during sync: %s", e)
 
     def _get_orderflow_stats(self) -> dict:
-        """Aggregate order flow stats for dashboard (Whale Walls, Inst. Flow)."""
+        """Aggregate order flow stats for dashboard (Whale Walls, Inst. Flow, OBs)."""
         if not self._orderflow:
             return {}
         
-        # We need to peek into the engine's cache or track it manually
-        # Since _orderflow is separate, let's just do a best-effort scan of cached coin_states for now
-        # OR better: Add a helper in OrderFlowEngine. For now, I'll iterate known symbols.
-        
         walls_count = 0
         inst_flow_count = 0
+        total_exchanges = 0
+        total_order_blocks = 0
+        total_agg_bid_usd = 0.0
+        total_agg_ask_usd = 0.0
         
         # Scan recently analyzed coins
         for sym in self._coin_states.keys():
             sig = self._orderflow.get_signal(sym)
             if sig:
-                # Count raw walls
                 walls_count += len(sig.bid_walls) + len(sig.ask_walls)
-                # Count "Institution Flow" signals (strong taker ratio or large cumulative delta)
                 if abs(sig.cumulative_delta) > 0.5 or abs(sig.taker_buy_ratio - 0.5) > 0.1:
                     inst_flow_count += 1
-                    
+                total_exchanges = max(total_exchanges, sig.exchange_count)
+                total_order_blocks += len(sig.order_blocks)
+                total_agg_bid_usd += sig.aggregated_bid_usd
+                total_agg_ask_usd += sig.aggregated_ask_usd
+                
         return {
             "WhaleWalls": walls_count,
-            "Institutional": inst_flow_count
+            "Institutional": inst_flow_count,
+            "exchange_count": total_exchanges,
+            "order_blocks_detected": total_order_blocks,
+            "agg_bid_usd": round(total_agg_bid_usd, 0),
+            "agg_ask_usd": round(total_agg_ask_usd, 0),
         }
 
     # ─── State Persistence ───────────────────────────────────────────────────

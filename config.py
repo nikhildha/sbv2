@@ -173,6 +173,13 @@ ORDERFLOW_LOOKBACK_BARS    = 4         # Bars of 15m taker data to sum for cumul
 ORDERFLOW_LS_ENABLED       = True      # Include L/S ratio from Binance futures
 ORDERFLOW_LARGE_ORDER_USD  = 50_000    # USD threshold to flag a single order as "large"
 
+# ─── Multi-Exchange Aggregation ──────────────────────────────────────────────
+ORDERFLOW_MULTI_EXCHANGE     = True      # Aggregate from Binance + OKX + Bybit
+ORDERFLOW_OB_DETECTION       = True      # Enable order block detection
+ORDERFLOW_OB_LOOKBACK_CANDLES = 100      # 1h candles to scan for OBs
+ORDERFLOW_OB_IMPULSE_SIGMA   = 1.5      # Min σ move to qualify as impulse
+ORDERFLOW_OB_PROXIMITY_PCT   = 0.005    # 0.5% — how close price must be to OB zone
+
 # ─── Conviction Score Weights (must sum to 100) ───────────────────────────────
 CONVICTION_WEIGHT_HMM       = 22   # HMM regime confidence
 CONVICTION_WEIGHT_BTC_MACRO = 18   # BTC macro regime alignment
