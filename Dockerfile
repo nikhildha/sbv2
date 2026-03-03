@@ -17,7 +17,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY web-dashboard/package*.json ./web-dashboard/
 RUN cd web-dashboard && npm install --production
 
-# ── Copy all source code ─────────────────────────────────────────────
+# ── Copy all source code (ARG busts Docker cache on each deploy) ─────
+ARG CACHEBUST=1
 COPY . .
 
 # ── Make startup script executable ───────────────────────────────────
