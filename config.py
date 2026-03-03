@@ -75,24 +75,14 @@ DEFAULT_QUANTITY = 0.002      # BTC quantity (overridden by position sizer)
 MARGIN_TYPE = "ISOLATED"      # Never use CROSS for high leverage
 
 # ─── Stop Loss / Take Profit ────────────────────────────────────────────────────
-ATR_SL_MULTIPLIER = 1.5       # SL = ATR * multiplier (DEFAULT, used as fallback)
-ATR_TP_MULTIPLIER = 3.0       # TP = ATR * multiplier (DEFAULT, used as fallback)
+ATR_SL_MULTIPLIER = 0.8       # SL = 0.8 × ATR (fixed, per user spec)
+ATR_TP_MULTIPLIER = 1.0       # TP = 1.0 × ATR (fixed, per user spec)
 SLIPPAGE_BUFFER = 0.0005      # 0.05% slippage estimate
 
 def get_atr_multipliers(leverage=1):
-    """Return (sl_mult, tp_mult) adjusted for leverage.
-    Higher leverage → tighter SL/TP to keep effective portfolio risk consistent.
-    Always maintains 1:2 risk-reward ratio."""
-    if leverage >= 50:
-        return (0.5, 1.0)
-    elif leverage >= 25:
-        return (0.7, 1.4)
-    elif leverage >= 10:
-        return (1.0, 2.0)
-    elif leverage >= 5:
-        return (1.2, 2.4)
-    else:  # 1-4x
-        return (ATR_SL_MULTIPLIER, ATR_TP_MULTIPLIER)
+    """Return fixed (sl_mult, tp_mult) — 0.8×ATR SL, 1.0×ATR TP.
+    Previously leverage-tiered; now fixed per user request."""
+    return (ATR_SL_MULTIPLIER, ATR_TP_MULTIPLIER)
 
 # ─── Trailing SL / TP ──────────────────────────────────────────────────────────
 TRAILING_SL_ENABLED = True

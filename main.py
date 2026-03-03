@@ -11,7 +11,7 @@ from datetime import datetime
 
 import config
 from hmm_brain import HMMBrain
-from data_pipeline import fetch_klines, get_multi_timeframe_data
+from data_pipeline import fetch_klines, get_multi_timeframe_data, _get_binance_client
 from feature_engine import compute_all_features, compute_hmm_features
 from execution_engine import ExecutionEngine
 from risk_manager import RiskManager
@@ -535,6 +535,22 @@ class RegimeMasterBot:
             }
         except Exception:
             pass
+        # Fetch real Binance 24h volume for this coin
+        _volume_24h = 0.0
+        try:
+            client = _get_binance_client()
+            ticker = client.get_ticker(symbol=symbol)
+            _volume_24h = round(float(ticker.get("quoteVolume", 0)), 2)
+        except Exception:
+            # Fallback: compute from 1h candles
+            try:
+                vol_col = "volume" if "volume" in df_1h_feat.columns else None
+                if vol_col:
+                    close_col = df_1h_feat["close"].tail(24)
+                    vol_vals = df_1h_feat[vol_col].tail(24)
+                    _volume_24h = round(float((close_col * vol_vals).sum()), 2)
+            except Exception:
+                pass
 
         self._coin_states[symbol] = {
             "symbol": symbol,
@@ -544,6 +560,7 @@ class RegimeMasterBot:
             "action": "ANALYZING",
             "macro_regime": macro_regime_name,
             "features": _features,
+            "volume_24h": _volume_24h,
         }
 
         # ── CRASH on either timeframe → skip ──

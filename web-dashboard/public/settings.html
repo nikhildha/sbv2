@@ -448,10 +448,10 @@
         </div>
         <nav class="header-nav">
             <a href="/" class="nav-link">Dashboard</a>
-            <a href="/intelligence" class="nav-link">Intelligence</a>
             <a href="/tradebook" class="nav-link">Tradebook</a>
             <a href="/charts" class="nav-link">Charts</a>
             <a href="/backtest" class="nav-link">Backtest</a>
+            <a href="/intelligence" class="nav-link">Intelligence</a>
             <a href="/deploy" class="nav-link">Deploy</a>
             <a href="/settings" class="nav-link active">Settings</a>
         </nav>
@@ -2180,16 +2180,19 @@
                                             <span class="status-pill offline" id="apiStatusPillOff">
                                                 <span class="dot"></span> Offline
                                             </span>
-                                            <span style="font-size:12px;color:var(--text-tertiary);" id="apiLatency">— ms</span>
+                                            <span style="font-size:12px;color:var(--text-tertiary);" id="apiLatency">—
+                                                ms</span>
                                         </div>
                                     </td>
                                 </tr>
                                 <tr>
                                     <td>Wallet Balance</td>
                                     <td>
-                                        <div style="font-size:18px;font-weight:700;color:var(--text-primary);" id="apiBalance">—
+                                        <div style="font-size:18px;font-weight:700;color:var(--text-primary);"
+                                            id="apiBalance">—
                                         </div>
-                                        <div style="font-size:11px;color:var(--text-secondary);">Available USDT / INR</div>
+                                        <div style="font-size:11px;color:var(--text-secondary);">Available USDT / INR
+                                        </div>
                                     </td>
                                 </tr>
                                 <tr>
@@ -2204,472 +2207,473 @@
                             </tbody>
                         </table>
                     </div>
-        
+
                     <div
                         style="background:var(--bg-card-alt);padding:20px;border-radius:12px;display:flex;align-items:center;justify-content:space-between;">
                         <div>
-                            <div style="font-size:14px;font-weight:700;color:var(--text-primary);">Global Bot Control</div>
+                            <div style="font-size:14px;font-weight:700;color:var(--text-primary);">Global Bot Control
+                            </div>
                             <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">Master switch to
                                 Pause/Resume trading
                                 loop</div>
-                                        </div>
-                                        <label class="switch">
-                                            <input type="checkbox" id="botMasterSwitch" checked onchange="toggleBot(this)">
-                                            <span class="slider round"></span>
-                                        </label>
-                                        </div>
-                                        </div>
-                                        </div>
-                                        </div>
-                                        
-                                        </main>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="botMasterSwitch" checked onchange="toggleBot(this)">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-    <!-- ═══ Dynamic Config Loader ═══ -->
-    <script>
-        // ═══════════════════════════════════════════════════════════════════
-        //  TAB SWITCHING
-        // ═══════════════════════════════════════════════════════════════════
-        function switchTab(tabId, btn) {
-            document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById('tab-' + tabId).classList.add('active');
-            btn.classList.add('active');
-        }
+        </main>
 
-        (async function loadConfig() {
-            try {
-                const res = await fetch('/api/config');
-                const cfg = await res.json();
-                if (cfg.error) throw new Error(cfg.error);
-
-                document.querySelectorAll('[data-cfg]').forEach(el => {
-                    const key = el.dataset.cfg;
-                    const fmt = el.dataset.fmt || '';
-                    let val = cfg[key];
-                    if (val === undefined) return;
-
-                    if (fmt === 'x') val = val + '×';
-                    else if (fmt === 'pct') {
-                        const pv = val <= 1 && val > 0 ? val * 100 : val;
-                        val = (pv % 1 === 0 ? pv.toFixed(0) : pv < 1 ? pv.toFixed(2) : pv.toFixed(1)) + '%';
-                    }
-                    else if (fmt === 'pctval') val = val + '%';
-                    else if (fmt === 's') val = val + 's';
-                    else if (fmt === '$') val = '$' + Number(val).toLocaleString();
-                    else if (fmt === 'bool') val = val ? 'true' : 'false';
-
-                    el.textContent = val;
-                });
-
-                document.getElementById('configStatus').textContent = '✅ Live from config.py';
-                document.getElementById('configStatus').style.color = '#22C55E';
-            } catch (e) {
-                console.error('Failed to load config:', e);
-                document.getElementById('configStatus').textContent = '⚠️ Using defaults';
-                document.getElementById('configStatus').style.color = '#F59E0B';
-            }
-        })();
-
-        // ═══════════════════════════════════════════════════════════════════
-        //  HMM CANVAS SIMULATION
-        // ═══════════════════════════════════════════════════════════════════
-        let hmmAnimFrame = null;
-        const REGIMES = [
-            { name: 'BULL', color: '#4ade80', drift: 0.003, vol: 0.01 },
-            { name: 'BEAR', color: '#f87171', drift: -0.003, vol: 0.012 },
-            { name: 'SIDEWAYS', color: '#facc15', drift: 0.0, vol: 0.005 },
-            { name: 'CRASH', color: '#f472b6', drift: -0.008, vol: 0.025 },
-        ];
-
-        // Transition matrix (row=from, col=to)
-        const T_MATRIX = [
-            [0.85, 0.05, 0.08, 0.02],  // BULL
-            [0.05, 0.80, 0.10, 0.05],  // BEAR
-            [0.15, 0.15, 0.65, 0.05],  // SIDEWAYS
-            [0.10, 0.30, 0.10, 0.50],  // CRASH
-        ];
-
-        function sampleTransition(fromState) {
-            const r = Math.random();
-            let cum = 0;
-            for (let i = 0; i < 4; i++) {
-                cum += T_MATRIX[fromState][i];
-                if (r < cum) return i;
-            }
-            return 3;
-        }
-
-        function runHmmSimulation() {
-            if (hmmAnimFrame) cancelAnimationFrame(hmmAnimFrame);
-            const canvas = document.getElementById('hmmCanvas');
-            const ctx = canvas.getContext('2d');
-            const W = canvas.width, H = canvas.height;
-            const N = 200; // data points
-            const statusEl = document.getElementById('hmmSimStatus');
-
-            // Generate synthetic price data with regime changes
-            let state = Math.floor(Math.random() * 4);
-            let price = 100;
-            const prices = [price];
-            const states = [state];
-
-            for (let i = 1; i < N; i++) {
-                state = sampleTransition(state);
-                const regime = REGIMES[state];
-                const ret = regime.drift + regime.vol * (Math.random() + Math.random() + Math.random() - 1.5) * 1.15;
-                price *= (1 + ret);
-                prices.push(price);
-                states.push(state);
+        <!-- ═══ Dynamic Config Loader ═══ -->
+        <script>
+            // ═══════════════════════════════════════════════════════════════════
+            //  TAB SWITCHING
+            // ═══════════════════════════════════════════════════════════════════
+            function switchTab(tabId, btn) {
+                document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.getElementById('tab-' + tabId).classList.add('active');
+                btn.classList.add('active');
             }
 
-            const minP = Math.min(...prices) * 0.98;
-            const maxP = Math.max(...prices) * 1.02;
+            (async function loadConfig() {
+                try {
+                    const res = await fetch('/api/config');
+                    const cfg = await res.json();
+                    if (cfg.error) throw new Error(cfg.error);
 
-            // Animate drawing
-            let drawn = 0;
-            const speed = 3;
+                    document.querySelectorAll('[data-cfg]').forEach(el => {
+                        const key = el.dataset.cfg;
+                        const fmt = el.dataset.fmt || '';
+                        let val = cfg[key];
+                        if (val === undefined) return;
 
-            function draw() {
-                const end = Math.min(drawn + speed, N);
-
-                // Clear
-                ctx.clearRect(0, 0, W, H);
-
-                // Draw regime background bands
-                for (let i = 0; i < end; i++) {
-                    const x = (i / N) * W;
-                    const nextX = ((i + 1) / N) * W;
-                    ctx.fillStyle = REGIMES[states[i]].color + '15';
-                    ctx.fillRect(x, 0, nextX - x + 1, H);
-                }
-
-                // Draw grid lines
-                ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-                ctx.lineWidth = 1;
-                for (let i = 0; i < 5; i++) {
-                    const y = (i / 4) * H;
-                    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-                }
-
-                // Draw price line
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                for (let i = 0; i < end; i++) {
-                    const x = (i / N) * W;
-                    const y = H - ((prices[i] - minP) / (maxP - minP)) * (H - 20) - 10;
-                    ctx.strokeStyle = REGIMES[states[i]].color;
-                    if (i === 0) ctx.moveTo(x, y);
-                    else {
-                        ctx.stroke();
-                        ctx.beginPath();
-                        ctx.strokeStyle = REGIMES[states[i]].color;
-                        ctx.moveTo((((i - 1) / N) * W), H - ((prices[i - 1] - minP) / (maxP - minP)) * (H - 20) - 10);
-                        ctx.lineTo(x, y);
-                        ctx.stroke();
-                        ctx.beginPath();
-                    }
-                }
-                ctx.stroke();
-
-                // Draw regime labels at transitions
-                let lastState = -1;
-                for (let i = 0; i < end; i++) {
-                    if (states[i] !== lastState) {
-                        lastState = states[i];
-                        const x = (i / N) * W;
-                        ctx.fillStyle = REGIMES[states[i]].color;
-                        ctx.font = 'bold 10px Inter, sans-serif';
-                        ctx.fillText(REGIMES[states[i]].name, x + 2, 14);
-                    }
-                }
-
-                drawn = end;
-                statusEl.textContent = `${drawn}/${N} candles`;
-
-                if (drawn < N) {
-                    hmmAnimFrame = requestAnimationFrame(draw);
-                } else {
-                    statusEl.textContent = `✅ ${N} candles – Simulation complete`;
-                }
-            }
-
-            draw();
-        }
-
-        function resetHmmSimulation() {
-            if (hmmAnimFrame) cancelAnimationFrame(hmmAnimFrame);
-            const canvas = document.getElementById('hmmCanvas');
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            document.getElementById('hmmSimStatus').textContent = 'Ready';
-        }
-
-        // ═══════════════════════════════════════════════════════════════════
-        //  TELEGRAM INTEGRATION
-        // ═══════════════════════════════════════════════════════════════════
-        (async function loadTelegramStatus() {
-            try {
-                const res = await fetch('/api/telegram/status');
-                const data = await res.json();
-
-                document.getElementById('tgBotToken').value = data.bot_token || 'Not configured';
-                document.getElementById('tgChatId').value = data.chat_id || '';
-                document.getElementById('tgEnabled').checked = data.enabled;
-                document.getElementById('tgNotifyTrades').checked = data.notify_trades;
-                document.getElementById('tgNotifyAlerts').checked = data.notify_alerts;
-                document.getElementById('tgNotifySummary').checked = data.notify_summary;
-
-                const badge = document.getElementById('tgStatusBadge');
-                if (data.has_token && data.chat_id) {
-                    badge.textContent = data.enabled ? '🟢 Active' : '🟡 Configured (disabled)';
-                    badge.style.color = data.enabled ? '#4ade80' : '#facc15';
-                } else if (data.has_token) {
-                    badge.textContent = '🟡 Token set, needs Chat ID';
-                    badge.style.color = '#facc15';
-                } else {
-                    badge.textContent = '⚪ Not configured';
-                    badge.style.color = 'var(--text-tertiary)';
-                }
-
-                // Initialize pause button state
-                updatePauseButton(data.enabled);
-            } catch (e) {
-                document.getElementById('tgStatusBadge').textContent = '❌ Error loading';
-            }
-        })();
-
-        async function detectChatId() {
-            const statusEl = document.getElementById('tgActionStatus');
-            statusEl.textContent = '🔍 Detecting...';
-            try {
-                const res = await fetch('/api/telegram/detect-chat-id');
-                const data = await res.json();
-                if (data.success && data.chats.length > 0) {
-                    const chat = data.chats[0];
-                    document.getElementById('tgChatId').value = chat.id;
-                    statusEl.textContent = `✅ Found: ${chat.name} (${chat.type})`;
-                    statusEl.style.color = '#4ade80';
-                } else {
-                    statusEl.textContent = data.message || '⚠️ No chats found. Send /start to the bot first.';
-                    statusEl.style.color = '#facc15';
-                }
-            } catch (e) {
-                statusEl.textContent = '❌ Detection failed';
-                statusEl.style.color = '#f87171';
-            }
-        }
-
-        async function saveTelegramChatId() {
-            const chatId = document.getElementById('tgChatId').value.trim();
-            if (!chatId) { document.getElementById('tgActionStatus').textContent = '⚠️ Enter a Chat ID first'; return; }
-            try {
-                const res = await fetch('/api/telegram/config', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ chat_id: chatId }),
-                });
-                const data = await res.json();
-                document.getElementById('tgActionStatus').textContent = data.success ? '✅ Chat ID saved!' : '❌ ' + data.error;
-                document.getElementById('tgActionStatus').style.color = data.success ? '#4ade80' : '#f87171';
-            } catch (e) {
-                document.getElementById('tgActionStatus').textContent = '❌ Save failed';
-            }
-        }
-
-        async function saveTelegramConfig() {
-            try {
-                await fetch('/api/telegram/config', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        enabled: document.getElementById('tgEnabled').checked,
-                        notify_trades: document.getElementById('tgNotifyTrades').checked,
-                        notify_alerts: document.getElementById('tgNotifyAlerts').checked,
-                        notify_summary: document.getElementById('tgNotifySummary').checked,
-                    }),
-                });
-            } catch (e) { console.error('Telegram config save error:', e); }
-        }
-
-        async function toggleTelegramPause() {
-            const enabledCb = document.getElementById('tgEnabled');
-            const wasEnabled = enabledCb.checked;
-            const nowEnabled = !wasEnabled;  // Toggle state
-            enabledCb.checked = nowEnabled;
-            await saveTelegramConfig();
-            updatePauseButton(nowEnabled);
-
-            // Update status badge
-            const badge = document.getElementById('tgStatusBadge');
-            if (nowEnabled) {
-                badge.textContent = '🟢 Active';
-                badge.style.color = '#4ade80';
-            } else {
-                badge.textContent = '🟡 Configured (disabled)';
-                badge.style.color = '#facc15';
-            }
-
-            const statusEl = document.getElementById('tgActionStatus');
-            statusEl.textContent = nowEnabled ? '▶ Notifications resumed' : '⏸ Notifications paused';
-            statusEl.style.color = nowEnabled ? '#4ade80' : '#facc15';
-        }
-
-        function updatePauseButton(isEnabled) {
-            const btn = document.getElementById('tgPauseBtn');
-            const icon = document.getElementById('tgPauseIcon');
-            const label = document.getElementById('tgPauseLabel');
-            if (!btn) return;
-            if (isEnabled) {
-                // Currently active — show "Pause" option
-                btn.style.borderColor = 'rgba(239, 68, 68, 0.3)';
-                btn.style.background = 'rgba(239, 68, 68, 0.08)';
-                btn.style.color = '#f87171';
-                icon.textContent = '⏸';
-                label.textContent = 'Pause All Notifications';
-            } else {
-                // Currently paused — show "Resume" option
-                btn.style.borderColor = 'rgba(74, 222, 128, 0.3)';
-                btn.style.background = 'rgba(74, 222, 128, 0.08)';
-                btn.style.color = '#4ade80';
-                icon.textContent = '▶';
-                label.textContent = 'Resume Notifications';
-            }
-        }
-
-        async function testTelegram() {
-            const statusEl = document.getElementById('tgActionStatus');
-            statusEl.textContent = '🧪 Sending test...';
-            statusEl.style.color = 'var(--text-secondary)';
-            try {
-                // ═══════════════════════════════════════════════════════════════════
-                //  API CONFIG LOGIC
-                // ═══════════════════════════════════════════════════════════════════
-                async function loadApiStatus() {
-                    try {
-                        const res = await fetch('/api/status');
-                        const data = await res.json();
-
-                        // Connection Status
-                        const pillOn = document.getElementById('apiStatusPill');
-                        const pillOff = document.getElementById('apiStatusPillOff');
-                        const latEl = document.getElementById('apiLatency');
-
-                        if (data.status === 'active') {
-                            pillOn.style.display = 'flex';
-                            pillOff.style.display = 'none';
-                            latEl.textContent = data.latency + ' ms';
-                            latEl.style.color = '#22C55E';
-                        } else {
-                            pillOn.style.display = 'none';
-                            pillOff.style.display = 'flex';
-                            latEl.textContent = '— ms';
-                            latEl.style.color = 'var(--text-tertiary)';
+                        if (fmt === 'x') val = val + '×';
+                        else if (fmt === 'pct') {
+                            const pv = val <= 1 && val > 0 ? val * 100 : val;
+                            val = (pv % 1 === 0 ? pv.toFixed(0) : pv < 1 ? pv.toFixed(2) : pv.toFixed(1)) + '%';
                         }
+                        else if (fmt === 'pctval') val = val + '%';
+                        else if (fmt === 's') val = val + 's';
+                        else if (fmt === '$') val = '$' + Number(val).toLocaleString();
+                        else if (fmt === 'bool') val = val ? 'true' : 'false';
 
-                        // Balance
-                        const balEl = document.getElementById('apiBalance');
-                        if (data.balance !== null) {
-                            balEl.textContent = 'USDT ' + Number(data.balance).toLocaleString();
-                        } else {
-                            balEl.textContent = '—';
-                        }
-
-                        // API Key masking
-                        if (data.keyLast4) {
-                            document.getElementById('apiKeyLast').textContent = data.keyLast4;
-                        }
-
-                        // Master Switch
-                        document.getElementById('botMasterSwitch').checked = data.botActive;
-
-                    } catch (e) {
-                        console.error('API Status Load Error:', e);
-                    }
-                }
-
-                async function toggleBot(el) {
-                    const active = el.checked;
-                    try {
-                        const res = await fetch('/api/bot/toggle', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ active })
-                        });
-                        const data = await res.json();
-                        if (!data.success) {
-                            el.checked = !active; // Revert if failed
-                            alert('Failed to toggle bot: ' + data.error);
-                        }
-                    } catch (e) {
-                        el.checked = !active;
-                        console.error('Toggle Error:', e);
-                    }
-                }
-
-                // Load on startup and refresher
-                loadApiStatus();
-                setInterval(loadApiStatus, 10000); // Refresh every 10s
-                const res = await fetch('/api/telegram/test', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ chat_id: chatId }),
-                });
-                const data = await res.json();
-                statusEl.textContent = data.success ? '✅ Test message sent!' : '❌ ' + (data.error || 'Failed');
-                statusEl.style.color = data.success ? '#4ade80' : '#f87171';
-            } catch (e) {
-                statusEl.textContent = '❌ Test failed: ' + e.message;
-                statusEl.style.color = '#f87171';
-            }
-        }
-
-        // ═══════════════════════════════════════════════════════════════════
-        //  REGIME ENGINE PRESETS
-        // ═══════════════════════════════════════════════════════════════════
-        async function applyPreset(preset) {
-            const statusEl = document.getElementById('presetStatus');
-            statusEl.style.display = 'block';
-            statusEl.textContent = `⏳ Applying ${preset} preset...`;
-            statusEl.style.background = 'rgba(99,102,241,0.1)';
-            statusEl.style.color = '#818cf8';
-
-            // Visual feedback on cards
-            document.querySelectorAll('.preset-card').forEach(c => c.style.transform = 'scale(1)');
-            const card = document.getElementById('preset' + preset.charAt(0).toUpperCase() + preset.slice(1));
-            if (card) card.style.transform = 'scale(1.02)';
-
-            try {
-                const res = await fetch('/api/config/preset', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ preset }),
-                });
-                const data = await res.json();
-
-                if (data.success) {
-                    statusEl.textContent = `✅ ${preset.toUpperCase()} preset applied! ${data.applied.length} parameters updated. Takes effect on next bot cycle.`;
-                    statusEl.style.background = 'rgba(74,222,128,0.1)';
-                    statusEl.style.color = '#4ade80';
-
-                    // Highlight active card
-                    document.querySelectorAll('.preset-card').forEach(c => {
-                        c.style.boxShadow = 'none';
-                        c.style.borderWidth = '2px';
+                        el.textContent = val;
                     });
-                    if (card) {
-                        card.style.boxShadow = '0 0 20px rgba(99,102,241,0.3)';
-                        card.style.borderWidth = '3px';
+
+                    document.getElementById('configStatus').textContent = '✅ Live from config.py';
+                    document.getElementById('configStatus').style.color = '#22C55E';
+                } catch (e) {
+                    console.error('Failed to load config:', e);
+                    document.getElementById('configStatus').textContent = '⚠️ Using defaults';
+                    document.getElementById('configStatus').style.color = '#F59E0B';
+                }
+            })();
+
+            // ═══════════════════════════════════════════════════════════════════
+            //  HMM CANVAS SIMULATION
+            // ═══════════════════════════════════════════════════════════════════
+            let hmmAnimFrame = null;
+            const REGIMES = [
+                { name: 'BULL', color: '#4ade80', drift: 0.003, vol: 0.01 },
+                { name: 'BEAR', color: '#f87171', drift: -0.003, vol: 0.012 },
+                { name: 'SIDEWAYS', color: '#facc15', drift: 0.0, vol: 0.005 },
+                { name: 'CRASH', color: '#f472b6', drift: -0.008, vol: 0.025 },
+            ];
+
+            // Transition matrix (row=from, col=to)
+            const T_MATRIX = [
+                [0.85, 0.05, 0.08, 0.02],  // BULL
+                [0.05, 0.80, 0.10, 0.05],  // BEAR
+                [0.15, 0.15, 0.65, 0.05],  // SIDEWAYS
+                [0.10, 0.30, 0.10, 0.50],  // CRASH
+            ];
+
+            function sampleTransition(fromState) {
+                const r = Math.random();
+                let cum = 0;
+                for (let i = 0; i < 4; i++) {
+                    cum += T_MATRIX[fromState][i];
+                    if (r < cum) return i;
+                }
+                return 3;
+            }
+
+            function runHmmSimulation() {
+                if (hmmAnimFrame) cancelAnimationFrame(hmmAnimFrame);
+                const canvas = document.getElementById('hmmCanvas');
+                const ctx = canvas.getContext('2d');
+                const W = canvas.width, H = canvas.height;
+                const N = 200; // data points
+                const statusEl = document.getElementById('hmmSimStatus');
+
+                // Generate synthetic price data with regime changes
+                let state = Math.floor(Math.random() * 4);
+                let price = 100;
+                const prices = [price];
+                const states = [state];
+
+                for (let i = 1; i < N; i++) {
+                    state = sampleTransition(state);
+                    const regime = REGIMES[state];
+                    const ret = regime.drift + regime.vol * (Math.random() + Math.random() + Math.random() - 1.5) * 1.15;
+                    price *= (1 + ret);
+                    prices.push(price);
+                    states.push(state);
+                }
+
+                const minP = Math.min(...prices) * 0.98;
+                const maxP = Math.max(...prices) * 1.02;
+
+                // Animate drawing
+                let drawn = 0;
+                const speed = 3;
+
+                function draw() {
+                    const end = Math.min(drawn + speed, N);
+
+                    // Clear
+                    ctx.clearRect(0, 0, W, H);
+
+                    // Draw regime background bands
+                    for (let i = 0; i < end; i++) {
+                        const x = (i / N) * W;
+                        const nextX = ((i + 1) / N) * W;
+                        ctx.fillStyle = REGIMES[states[i]].color + '15';
+                        ctx.fillRect(x, 0, nextX - x + 1, H);
                     }
+
+                    // Draw grid lines
+                    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+                    ctx.lineWidth = 1;
+                    for (let i = 0; i < 5; i++) {
+                        const y = (i / 4) * H;
+                        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+                    }
+
+                    // Draw price line
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    for (let i = 0; i < end; i++) {
+                        const x = (i / N) * W;
+                        const y = H - ((prices[i] - minP) / (maxP - minP)) * (H - 20) - 10;
+                        ctx.strokeStyle = REGIMES[states[i]].color;
+                        if (i === 0) ctx.moveTo(x, y);
+                        else {
+                            ctx.stroke();
+                            ctx.beginPath();
+                            ctx.strokeStyle = REGIMES[states[i]].color;
+                            ctx.moveTo((((i - 1) / N) * W), H - ((prices[i - 1] - minP) / (maxP - minP)) * (H - 20) - 10);
+                            ctx.lineTo(x, y);
+                            ctx.stroke();
+                            ctx.beginPath();
+                        }
+                    }
+                    ctx.stroke();
+
+                    // Draw regime labels at transitions
+                    let lastState = -1;
+                    for (let i = 0; i < end; i++) {
+                        if (states[i] !== lastState) {
+                            lastState = states[i];
+                            const x = (i / N) * W;
+                            ctx.fillStyle = REGIMES[states[i]].color;
+                            ctx.font = 'bold 10px Inter, sans-serif';
+                            ctx.fillText(REGIMES[states[i]].name, x + 2, 14);
+                        }
+                    }
+
+                    drawn = end;
+                    statusEl.textContent = `${drawn}/${N} candles`;
+
+                    if (drawn < N) {
+                        hmmAnimFrame = requestAnimationFrame(draw);
+                    } else {
+                        statusEl.textContent = `✅ ${N} candles – Simulation complete`;
+                    }
+                }
+
+                draw();
+            }
+
+            function resetHmmSimulation() {
+                if (hmmAnimFrame) cancelAnimationFrame(hmmAnimFrame);
+                const canvas = document.getElementById('hmmCanvas');
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                document.getElementById('hmmSimStatus').textContent = 'Ready';
+            }
+
+            // ═══════════════════════════════════════════════════════════════════
+            //  TELEGRAM INTEGRATION
+            // ═══════════════════════════════════════════════════════════════════
+            (async function loadTelegramStatus() {
+                try {
+                    const res = await fetch('/api/telegram/status');
+                    const data = await res.json();
+
+                    document.getElementById('tgBotToken').value = data.bot_token || 'Not configured';
+                    document.getElementById('tgChatId').value = data.chat_id || '';
+                    document.getElementById('tgEnabled').checked = data.enabled;
+                    document.getElementById('tgNotifyTrades').checked = data.notify_trades;
+                    document.getElementById('tgNotifyAlerts').checked = data.notify_alerts;
+                    document.getElementById('tgNotifySummary').checked = data.notify_summary;
+
+                    const badge = document.getElementById('tgStatusBadge');
+                    if (data.has_token && data.chat_id) {
+                        badge.textContent = data.enabled ? '🟢 Active' : '🟡 Configured (disabled)';
+                        badge.style.color = data.enabled ? '#4ade80' : '#facc15';
+                    } else if (data.has_token) {
+                        badge.textContent = '🟡 Token set, needs Chat ID';
+                        badge.style.color = '#facc15';
+                    } else {
+                        badge.textContent = '⚪ Not configured';
+                        badge.style.color = 'var(--text-tertiary)';
+                    }
+
+                    // Initialize pause button state
+                    updatePauseButton(data.enabled);
+                } catch (e) {
+                    document.getElementById('tgStatusBadge').textContent = '❌ Error loading';
+                }
+            })();
+
+            async function detectChatId() {
+                const statusEl = document.getElementById('tgActionStatus');
+                statusEl.textContent = '🔍 Detecting...';
+                try {
+                    const res = await fetch('/api/telegram/detect-chat-id');
+                    const data = await res.json();
+                    if (data.success && data.chats.length > 0) {
+                        const chat = data.chats[0];
+                        document.getElementById('tgChatId').value = chat.id;
+                        statusEl.textContent = `✅ Found: ${chat.name} (${chat.type})`;
+                        statusEl.style.color = '#4ade80';
+                    } else {
+                        statusEl.textContent = data.message || '⚠️ No chats found. Send /start to the bot first.';
+                        statusEl.style.color = '#facc15';
+                    }
+                } catch (e) {
+                    statusEl.textContent = '❌ Detection failed';
+                    statusEl.style.color = '#f87171';
+                }
+            }
+
+            async function saveTelegramChatId() {
+                const chatId = document.getElementById('tgChatId').value.trim();
+                if (!chatId) { document.getElementById('tgActionStatus').textContent = '⚠️ Enter a Chat ID first'; return; }
+                try {
+                    const res = await fetch('/api/telegram/config', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ chat_id: chatId }),
+                    });
+                    const data = await res.json();
+                    document.getElementById('tgActionStatus').textContent = data.success ? '✅ Chat ID saved!' : '❌ ' + data.error;
+                    document.getElementById('tgActionStatus').style.color = data.success ? '#4ade80' : '#f87171';
+                } catch (e) {
+                    document.getElementById('tgActionStatus').textContent = '❌ Save failed';
+                }
+            }
+
+            async function saveTelegramConfig() {
+                try {
+                    await fetch('/api/telegram/config', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            enabled: document.getElementById('tgEnabled').checked,
+                            notify_trades: document.getElementById('tgNotifyTrades').checked,
+                            notify_alerts: document.getElementById('tgNotifyAlerts').checked,
+                            notify_summary: document.getElementById('tgNotifySummary').checked,
+                        }),
+                    });
+                } catch (e) { console.error('Telegram config save error:', e); }
+            }
+
+            async function toggleTelegramPause() {
+                const enabledCb = document.getElementById('tgEnabled');
+                const wasEnabled = enabledCb.checked;
+                const nowEnabled = !wasEnabled;  // Toggle state
+                enabledCb.checked = nowEnabled;
+                await saveTelegramConfig();
+                updatePauseButton(nowEnabled);
+
+                // Update status badge
+                const badge = document.getElementById('tgStatusBadge');
+                if (nowEnabled) {
+                    badge.textContent = '🟢 Active';
+                    badge.style.color = '#4ade80';
                 } else {
-                    statusEl.textContent = `❌ ${data.error}`;
+                    badge.textContent = '🟡 Configured (disabled)';
+                    badge.style.color = '#facc15';
+                }
+
+                const statusEl = document.getElementById('tgActionStatus');
+                statusEl.textContent = nowEnabled ? '▶ Notifications resumed' : '⏸ Notifications paused';
+                statusEl.style.color = nowEnabled ? '#4ade80' : '#facc15';
+            }
+
+            function updatePauseButton(isEnabled) {
+                const btn = document.getElementById('tgPauseBtn');
+                const icon = document.getElementById('tgPauseIcon');
+                const label = document.getElementById('tgPauseLabel');
+                if (!btn) return;
+                if (isEnabled) {
+                    // Currently active — show "Pause" option
+                    btn.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+                    btn.style.background = 'rgba(239, 68, 68, 0.08)';
+                    btn.style.color = '#f87171';
+                    icon.textContent = '⏸';
+                    label.textContent = 'Pause All Notifications';
+                } else {
+                    // Currently paused — show "Resume" option
+                    btn.style.borderColor = 'rgba(74, 222, 128, 0.3)';
+                    btn.style.background = 'rgba(74, 222, 128, 0.08)';
+                    btn.style.color = '#4ade80';
+                    icon.textContent = '▶';
+                    label.textContent = 'Resume Notifications';
+                }
+            }
+
+            async function testTelegram() {
+                const statusEl = document.getElementById('tgActionStatus');
+                statusEl.textContent = '🧪 Sending test...';
+                statusEl.style.color = 'var(--text-secondary)';
+                try {
+                    // ═══════════════════════════════════════════════════════════════════
+                    //  API CONFIG LOGIC
+                    // ═══════════════════════════════════════════════════════════════════
+                    async function loadApiStatus() {
+                        try {
+                            const res = await fetch('/api/status');
+                            const data = await res.json();
+
+                            // Connection Status
+                            const pillOn = document.getElementById('apiStatusPill');
+                            const pillOff = document.getElementById('apiStatusPillOff');
+                            const latEl = document.getElementById('apiLatency');
+
+                            if (data.status === 'active') {
+                                pillOn.style.display = 'flex';
+                                pillOff.style.display = 'none';
+                                latEl.textContent = data.latency + ' ms';
+                                latEl.style.color = '#22C55E';
+                            } else {
+                                pillOn.style.display = 'none';
+                                pillOff.style.display = 'flex';
+                                latEl.textContent = '— ms';
+                                latEl.style.color = 'var(--text-tertiary)';
+                            }
+
+                            // Balance
+                            const balEl = document.getElementById('apiBalance');
+                            if (data.balance !== null) {
+                                balEl.textContent = 'USDT ' + Number(data.balance).toLocaleString();
+                            } else {
+                                balEl.textContent = '—';
+                            }
+
+                            // API Key masking
+                            if (data.keyLast4) {
+                                document.getElementById('apiKeyLast').textContent = data.keyLast4;
+                            }
+
+                            // Master Switch
+                            document.getElementById('botMasterSwitch').checked = data.botActive;
+
+                        } catch (e) {
+                            console.error('API Status Load Error:', e);
+                        }
+                    }
+
+                    async function toggleBot(el) {
+                        const active = el.checked;
+                        try {
+                            const res = await fetch('/api/bot/toggle', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ active })
+                            });
+                            const data = await res.json();
+                            if (!data.success) {
+                                el.checked = !active; // Revert if failed
+                                alert('Failed to toggle bot: ' + data.error);
+                            }
+                        } catch (e) {
+                            el.checked = !active;
+                            console.error('Toggle Error:', e);
+                        }
+                    }
+
+                    // Load on startup and refresher
+                    loadApiStatus();
+                    setInterval(loadApiStatus, 10000); // Refresh every 10s
+                    const res = await fetch('/api/telegram/test', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ chat_id: chatId }),
+                    });
+                    const data = await res.json();
+                    statusEl.textContent = data.success ? '✅ Test message sent!' : '❌ ' + (data.error || 'Failed');
+                    statusEl.style.color = data.success ? '#4ade80' : '#f87171';
+                } catch (e) {
+                    statusEl.textContent = '❌ Test failed: ' + e.message;
+                    statusEl.style.color = '#f87171';
+                }
+            }
+
+            // ═══════════════════════════════════════════════════════════════════
+            //  REGIME ENGINE PRESETS
+            // ═══════════════════════════════════════════════════════════════════
+            async function applyPreset(preset) {
+                const statusEl = document.getElementById('presetStatus');
+                statusEl.style.display = 'block';
+                statusEl.textContent = `⏳ Applying ${preset} preset...`;
+                statusEl.style.background = 'rgba(99,102,241,0.1)';
+                statusEl.style.color = '#818cf8';
+
+                // Visual feedback on cards
+                document.querySelectorAll('.preset-card').forEach(c => c.style.transform = 'scale(1)');
+                const card = document.getElementById('preset' + preset.charAt(0).toUpperCase() + preset.slice(1));
+                if (card) card.style.transform = 'scale(1.02)';
+
+                try {
+                    const res = await fetch('/api/config/preset', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ preset }),
+                    });
+                    const data = await res.json();
+
+                    if (data.success) {
+                        statusEl.textContent = `✅ ${preset.toUpperCase()} preset applied! ${data.applied.length} parameters updated. Takes effect on next bot cycle.`;
+                        statusEl.style.background = 'rgba(74,222,128,0.1)';
+                        statusEl.style.color = '#4ade80';
+
+                        // Highlight active card
+                        document.querySelectorAll('.preset-card').forEach(c => {
+                            c.style.boxShadow = 'none';
+                            c.style.borderWidth = '2px';
+                        });
+                        if (card) {
+                            card.style.boxShadow = '0 0 20px rgba(99,102,241,0.3)';
+                            card.style.borderWidth = '3px';
+                        }
+                    } else {
+                        statusEl.textContent = `❌ ${data.error}`;
+                        statusEl.style.background = 'rgba(248,113,113,0.1)';
+                        statusEl.style.color = '#f87171';
+                    }
+                } catch (e) {
+                    statusEl.textContent = '❌ Failed to apply preset: ' + e.message;
                     statusEl.style.background = 'rgba(248,113,113,0.1)';
                     statusEl.style.color = '#f87171';
                 }
-            } catch (e) {
-                statusEl.textContent = '❌ Failed to apply preset: ' + e.message;
-                statusEl.style.background = 'rgba(248,113,113,0.1)';
-                statusEl.style.color = '#f87171';
             }
-        }
-    </script>
+        </script>
 
-    <script src="/mode-toggle.js"></script>
+        <script src="/mode-toggle.js"></script>
 </body>
 
 </html>

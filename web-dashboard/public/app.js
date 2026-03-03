@@ -88,6 +88,13 @@ function updateHeader(state, multi) {
 
 // ─── Stats Row ───────────────────────────────────────────────────────────────
 function updateStats(multi, tradebook) {
+    // Update active positions count (moved from separate card to stats)
+    const posEl = document.getElementById('activePositions');
+    if (posEl) {
+        const tbActive = (tradebook?.trades || []).filter(t => t.status === 'ACTIVE').length;
+        const multiActive = Object.keys(multi?.active_positions || {}).length;
+        posEl.textContent = `${tbActive || multiActive}`;
+    }
     // Always pull active count from tradebook (not multi_bot_state) so it updates independently of cycle runs
     const activeCount = tradebook?.trades ? tradebook.trades.filter(t => t.status === 'ACTIVE').length : 0;
     animateValue('activePositions', activeCount);
@@ -722,6 +729,13 @@ function updateFeatureHeatmap(coinStates) {
     if (!area) return;
 
     const entries = coinStates ? Object.values(coinStates) : [];
+    // Inject live Binance 24h volume into each coin entry
+    entries.forEach(c => {
+        const sym = c.symbol || '';
+        if (liveVolumes[sym] && (!c.volume_24h || c.volume_24h === 0)) {
+            c.volume_24h = liveVolumes[sym];
+        }
+    });
     const withFeatures = entries.filter(c => c.features && Object.keys(c.features).length > 0);
 
     if (withFeatures.length === 0) {
@@ -729,21 +743,44 @@ function updateFeatureHeatmap(coinStates) {
         return;
     }
 
-    // Sort by confidence descending
-    withFeatures.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+    // Sort by volume descending
+    withFeatures.sort((a, b) => (b.volume_24h || 0) - (a.volume_24h || 0));
 
-    const featureKeys = ['log_return', 'volatility', 'volume_change', 'rsi_norm'];
+    // T8: Track volume at deployment using sessionStorage
+    const deployVolKey = 'sentinel_deploy_volumes';
+    let deployVolumes = {};
+    try { deployVolumes = JSON.parse(sessionStorage.getItem(deployVolKey) || '{}'); } catch (e) { }
+    let updated = false;
+    withFeatures.forEach(c => {
+        const sym = c.symbol || '';
+        const vol = c.volume_24h || 0;
+        if (vol > 0 && !(sym in deployVolumes)) {
+            deployVolumes[sym] = vol;
+            updated = true;
+        }
+    });
+    if (updated) sessionStorage.setItem(deployVolKey, JSON.stringify(deployVolumes));
+
+    const featureKeys = ['log_return', 'volatility', 'volume_change', 'rsi_norm', 'funding', 'oi_change', 'volume_24h'];
     const featureLabels = {
         log_return: 'Log Return',
         volatility: 'Volatility',
         volume_change: 'Vol Change',
         rsi_norm: 'RSI Norm',
+        funding: 'Funding',
+        oi_change: 'OI Change',
+        volume_24h: 'Volume 24h',
     };
 
     // Compute min/max for each feature for color scaling
     const stats = {};
     featureKeys.forEach(k => {
-        const vals = withFeatures.map(c => c.features[k] || 0);
+        let vals;
+        if (k === 'volume_24h') {
+            vals = withFeatures.map(c => c.volume_24h || 0);
+        } else {
+            vals = withFeatures.map(c => c.features[k] || 0);
+        }
         stats[k] = {
             min: Math.min(...vals),
             max: Math.max(...vals),
@@ -777,25 +814,48 @@ function updateFeatureHeatmap(coinStates) {
 
     let html = `<table class="feature-heatmap-table">
     <thead><tr>
-      <th>Coin</th><th>Regime</th><th>Conf</th>`;
-    featureKeys.forEach(k => { html += `<th>${featureLabels[k]}</th>`; });
+      <th>Coin</th><th>Volume 24h</th><th>Vol Δ Deploy</th><th>Regime</th><th>Conf</th>`;
+    featureKeys.filter(k => k !== 'volume_24h').forEach(k => { html += `<th>${featureLabels[k]}</th>`; });
     html += `</tr></thead><tbody>`;
 
     withFeatures.forEach(coin => {
         const sym = (coin.symbol || '').replace('USDT', '');
         const regime = coin.regime || 'CHOP';
         const info = getRegimeInfo(regime);
-        const conf = ((coin.confidence || 0) * 100).toFixed(0);
+        const conf = ((coin.confidence || 0) * 100).toFixed(1);
+
+        // Volume 24h value
+        const vol24h = coin.volume_24h || 0;
+        const volDisplay = vol24h > 1e9 ? '$' + (vol24h / 1e9).toFixed(2) + 'B' : (vol24h > 1e6 ? '$' + (vol24h / 1e6).toFixed(1) + 'M' : (vol24h > 1e3 ? '$' + (vol24h / 1e3).toFixed(0) + 'K' : '$' + vol24h.toFixed(0)));
+        const volBg = featureCellColor('volume_24h', vol24h);
+
+        // Volume delta from deployment
+        const deployVol = deployVolumes[coin.symbol] || 0;
+        let volDeltaDisplay = '—';
+        let volDeltaColor = '#64748B';
+        if (deployVol > 0 && vol24h > 0) {
+            const deltaPct = ((vol24h - deployVol) / deployVol) * 100;
+            volDeltaDisplay = (deltaPct >= 0 ? '+' : '') + deltaPct.toFixed(1) + '%';
+            volDeltaColor = deltaPct >= 0 ? '#16A34A' : '#DC2626';
+        }
 
         html += `<tr>
       <td class="fh-symbol"><strong>${sym}</strong></td>
+      <td class="fh-cell" style="background:${volBg};font-weight:700;">${volDisplay}</td>
+      <td class="fh-cell" style="color:${volDeltaColor};font-weight:700;">${volDeltaDisplay}</td>
       <td><span class="regime-badge badge-${info.class}">${info.emoji} ${regime.split('/')[0]}</span></td>
       <td class="fh-conf">${conf}%</td>`;
 
-        featureKeys.forEach(k => {
-            const val = coin.features[k] || 0;
+        featureKeys.filter(k => k !== 'volume_24h').forEach(k => {
+            let val;
+            val = coin.features[k] || 0;
             const bg = featureCellColor(k, val);
-            const display = val >= 0 ? `+${val.toFixed(4)}` : val.toFixed(4);
+            let display;
+            if (k === 'funding') {
+                display = (val * 100).toFixed(4) + '%';
+            } else {
+                display = val >= 0 ? `+${val.toFixed(4)}` : val.toFixed(4);
+            }
             html += `<td class="fh-cell" style="background:${bg}">${display}</td>`;
         });
         html += `</tr>`;
@@ -803,6 +863,163 @@ function updateFeatureHeatmap(coinStates) {
 
     html += `</tbody></table>`;
     area.innerHTML = html;
+}
+
+// ─── Conviction Score (Dashboard card) ───────────────────────────────────────
+function updateDeploymentCard(coinStates, tradebook) {
+    const countEl = document.getElementById('deployedCount');
+    const labelEl = document.getElementById('deployedLabel');
+    const coinsEl = document.getElementById('deployedCoins');
+    const capitalEl = document.getElementById('deployedCapital');
+    if (!countEl) return;
+
+    // Get active trades from tradebook
+    const trades = Array.isArray(tradebook) ? tradebook : [];
+    const active = trades.filter(t => t.status === 'ACTIVE' || t.status === 'OPEN');
+    const count = active.length;
+    const totalCapital = active.reduce((s, t) => s + (t.capital || t.margin || 0), 0);
+    const coinNames = active.map(t => (t.symbol || '').replace('USDT', '')).filter(Boolean);
+
+    countEl.textContent = count;
+    countEl.style.color = count > 0 ? '#22C55E' : '#8899AA';
+    labelEl.textContent = count === 1 ? 'Active Position' : 'Active Positions';
+    coinsEl.textContent = coinNames.length > 0 ? coinNames.join(', ') : 'No coins deployed';
+    capitalEl.textContent = `Capital: $${totalCapital.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+// Alias for backward compat
+function updateConvictionScore(coinStates) {
+    // Now handled by updateDeploymentCard
+}
+
+// ─── Market Regime Table (replaces charts) ───────────────────────────────────
+function updateRegimeTable(coinStates) {
+    const body = document.getElementById('regimeTableBody');
+    if (!body) return;
+    const entries = coinStates ? Object.values(coinStates) : [];
+    if (entries.length === 0) return;
+
+    entries.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+    body.innerHTML = '';
+
+    entries.forEach(c => {
+        const sym = (c.symbol || '').replace('USDT', '');
+        const regime = c.regime || 'UNKNOWN';
+        const info = getRegimeInfo(regime);
+        const conf = ((c.confidence || 0) * 100).toFixed(1);
+        const price = formatPrice(c.price || 0);
+        const macro = c.macro_regime || '—';
+        const action = c.action || '—';
+        const conviction = c.conviction !== undefined ? c.conviction.toFixed(1) : '—';
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><strong>${sym}</strong></td>
+            <td><span class="regime-badge badge-${info.class}">${info.emoji} ${regime.split('/')[0]}</span></td>
+            <td style="font-weight:700;">${conf}%</td>
+            <td>${price}</td>
+            <td>${macro}</td>
+            <td style="font-size:11px;color:var(--text-secondary);">${action}</td>
+            <td style="font-weight:700;">${conviction}</td>
+        `;
+        body.appendChild(tr);
+    });
+}
+
+// ─── Technical Analysis — Deployed Trades ────────────────────────────────────
+function updateTechnicalAnalysis(coinStates, tradebook) {
+    const body = document.getElementById('taTableBody');
+    if (!body) return;
+
+    // Get active trades from tradebook
+    const active = (tradebook?.trades || []).filter(t => t.status === 'ACTIVE');
+    if (active.length === 0) {
+        body.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#8899AA;padding:24px;">No deployed trades</td></tr>';
+        return;
+    }
+
+    body.innerHTML = '';
+    active.forEach(trade => {
+        const sym = (trade.symbol || '').replace('USDT', '');
+        const coinState = coinStates ? coinStates[trade.symbol] : null;
+        const features = coinState?.features || {};
+
+        const side = trade.position || (trade.side === 'BUY' ? 'LONG' : 'SHORT');
+        const sideColor = side === 'LONG' ? '#22C55E' : '#EF4444';
+        const entry = formatPrice(trade.entry_price || 0);
+        const current = formatPrice(trade.current_price || 0);
+        const atr = trade.atr_at_entry ? trade.atr_at_entry.toFixed(4) : '—';
+        const rsi = features.rsi_norm !== undefined ? ((features.rsi_norm + 1) * 50).toFixed(1) : '—';
+        const regime1h = coinState?.regime || '—';
+        const regime4h = coinState?.macro_regime || '—';
+        const bbWidth = features.volatility !== undefined ? (features.volatility * 100).toFixed(2) + '%' : '—';
+        const volRatio = features.volume_change !== undefined ? (features.volume_change > 0 ? '+' : '') + (features.volume_change * 100).toFixed(1) + '%' : '—';
+        const sl = formatPrice(trade.trailing_sl || trade.stop_loss || 0);
+        const tp = formatPrice(trade.trailing_tp || trade.take_profit || 0);
+        const pnl = trade.unrealized_pnl_pct || 0;
+        const pnlColor = pnl >= 0 ? '#22C55E' : '#EF4444';
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><strong>${sym}</strong></td>
+            <td style="color:${sideColor};font-weight:700;">${side}</td>
+            <td>${entry}</td>
+            <td>${current}</td>
+            <td style="font-size:11px;">${atr}</td>
+            <td>${rsi}</td>
+            <td style="font-size:11px;">${regime1h}</td>
+            <td style="font-size:11px;">${regime4h}</td>
+            <td>${bbWidth}</td>
+            <td>${volRatio}</td>
+            <td style="color:#EF4444;font-weight:600;">${sl}</td>
+            <td style="color:#22C55E;font-weight:600;">${tp}</td>
+            <td style="color:${pnlColor};font-weight:700;">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%</td>
+        `;
+        body.appendChild(tr);
+    });
+}
+
+// ─── Scanned Coins — Volume ──────────────────────────────────────────────────
+function updateCoinVolumes(coinStates) {
+    const body = document.getElementById('volumeTableBody');
+    if (!body) return;
+    const entries = coinStates ? Object.values(coinStates) : [];
+    if (entries.length === 0) return;
+
+    // Sort by volume (descending) if available, otherwise by confidence
+    entries.sort((a, b) => {
+        const aVol = a.volume_24h || 0;
+        const bVol = b.volume_24h || 0;
+        if (aVol !== bVol) return bVol - aVol;
+        return (b.confidence || 0) - (a.confidence || 0);
+    });
+
+    body.innerHTML = '';
+    entries.forEach((c, idx) => {
+        const sym = (c.symbol || '').replace('USDT', '');
+        const regime = c.regime || 'UNKNOWN';
+        const info = getRegimeInfo(regime);
+        const conf = ((c.confidence || 0) * 100).toFixed(1);
+        const vol = c.volume_24h;
+        const volStr = vol ? (vol >= 1e9 ? `$${(vol / 1e9).toFixed(2)}B` :
+            vol >= 1e6 ? `$${(vol / 1e6).toFixed(2)}M` :
+                vol >= 1e3 ? `$${(vol / 1e3).toFixed(1)}K` :
+                    `$${vol.toFixed(0)}`) : '—';
+        const action = c.action || '—';
+        const actionColor = action.includes('ELIGIBLE') ? '#22C55E' :
+            action.includes('SKIP') || action.includes('VETO') || action.includes('CRASH') ? '#EF4444' :
+                'var(--text-secondary)';
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="font-weight:600;">${idx + 1}</td>
+            <td><strong>${sym}</strong></td>
+            <td style="font-weight:700;">${volStr}</td>
+            <td><span class="regime-badge badge-${info.class}">${info.emoji} ${regime.split('/')[0]}</span></td>
+            <td>${conf}%</td>
+            <td style="font-size:11px;color:${actionColor};">${action}</td>
+        `;
+        body.appendChild(tr);
+    });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -833,16 +1050,20 @@ function updateAll(data) {
     updateStats(multiState, tradebookData);
     updateRegimeCard(currentState);
     updateGauge(currentState);
-    updatePositionsCount(multiState, tradebookData);
     updateLastAction(currentState, tradebookData);
-    updatePositions();
-    updateHeatmap(liveScanner);
     updateTicker(liveScanner);
-    updateRegimeChart(liveScanner);
-    updateConfChart(liveScanner);
     updateRegimeDriversTable(multiState?.coin_states);
+    updateFeatureHeatmap(multiState?.coin_states);
+    updateTechnicalAnalysis(multiState?.coin_states, tradebookData);
     updateTradeLog(tradeLog);
     addExecLogEntry(multiState);
+    updateConvictionScore(multiState?.coin_states);
+    updateDeploymentCard(multiState?.coin_states, tradebookData);
+
+    // Intelligence sections (from intelligence-app.js IIFE)
+    if (window._intelUpdateSentiment) window._intelUpdateSentiment(multiState);
+    if (window._intelUpdateFunding) window._intelUpdateFunding(multiState);
+    if (window._intelUpdateOrderFlow) window._intelUpdateOrderFlow(multiState);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -900,12 +1121,10 @@ socket.on('multi-update', (multi) => {
     if (dialogOpen) return;
     multiState = multi || multiState;
     updateStats(multiState, tradebookData);
-    updatePositionsCount(multiState, tradebookData);
-    updatePositions();
     updateHeader(currentState, multiState);
     addExecLogEntry(multiState);
 
-    // Also update heatmap from coin_states if available
+    // Update all coin-state-dependent sections
     if (multi?.coin_states) {
         const coins = Object.values(multi.coin_states).map((c, i) => ({
             ...c,
@@ -913,21 +1132,24 @@ socket.on('multi-update', (multi) => {
             rank: i + 1,
         }));
         if (coins.length > 0) {
-            updateHeatmap({ coins });
             updateTicker({ coins });
-            updateRegimeChart({ coins });
-            updateConfChart({ coins });
         }
         updateRegimeDriversTable(multi.coin_states);
+        updateFeatureHeatmap(multi.coin_states);
+        updateTechnicalAnalysis(multi.coin_states, tradebookData);
+        updateConvictionScore(multi.coin_states);
+        updateDeploymentCard(multi.coin_states, tradebookData);
+
+        // Intelligence sections
+        if (window._intelUpdateSentiment) window._intelUpdateSentiment(multi);
+        if (window._intelUpdateFunding) window._intelUpdateFunding(multi);
+        if (window._intelUpdateOrderFlow) window._intelUpdateOrderFlow(multi);
     }
 });
 
 socket.on('scanner-update', (scanner) => {
     scannerData = scanner || scannerData;
-    updateHeatmap(scannerData);
     updateTicker(scannerData);
-    updateRegimeChart(scannerData);
-    updateConfChart(scannerData);
 });
 
 socket.on('trades-update', (trades) => {
@@ -940,10 +1162,10 @@ socket.on('tradebook-update', (data) => {
     if (dialogOpen) return;
     if (isLiveMode()) return;  // In LIVE mode, positions come from CoinDCX
     tradebookData = data || tradebookData;
-    updatePositionsCount(multiState, tradebookData);
     updateLastAction(currentState, tradebookData);
     updateStats(multiState, tradebookData);
-    updatePositions();
+    updateTechnicalAnalysis(multiState?.coin_states, tradebookData);
+    updateDeploymentCard(multiState?.coin_states, tradebookData);
 });
 
 socket.on('command', (cmd) => {
@@ -956,11 +1178,20 @@ socket.on('command', (cmd) => {
 
 // ─── Live Price Tick (1-second updates) ──────────────────────────────────────
 let livePrices = {};
+let liveVolumes = {};
 
 socket.on('price-tick', (data) => {
     if (dialogOpen) return;
     if (!data?.prices) return;
     livePrices = data.prices;
+    if (data.volumes) {
+        const hadVolumes = Object.keys(liveVolumes).length > 0;
+        liveVolumes = data.volumes;
+        // Re-render feature heatmap once volumes arrive for the first time
+        if (!hadVolumes && Object.keys(liveVolumes).length > 0 && multiState?.coin_states) {
+            updateFeatureHeatmap(multiState.coin_states);
+        }
+    }
 
     // Update heatmap cell prices
     document.querySelectorAll('.heatmap-cell').forEach(cell => {

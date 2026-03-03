@@ -429,6 +429,33 @@ def update_unrealized(prices=None, funding_rates=None):
         if "tp_extensions" not in trade:
             trade["tp_extensions"] = 0
 
+        # ── Capital Protection SL ─────────────────────────────────
+        # When profit ≥ 10%, move SL to price where profit = +4%
+        # This locks in gains and covers commission.
+        if pnl_pct >= 10.0:
+            if not trade.get("capital_protection_active"):
+                if is_long:
+                    protect_sl = round(entry * 1.04, 6)  # 4% above entry
+                else:
+                    protect_sl = round(entry * 0.96, 6)  # 4% below entry
+                # Only tighten, never loosen
+                if is_long and protect_sl > trade["trailing_sl"]:
+                    trade["trailing_sl"] = protect_sl
+                    trade["capital_protection_active"] = True
+                    trade["trailing_active"] = True
+                    logger.info(
+                        "🛡️ Capital protection SL activated for %s: SL moved to %.6f (+4%% profit lock)",
+                        trade["trade_id"], protect_sl,
+                    )
+                elif not is_long and protect_sl < trade["trailing_sl"]:
+                    trade["trailing_sl"] = protect_sl
+                    trade["capital_protection_active"] = True
+                    trade["trailing_active"] = True
+                    logger.info(
+                        "🛡️ Capital protection SL activated for %s: SL moved to %.6f (+4%% profit lock)",
+                        trade["trade_id"], protect_sl,
+                    )
+
         # --- Trailing Stop Loss ---
         if config.TRAILING_SL_ENABLED and atr > 0:
             # Update peak price (high-water mark for LONG, low-water mark for SHORT)

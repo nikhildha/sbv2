@@ -546,10 +546,10 @@ function refreshTrackedSymbols() {
 async function fetchLivePrices() {
     if (trackedSymbols.length === 0) return {};
     try {
-        // Use Binance public API (no auth needed)
+        // Use Binance 24hr ticker API to get prices + volume (no auth needed)
         const https = require('https');
         const symbols = JSON.stringify(trackedSymbols);
-        const url = `https://api.binance.com/api/v3/ticker/price?symbols=${encodeURIComponent(symbols)}`;
+        const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(symbols)}`;
 
         return new Promise((resolve) => {
             https.get(url, (res) => {
@@ -559,7 +559,12 @@ async function fetchLivePrices() {
                     try {
                         const tickers = JSON.parse(data);
                         const prices = {};
-                        tickers.forEach(t => { prices[t.symbol] = parseFloat(t.price); });
+                        tickers.forEach(t => {
+                            prices[t.symbol] = {
+                                price: parseFloat(t.lastPrice),
+                                volume_24h: parseFloat(t.quoteVolume || 0)
+                            };
+                        });
                         resolve(prices);
                     } catch (e) { resolve({}); }
                 });
@@ -993,9 +998,16 @@ function updateTradebookWithPrices(prices) {
 // Broadcast live prices every 10 seconds
 setInterval(async () => {
     if (io.engine?.clientsCount === 0) return; // Skip if no clients
-    const prices = await fetchLivePrices();
-    if (Object.keys(prices).length > 0) {
-        io.emit('price-tick', { prices, timestamp: new Date().toISOString() });
+    const rawPrices = await fetchLivePrices();
+    if (Object.keys(rawPrices).length > 0) {
+        // Extract flat price map for backward compat (SL/TP engine, tradebook)
+        const prices = {};
+        const volumes = {};
+        for (const [sym, data] of Object.entries(rawPrices)) {
+            prices[sym] = typeof data === 'object' ? data.price : data;
+            if (typeof data === 'object' && data.volume_24h) volumes[sym] = data.volume_24h;
+        }
+        io.emit('price-tick', { prices, volumes, timestamp: new Date().toISOString() });
         // Enforce SL/TP/MAX_LOSS with fresh prices every tick
         try {
             updateTradebookWithPrices(prices);
@@ -1007,8 +1019,14 @@ setInterval(async () => {
 
 // REST endpoint for on-demand price fetch
 app.get('/api/prices', async (req, res) => {
-    const prices = await fetchLivePrices();
-    res.json({ prices, timestamp: new Date().toISOString() });
+    const rawPrices = await fetchLivePrices();
+    const prices = {};
+    const volumes = {};
+    for (const [sym, data] of Object.entries(rawPrices)) {
+        prices[sym] = typeof data === 'object' ? data.price : data;
+        if (typeof data === 'object' && data.volume_24h) volumes[sym] = data.volume_24h;
+    }
+    res.json({ prices, volumes, timestamp: new Date().toISOString() });
 });
 
 // ─── Klines API (proxies Binance for chart data) ────────────────────────────
@@ -1771,17 +1789,17 @@ function parseRSS(xml, sourceName) {
     while ((m = itemRx.exec(xml)) !== null) {
         const inner = m[1];
         const get = (rx1, rx2) => ((inner.match(rx1) || inner.match(rx2) || [])[1] || '').trim();
-        const title   = get(/<title><!\[CDATA\[(.*?)\]\]><\/title>/, /<title>(.*?)<\/title>/);
-        const link    = get(/<link>(.*?)<\/link>/, /<guid>(.*?)<\/guid>/);
+        const title = get(/<title><!\[CDATA\[(.*?)\]\]><\/title>/, /<title>(.*?)<\/title>/);
+        const link = get(/<link>(.*?)<\/link>/, /<guid>(.*?)<\/guid>/);
         const pubDate = get(/<pubDate>(.*?)<\/pubDate>/, /<dc:date>(.*?)<\/dc:date>/);
-        const desc    = get(/<description><!\[CDATA\[(.*?)\]\]><\/description>/, /<description>(.*?)<\/description>/);
+        const desc = get(/<description><!\[CDATA\[(.*?)\]\]><\/description>/, /<description>(.*?)<\/description>/);
         if (!title) continue;
-        const clean = s => s.replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&#39;/g,"'").replace(/&quot;/g,'"').trim();
+        const clean = s => s.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim();
         items.push({
-            title:   clean(title),
-            url:     link,
-            source:  sourceName,
-            time:    pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
+            title: clean(title),
+            url: link,
+            source: sourceName,
+            time: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
             summary: clean(desc).substring(0, 220),
         });
     }
@@ -1793,20 +1811,20 @@ app.get('/api/news-feed', async (req, res) => {
         return res.json(NEWS_CACHE.data);
     }
     const feeds = [
-        { url: 'https://cointelegraph.com/rss',                       name: 'CoinTelegraph' },
-        { url: 'https://www.coindesk.com/arc/outboundfeeds/rss/',     name: 'CoinDesk' },
-        { url: 'https://decrypt.co/feed',                             name: 'Decrypt' },
-        { url: 'https://cryptoslate.com/feed/',                       name: 'CryptoSlate' },
+        { url: 'https://cointelegraph.com/rss', name: 'CoinTelegraph' },
+        { url: 'https://www.coindesk.com/arc/outboundfeeds/rss/', name: 'CoinDesk' },
+        { url: 'https://decrypt.co/feed', name: 'Decrypt' },
+        { url: 'https://cryptoslate.com/feed/', name: 'CryptoSlate' },
     ];
     const settled = await Promise.allSettled(feeds.map(async ({ url, name }) => {
-        try   { return parseRSS(await httpsGet(url, 9000), name); }
+        try { return parseRSS(await httpsGet(url, 9000), name); }
         catch (e) { console.log(`[News] ${name} failed: ${e.message}`); return []; }
     }));
     const all = settled.flatMap(r => r.status === 'fulfilled' ? r.value : []);
     all.sort((a, b) => new Date(b.time) - new Date(a.time));
     const result = { items: all.slice(0, 40), fetched_at: new Date().toISOString() };
     NEWS_CACHE.data = result;
-    NEWS_CACHE.ts   = Date.now();
+    NEWS_CACHE.ts = Date.now();
     res.json(result);
 });
 
@@ -1821,7 +1839,7 @@ app.get('/api/intelligence', (req, res) => {
     const alerts = [];
 
     for (const [sym, state] of Object.entries(coinStates)) {
-        const coin = sym.replace('USDT','').replace('BUSD','');
+        const coin = sym.replace('USDT', '').replace('BUSD', '');
         if (state.sentiment !== undefined && state.sentiment !== null) {
             sentimentCoins[sym] = { coin, score: parseFloat(state.sentiment), action: state.action || '' };
         }
@@ -1835,7 +1853,7 @@ app.get('/api/intelligence', (req, res) => {
 
     // Market bias = average of all coin sentiment scores
     const scores = Object.values(sentimentCoins).map(c => c.score);
-    const marketBias = scores.length > 0 ? (scores.reduce((a,b)=>a+b,0)/scores.length) : null;
+    const marketBias = scores.length > 0 ? (scores.reduce((a, b) => a + b, 0) / scores.length) : null;
 
     // Last 100 sentiment log entries (most recent first)
     const rawLog = readCSV('sentiment_log.csv');

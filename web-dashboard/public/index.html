@@ -11,6 +11,392 @@
   <link rel="stylesheet" href="/styles.css">
   <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    /* ── Intelligence sections embedded styles ──────────────────── */
+    .intel-section {
+      padding: 0;
+      grid-column: 1 / -1;
+    }
+
+    .intel-section .section-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid #F0F4F8;
+    }
+
+    .section-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .section-icon.sent {
+      background: linear-gradient(135deg, #F59E0B22, #EF444422);
+    }
+
+    .section-icon.fund {
+      background: linear-gradient(135deg, #06B6D422, #3B82F622);
+    }
+
+    .section-icon.flow {
+      background: linear-gradient(135deg, #3B82F622, #8B5CF622);
+    }
+
+    .section-title {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--text-primary);
+    }
+
+    .section-sub {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    .icard {
+      background: var(--bg-secondary);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-card);
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .icard-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-secondary);
+      margin-bottom: 14px;
+    }
+
+    /* Bias meter */
+    .bias-meter {
+      height: 8px;
+      border-radius: 4px;
+      overflow: hidden;
+      background: #F0F4F8;
+      margin: 10px 0;
+    }
+
+    .bias-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.8s ease, background 0.8s ease;
+    }
+
+    .bias-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--text-secondary);
+    }
+
+    .bias-val {
+      font-size: 28px;
+      font-weight: 800;
+      text-align: center;
+      margin: 6px 0;
+    }
+
+    /* Per-coin sentiment bars */
+    .sent-bar-wrap {
+      max-height: 260px;
+      overflow-y: auto;
+    }
+
+    .sent-bar-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 0;
+      border-bottom: 1px solid #F8FAFC;
+    }
+
+    .sent-coin {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-primary);
+      width: 44px;
+      flex-shrink: 0;
+    }
+
+    .sent-bar-bg {
+      flex: 1;
+      height: 20px;
+      border-radius: 4px;
+      background: #F0F4F8;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .sent-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      position: absolute;
+      top: 0;
+      transition: width 0.6s ease;
+    }
+
+    .sent-score {
+      font-size: 12px;
+      font-weight: 700;
+      width: 50px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .sent-action {
+      font-size: 10px;
+      width: 80px;
+      text-align: right;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+    }
+
+    /* Alert banner */
+    .alert-banner {
+      background: linear-gradient(135deg, #FEF2F2, #FEE2E2);
+      border: 1px solid #FECACA;
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .alert-banner.hidden {
+      display: none;
+    }
+
+    .alert-icon {
+      font-size: 20px;
+    }
+
+    .alert-text {
+      font-size: 13px;
+      font-weight: 600;
+      color: #DC2626;
+    }
+
+    /* News feed */
+    .news-item {
+      display: flex;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid #F0F4F8;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+
+    .news-item:hover {
+      background: #F8FAFC;
+      border-radius: 4px;
+      padding-left: 6px;
+    }
+
+    .news-item:last-child {
+      border-bottom: none;
+    }
+
+    .news-src-pill {
+      flex-shrink: 0;
+      align-self: flex-start;
+      font-size: 9px;
+      font-weight: 800;
+      padding: 2px 7px;
+      border-radius: 20px;
+      background: #EEF2FF;
+      color: #4F46E5;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-top: 2px;
+      white-space: nowrap;
+    }
+
+    .news-src-pill.ct {
+      background: #FFF7ED;
+      color: #EA580C;
+    }
+
+    .news-src-pill.cd {
+      background: #EFF6FF;
+      color: #1D4ED8;
+    }
+
+    .news-src-pill.dc {
+      background: #F0FDF4;
+      color: #15803D;
+    }
+
+    .news-src-pill.cs {
+      background: #FDF4FF;
+      color: #9333EA;
+    }
+
+    .news-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .news-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.4;
+      margin-bottom: 4px;
+    }
+
+    .news-meta {
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    .news-summary {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 3px;
+      line-height: 1.5;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+
+    .news-sentiment {
+      flex-shrink: 0;
+      align-self: center;
+    }
+
+    .news-sent-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    /* Funding tiles */
+    .funding-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .funding-tile {
+      background: var(--bg-secondary);
+      border-radius: var(--radius-sm);
+      box-shadow: var(--shadow-card);
+      padding: 12px;
+      text-align: center;
+    }
+
+    .funding-tile-sym {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .funding-tile-rate {
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .funding-tile-sub {
+      font-size: 10px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    .funding-pos {
+      color: #22C55E;
+    }
+
+    .funding-neg {
+      color: #EF4444;
+    }
+
+    .funding-neu {
+      color: #F59E0B;
+    }
+
+    /* Order flow */
+    .flow-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+      gap: 8px;
+    }
+
+    .flow-tile-coin {
+      border-radius: var(--radius-sm);
+      padding: 12px 8px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .walls-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .walls-table th {
+      text-align: left;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      font-weight: 700;
+      padding: 0 10px 8px;
+      border-bottom: 1px solid #E2E8F0;
+    }
+
+    .walls-table td {
+      padding: 10px;
+      border-bottom: 1px solid #F8FAFC;
+      font-weight: 500;
+    }
+
+    .positive {
+      color: #22C55E;
+    }
+
+    .negative {
+      color: #EF4444;
+    }
+
+    .neutral {
+      color: #F59E0B;
+    }
+
+    /* Intel grid helpers */
+    .intel-grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .intel-grid-2 {
+      grid-template-columns: 1.4fr 1fr;
+    }
+
+    /* Regime table */
+    .regime-table-scroll {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+  </style>
 </head>
 
 <body>
@@ -35,8 +421,8 @@
       <a href="/tradebook" class="nav-link">Tradebook</a>
       <a href="/charts" class="nav-link">Charts</a>
       <a href="/backtest" class="nav-link">Backtest</a>
-      <a href="/deploy" class="nav-link">Deploy</a>
       <a href="/intelligence" class="nav-link">Intelligence</a>
+      <a href="/deploy" class="nav-link">Deploy</a>
       <a href="/settings" class="nav-link">Settings</a>
     </nav>
     <div class="header-right">
@@ -51,7 +437,8 @@
   <!-- ═══ Main Grid ═══ -->
   <main class="main">
 
-    <!-- ─── Regime Card (Black) ─── -->
+    <!-- ─── Row 1: Top Cards ─── -->
+    <!-- Regime Card (Black) -->
     <div class="card card-dark regime-card" id="regimeCard">
       <div class="card-title">Primary Regime</div>
       <div class="regime-emoji" id="regimeEmoji">⏳</div>
@@ -61,7 +448,7 @@
       </div>
     </div>
 
-    <!-- ─── Confidence Gauge (Black) ─── -->
+    <!-- Confidence Gauge (Black) -->
     <div class="card card-dark">
       <div class="card-title">AI Confidence</div>
       <div class="gauge-container">
@@ -79,14 +466,7 @@
       </div>
     </div>
 
-    <!-- ─── Active Positions (Black) ─── -->
-    <div class="card card-dark">
-      <div class="card-title">Active Positions</div>
-      <div class="card-value cyan" id="activePositions" style="font-size:72px">—</div>
-      <div class="card-subtitle" id="maxSlotsSub">Max concurrent slots: 25</div>
-    </div>
-
-    <!-- ─── Cumulative P&L ─── -->
+    <!-- Cumulative P&L -->
     <div class="card card-dark">
       <div class="card-title">Cumulative P&L</div>
       <div class="card-value" id="cumulativePnlValue" style="font-size:48px">$0.00</div>
@@ -94,30 +474,46 @@
       <div class="card-subtitle" id="capitalDeployed" style="margin-top:4px; opacity:0.7;">Capital: $0</div>
     </div>
 
-
-    <!-- ─── Section: Regime Distribution ─── -->
-    <div class="section-header">
-
-      <h2>Market Regime Analysis</h2>
-      <span class="line"></span>
+    <!-- Deployment Status Card -->
+    <div class="card card-dark" id="deploymentCard">
+      <div class="card-title">Deployment</div>
+      <div class="card-value" id="deployedCount" style="font-size:48px">0</div>
+      <div class="card-subtitle" id="deployedLabel">Active Positions</div>
+      <div class="card-subtitle" id="deployedCoins" style="margin-top:4px; opacity:0.7;">No coins deployed</div>
+      <div class="card-subtitle" id="deployedCapital" style="margin-top:2px; opacity:0.7;">Capital: $0</div>
     </div>
 
-    <div class="card chart-container regime-dist-wrapper">
-      <div class="card-title">Regime Distribution</div>
-      <div class="chart-inner">
-        <canvas id="regimeChart"></canvas>
+
+    <!-- ─── Row 2: 4 Small Cards ─── -->
+    <div style="grid-column:1/-1;display:grid;grid-template-columns:repeat(4,1fr);gap:16px;">
+      <!-- Market Sentiment Bias -->
+      <div class="icard">
+        <div class="icard-title">Market Sentiment Bias</div>
+        <div class="bias-val" id="biasVal">—</div>
+        <div class="bias-labels"><span>Bearish -1</span><span>0</span><span>Bullish +1</span></div>
+        <div class="bias-meter">
+          <div class="bias-fill" id="biasFill" style="width:50%;background:#E2E8F0;"></div>
+        </div>
       </div>
-    </div>
-
-    <div class="card chart-container">
-      <div class="card-title">Confidence Heatmap</div>
-      <div class="chart-inner">
-        <canvas id="confChart"></canvas>
+      <!-- Conviction Distribution -->
+      <div class="icard">
+        <div class="icard-title">Conviction Distribution</div>
+        <canvas id="convictionDist" height="80"></canvas>
+      </div>
+      <!-- Source Breakdown -->
+      <div class="icard">
+        <div class="icard-title">Source Breakdown</div>
+        <div class="source-pills" id="sourcePills"></div>
+      </div>
+      <!-- Hourly Buzz Volume -->
+      <div class="icard">
+        <div class="icard-title">Hourly Buzz Volume</div>
+        <canvas id="buzzChart" height="80"></canvas>
       </div>
     </div>
 
     <!-- ─── Section: Regime Drivers — Feature Heatmap ─── -->
-    <div class="section-header">
+    <div class="section-header" style="grid-column:1/-1;">
       <h2>Regime Drivers — Feature Heatmap</h2>
       <span class="line"></span>
     </div>
@@ -132,90 +528,259 @@
       </div>
     </div>
 
-    <!-- ─── Section: 50-Coin Heatmap ─── -->
-    <div class="section-header">
-
-      <h2>Active Positions</h2>
-      <span class="line"></span>
-    </div>
-
-    <div class="heatmap-wrapper card">
-      <div class="heatmap-grid" id="heatmapGrid">
-        <div class="empty-state">
-          <div class="icon">📊</div>
-          <p>Waiting for scanner data...</p>
+    <!-- ════════════════════════════════════════════════════════════ -->
+    <!--  INTELLIGENCE: SENTIMENT INTELLIGENCE                      -->
+    <!-- ════════════════════════════════════════════════════════════ -->
+    <div class="intel-section">
+      <div class="section-header">
+        <div class="section-icon sent">📰</div>
+        <div>
+          <div class="section-title">Sentiment Intelligence</div>
+          <div class="section-sub">VADER NLP · RSS · Reddit · CryptoPanic · Fear &amp; Greed Index</div>
         </div>
       </div>
-    </div>
 
-    <!-- ─── Controls ─── -->
-    <div class="controls-bar">
-      <button class="btn" id="engineToggleBtn" onclick="toggleEngine()"
-        style="background:linear-gradient(135deg,#F59E0B,#D97706); min-width:160px; font-weight:700;">
-        ⏸️ Pause Engine
-      </button>
-      <button class="btn btn-refresh" onclick="triggerCycle()">Run Cycle</button>
-      <button class="btn btn-kill" onclick="deleteAllTrades()"
-        style="background:linear-gradient(135deg,#EF4444,#DC2626)">Delete</button>
-    </div>
-
-    <!-- ─── Section: Live Bot Kernel ─── -->
-    <div class="section-header">
-
-      <h2>Bot Kernel — Live Logs</h2>
-      <span class="line"></span>
-    </div>
-
-    <div class="card log-viewer-card">
-      <div class="log-toolbar">
-        <span class="log-status" id="logStatus">● Connected</span>
-        <div class="log-actions">
-          <button class="btn-log" onclick="toggleAutoScroll()" id="autoScrollBtn">Auto-scroll</button>
-          <button class="btn-log" onclick="clearLogs()">Clear</button>
+      <!-- Alert Banner -->
+      <div class="alert-banner hidden" id="alertBanner">
+        <span class="alert-icon">🚨</span>
+        <div>
+          <div class="alert-text" id="alertText">SENTIMENT ALERT DETECTED</div>
+          <div style="font-size:11px;color:#991B1B;margin-top:2px;" id="alertDetail"></div>
         </div>
       </div>
-      <div class="log-output" id="logOutput">
-        <div class="log-empty">Waiting for bot output...</div>
+
+      <!-- Row 1: News Feed (left) + Per-Coin Sentiment Scores (right) -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <!-- LEFT: Live News Feed -->
+        <div class="icard">
+          <div class="icard-title">Live News Feed
+            <span style="float:right;font-size:10px;color:var(--text-secondary);" id="newsFetchTs"></span>
+          </div>
+          <div
+            style="font-size:10px;color:var(--text-secondary);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #F0F4F8;">
+            CoinTelegraph · CoinDesk · Decrypt · CryptoSlate — cached 5 min
+          </div>
+          <div id="newsFeed" style="max-height:900px;overflow-y:auto;">
+            <div style="text-align:center;color:var(--text-secondary);padding:20px;">Loading news…</div>
+          </div>
+        </div>
+
+        <!-- RIGHT: Per-Coin Sentiment Scores -->
+        <div class="icard">
+          <div class="icard-title">Per-Coin Sentiment Scores <span
+              style="font-weight:400;color:var(--text-secondary);font-size:10px;">all coins</span></div>
+          <div class="sent-bar-wrap" id="sentBars" style="max-height:none;overflow-y:auto;">
+            <div style="color:var(--text-secondary);font-size:13px;padding:20px 0;text-align:center;">Waiting for bot
+              analysis cycle…</div>
+          </div>
+          <!-- AI Insight -->
+          <div id="sentimentInsight"
+            style="margin-top:12px;padding:10px 12px;background:linear-gradient(135deg,#F0FDF4,#ECFDF5);border-radius:8px;font-size:11px;color:#15803D;line-height:1.5;">
+            <strong>💡 Insight:</strong> Waiting for analysis...
+          </div>
+        </div>
       </div>
-    </div>
 
-    <!-- ─── Section: Regime Engine Execution Log ─── -->
-    <div class="section-header">
-
-      <h2>Regime Engine — Execution Log</h2>
-      <span class="line"></span>
-    </div>
-
-    <div class="exec-timing" style="grid-column:1/-1; display:flex; gap:24px; margin-bottom:8px;">
-      <span class="stat-sub" style="font-size:11px;">⏱ Last run: <strong id="execLastRun">—</strong></span>
-      <span class="stat-sub" style="font-size:11px;">⏭ Next run: <strong id="execNextRun">—</strong></span>
-    </div>
-
-    <div class="positions-table-wrapper card" style="grid-column:1/-1;">
-      <table class="data-table" id="execLogTable">
-        <thead>
-          <tr>
-            <th>Timestamp</th>
-            <th>Cycle</th>
-            <th>Coins Scanned</th>
-            <th>Eligible</th>
-            <th>Deployed</th>
-            <th>Total Trades</th>
-            <th>Closed</th>
-            <th>Exec Time</th>
-          </tr>
-        </thead>
-        <tbody id="execLogBody">
-          <tr>
-            <td colspan="8" style="text-align:center;color:#8899AA;padding:24px;">Waiting for first analysis cycle...
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <div class="exec-log-pagination" id="execLogPagination"
-        style="display:flex; align-items:center; justify-content:center; gap:12px; padding:12px 16px; border-top:1px solid rgba(0,0,0,0.06); font-size:13px; color:#5A6A7E;">
+      <!-- ════════════════════════════════════════════════════════════ -->
+      <!--  INTELLIGENCE: FUNDING RATES (compact card)                -->
+      <!-- ════════════════════════════════════════════════════════════ -->
+      <div class="intel-section">
+        <div class="section-header">
+          <div class="section-icon fund">💹</div>
+          <div>
+            <div class="section-title">Funding Rates &amp; Open Interest</div>
+            <div class="section-sub">Binance Futures perpetual swap rates · Smart-money signals</div>
+          </div>
+        </div>
+        <div class="icard">
+          <div class="icard-title">Funding Rates — All Coins
+            <span style="font-size:10px;color:var(--text-secondary);margin-left:8px;">Updated from last bot analysis
+              cycle</span>
+          </div>
+          <div class="funding-grid" id="fundingGrid">
+            <div style="color:var(--text-secondary);font-size:13px;padding:16px;text-align:center;">Loading…</div>
+          </div>
+          <!-- Funding Insight — inline text below grid -->
+          <div id="fundingInsight"
+            style="margin-top:12px;padding:10px 12px;background:linear-gradient(135deg,#F0F9FF,#E0F2FE);border-radius:8px;font-size:11px;color:#0369A1;line-height:1.5;">
+            <strong>💡 Funding Insight:</strong> Loading funding data...
+          </div>
+        </div>
       </div>
-    </div>
+
+      <!-- ════════════════════════════════════════════════════════════ -->
+      <!--  INTELLIGENCE: ORDER FLOW (all-coins table)                -->
+      <!-- ════════════════════════════════════════════════════════════ -->
+      <div class="intel-section">
+        <div class="section-header">
+          <div class="section-icon flow">📊</div>
+          <div>
+            <div class="section-title">Order Flow Intelligence</div>
+            <div class="section-sub">L2 Order Book · Taker Buy/Sell · Cumulative Delta · Long/Short Ratio · All Coins
+            </div>
+          </div>
+        </div>
+        <div class="icard">
+          <div class="icard-title">Order Flow — All Tracked Coins
+            <span style="font-size:10px;color:var(--text-secondary);margin-left:8px;">Data from last bot analysis
+              cycle</span>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="walls-table" id="orderFlowAllTable" style="width:100%;min-width:800px;">
+              <thead>
+                <tr>
+                  <th style="text-align:left;padding:10px 8px;">Coin</th>
+                  <th>Regime</th>
+                  <th>Imbalance</th>
+                  <th>Taker Buy%</th>
+                  <th>Cum Delta</th>
+                  <th>L/S Ratio</th>
+                  <th>Bid Walls</th>
+                  <th>Ask Walls</th>
+                  <th>Next Upper Wall</th>
+                  <th>Next Lower Wall</th>
+                  <th>Signal</th>
+                </tr>
+              </thead>
+              <tbody id="orderFlowAllBody">
+                <tr>
+                  <td colspan="11" style="text-align:center;color:var(--text-secondary);padding:24px;">Waiting for bot
+                    analysis cycle…</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <!-- AI Insight -->
+          <div id="orderFlowInsight"
+            style="margin-top:12px;padding:10px 12px;background:linear-gradient(135deg,#FAF5FF,#F3E8FF);border-radius:8px;font-size:11px;color:#7C3AED;line-height:1.5;">
+            <strong>💡 Insight:</strong> Waiting for analysis...
+          </div>
+        </div>
+
+        <!-- Order Flow Heatmap — Tile Grid -->
+        <div style="margin-top:16px;">
+          <div class="icard">
+            <div class="icard-title">Order Flow Heatmap — All Coins
+              <span style="font-size:10px;color:var(--text-secondary);margin-left:8px;">Sentiment-weighted flow
+                signals</span>
+            </div>
+            <div class="funding-grid" id="flowHeatmap">
+              <div style="color:var(--text-secondary);font-size:13px;padding:16px;text-align:center;">Waiting for bot
+                analysis cycle…</div>
+            </div>
+            <!-- AI Insight -->
+            <div id="flowHeatmapInsight"
+              style="margin-top:12px;padding:10px 12px;background:linear-gradient(135deg,#EFF6FF,#DBEAFE);border-radius:8px;font-size:11px;color:#1D4ED8;line-height:1.5;">
+              <strong>💡 Insight:</strong> Waiting for analysis...
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- ─── Section: Technical Analysis — Deployed Trades ─── -->
+      <div class="section-header" style="grid-column:1/-1;">
+        <h2>Technical Analysis — Deployed Trades</h2>
+        <span class="line"></span>
+      </div>
+
+      <div class="positions-table-wrapper card" style="grid-column:1/-1;">
+        <div style="overflow-x:auto;">
+          <table class="data-table" id="taTable">
+            <thead>
+              <tr>
+                <th>Coin</th>
+                <th>Side</th>
+                <th>Entry</th>
+                <th>Current</th>
+                <th>ATR</th>
+                <th>RSI</th>
+                <th>Trend 1h</th>
+                <th>Trend 4h</th>
+                <th>BB Width</th>
+                <th>Vol Ratio</th>
+                <th>SL</th>
+                <th>TP</th>
+                <th>P&L%</th>
+              </tr>
+            </thead>
+            <tbody id="taTableBody">
+              <tr>
+                <td colspan="13" style="text-align:center;color:#8899AA;padding:24px;">No deployed trades</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+
+
+      <!-- ─── Controls ─── -->
+      <div class="controls-bar">
+        <button class="btn" id="engineToggleBtn" onclick="toggleEngine()"
+          style="background:linear-gradient(135deg,#F59E0B,#D97706); min-width:160px; font-weight:700;">
+          ⏸️ Pause Engine
+        </button>
+        <button class="btn btn-refresh" onclick="triggerCycle()">Run Cycle</button>
+        <button class="btn btn-kill" onclick="deleteAllTrades()"
+          style="background:linear-gradient(135deg,#EF4444,#DC2626)">Delete</button>
+      </div>
+
+      <!-- ─── Section: Live Bot Kernel ─── -->
+      <div class="section-header">
+        <h2>Bot Kernel — Live Logs</h2>
+        <span class="line"></span>
+      </div>
+
+      <div class="card log-viewer-card">
+        <div class="log-toolbar">
+          <span class="log-status" id="logStatus">● Connected</span>
+          <div class="log-actions">
+            <button class="btn-log" onclick="toggleAutoScroll()" id="autoScrollBtn">Auto-scroll</button>
+            <button class="btn-log" onclick="clearLogs()">Clear</button>
+          </div>
+        </div>
+        <div class="log-output" id="logOutput">
+          <div class="log-empty">Waiting for bot output...</div>
+        </div>
+      </div>
+
+      <!-- ─── Section: Regime Engine Execution Log ─── -->
+      <div class="section-header">
+        <h2>Regime Engine — Execution Log</h2>
+        <span class="line"></span>
+      </div>
+
+      <div class="exec-timing" style="grid-column:1/-1; display:flex; gap:24px; margin-bottom:8px;">
+        <span class="stat-sub" style="font-size:11px;">⏱ Last run: <strong id="execLastRun">—</strong></span>
+        <span class="stat-sub" style="font-size:11px;">⏭ Next run: <strong id="execNextRun">—</strong></span>
+      </div>
+
+      <div class="positions-table-wrapper card" style="grid-column:1/-1;">
+        <table class="data-table" id="execLogTable">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Cycle</th>
+              <th>Coins Scanned</th>
+              <th>Eligible</th>
+              <th>Deployed</th>
+              <th>Total Trades</th>
+              <th>Closed</th>
+              <th>Exec Time</th>
+            </tr>
+          </thead>
+          <tbody id="execLogBody">
+            <tr>
+              <td colspan="8" style="text-align:center;color:#8899AA;padding:24px;">Waiting for first analysis cycle...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="exec-log-pagination" id="execLogPagination"
+          style="display:flex; align-items:center; justify-content:center; gap:12px; padding:12px 16px; border-top:1px solid rgba(0,0,0,0.06); font-size:13px; color:#5A6A7E;">
+        </div>
+      </div>
 
   </main>
 
@@ -242,8 +807,9 @@
     </div>
   </div>
 
-  <script src="/mode-toggle.js"></script>
+  <!-- mode-toggle.js removed — LIVE/PAPER toggle no longer in nav -->
   <script src="/app.js"></script>
+  <script src="/intelligence-app.js"></script>
 </body>
 
 </html>
