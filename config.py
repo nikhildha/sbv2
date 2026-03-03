@@ -69,7 +69,16 @@ CONFIDENCE_LOW = 0.92    # 92–96% → 15x  (optimized from 0.85, below 92% = n
 # ─── Risk Management ────────────────────────────────────────────────────────────
 RISK_PER_TRADE = 0.04
 KILL_SWITCH_DRAWDOWN = 0.10   # Pause bot if 10% drawdown in 24h
-MAX_LOSS_PER_TRADE_PCT = -15   # Force-close trade if loss exceeds 15%
+MAX_LOSS_PER_TRADE_PCT = -15   # Default max loss (used as fallback)
+
+def get_max_loss_pct(leverage):
+    """Leverage-tiered max loss: higher leverage = wider stop to avoid wicks."""
+    if leverage >= 20:
+        return -30
+    elif leverage >= 15:
+        return -20
+    else:
+        return -15
 MIN_HOLD_MINUTES = 30         # Minimum hold time before regime-change exits
 DEFAULT_QUANTITY = 0.002      # BTC quantity (overridden by position sizer)
 MARGIN_TYPE = "ISOLATED"      # Never use CROSS for high leverage
@@ -114,7 +123,7 @@ SIDEWAYS_POSITION_REDUCTION = 0.30  # 30% smaller positions in chop
 
 # ─── Bot Loop ────────────────────────────────────────────────────────────────────
 LOOP_INTERVAL_SECONDS = 60        # 1-minute heartbeat (checks commands, updates state)
-ANALYSIS_INTERVAL_SECONDS = 60   # 1-minute full analysis cycle (for debugging)
+ANALYSIS_INTERVAL_SECONDS = 300   # 5-minute full analysis cycle
 ERROR_RETRY_SECONDS = 60          # Retry after error
 
 # ─── Multi-Coin Trading ──────────────────────────────────────────────────────────

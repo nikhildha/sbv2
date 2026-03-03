@@ -420,9 +420,6 @@
       <a href="/" class="nav-link active">Dashboard</a>
       <a href="/tradebook" class="nav-link">Tradebook</a>
       <a href="/charts" class="nav-link">Charts</a>
-      <a href="/backtest" class="nav-link">Backtest</a>
-      <a href="/intelligence" class="nav-link">Intelligence</a>
-      <a href="/deploy" class="nav-link">Deploy</a>
       <a href="/settings" class="nav-link">Settings</a>
     </nav>
     <div class="header-right">
@@ -483,62 +480,283 @@
       <div class="card-subtitle" id="deployedCapital" style="margin-top:2px; opacity:0.7;">Capital: $0</div>
     </div>
 
+    <!-- ════════════════════════════════════════════════════════════ -->
+    <!--  SIGNAL SUMMARY — All Coins Consolidated View             -->
+    <!-- ════════════════════════════════════════════════════════════ -->
+    <div class="intel-section">
+      <div class="section-header">
 
-    <!-- ─── Row 2: 4 Small Cards ─── -->
-    <div style="grid-column:1/-1;display:grid;grid-template-columns:repeat(4,1fr);gap:16px;">
-      <!-- Market Sentiment Bias -->
-      <div class="icard">
-        <div class="icard-title">Market Sentiment Bias</div>
-        <div class="bias-val" id="biasVal">—</div>
-        <div class="bias-labels"><span>Bearish -1</span><span>0</span><span>Bullish +1</span></div>
-        <div class="bias-meter">
-          <div class="bias-fill" id="biasFill" style="width:50%;background:#E2E8F0;"></div>
+        <div>
+          <div class="section-title">Signal Summary — All Coins</div>
+          <div class="section-sub">Consolidated signals from Technical Analysis · Order Flow · Funding Rates · Sentiment
+          </div>
         </div>
       </div>
-      <!-- Conviction Distribution -->
       <div class="icard">
-        <div class="icard-title">Conviction Distribution</div>
-        <canvas id="convictionDist" height="80"></canvas>
-      </div>
-      <!-- Source Breakdown -->
-      <div class="icard">
-        <div class="icard-title">Source Breakdown</div>
-        <div class="source-pills" id="sourcePills"></div>
-      </div>
-      <!-- Hourly Buzz Volume -->
-      <div class="icard">
-        <div class="icard-title">Hourly Buzz Volume</div>
-        <canvas id="buzzChart" height="80"></canvas>
-      </div>
-    </div>
-
-    <!-- ─── Section: Regime Drivers — Feature Heatmap ─── -->
-    <div class="section-header" style="grid-column:1/-1;">
-      <h2>Regime Drivers — Feature Heatmap</h2>
-      <span class="line"></span>
-    </div>
-
-    <div class="card feature-heatmap-wrapper" style="grid-column: 1 / -1;">
-      <div class="card-title">HMM Feature Values per Coin</div>
-      <div class="feature-heatmap-scroll" id="featureHeatmapArea">
-        <div class="empty-state">
-          <div class="icon">🧠</div>
-          <p>Waiting for engine analysis cycle...</p>
+        <div style="overflow-x:auto;max-height:440px;overflow-y:auto;" id="signalSummaryWrap">
+          <table class="walls-table" id="signalSummaryTable" style="width:100%;min-width:900px;">
+            <thead style="position:sticky;top:0;background:white;z-index:2;">
+              <tr>
+                <th style="text-align:left;padding:10px 8px;">Coin</th>
+                <th>Regime</th>
+                <th>Action</th>
+                <th>Confidence</th>
+                <th>Price</th>
+                <th style="min-width:80px;">TA Signal</th>
+                <th style="min-width:80px;">Order Flow</th>
+                <th style="min-width:80px;">Funding</th>
+                <th style="min-width:80px;">Sentiment</th>
+                <th style="min-width:100px;">Composite</th>
+              </tr>
+            </thead>
+            <tbody id="signalSummaryBody">
+              <tr>
+                <td colspan="10" style="text-align:center;color:var(--text-secondary);padding:24px;">Waiting for bot
+                  analysis cycle…</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
+
+
+    <!-- ─── Section: Technical Analysis — Multi-Timeframe S/R ─── -->
+    <div class="intel-section">
+      <div class="section-header">
+
+        <div>
+          <div class="section-title">Technical Analysis — All Coins</div>
+          <div class="section-sub">Multi-Timeframe S/R · RSI · EMA Trend · Bollinger Bands · 1h / 15m / 5m</div>
+        </div>
+      </div>
+      <div class="icard">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+          <div class="icard-title" style="margin-bottom:0;">Support & Resistance — All Tracked Coins
+            <span style="font-size:10px;color:var(--text-secondary);margin-left:8px;">Swing High/Low Detection ·
+              Updated each cycle</span>
+          </div>
+          <!-- Multiselect Coin Filter for TA -->
+          <div style="position:relative;" id="taFilterWrap">
+            <button id="taFilterBtn"
+              style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:5px 12px;font-size:11px;font-weight:600;color:#334155;cursor:pointer;display:flex;align-items:center;gap:4px;">
+              🔍 Filter Coins <span style="font-size:9px;opacity:0.6;" id="taFilterCount">(all)</span>
+              <span style="font-size:8px;">▼</span>
+            </button>
+            <div id="taFilterDropdown"
+              style="display:none;position:absolute;right:0;top:32px;background:white;border:1px solid #E2E8F0;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);z-index:100;min-width:220px;max-height:340px;overflow-y:auto;padding:8px 0;">
+              <div style="padding:6px 12px;border-bottom:1px solid #F1F5F9;display:flex;gap:8px;">
+                <button id="taSelectAll"
+                  style="flex:1;background:#EEF2FF;border:none;border-radius:6px;padding:4px 0;font-size:10px;font-weight:600;color:#4F46E5;cursor:pointer;">Select
+                  All</button>
+                <button id="taDeselectAll"
+                  style="flex:1;background:#FEF2F2;border:none;border-radius:6px;padding:4px 0;font-size:10px;font-weight:600;color:#DC2626;cursor:pointer;">Clear
+                  All</button>
+              </div>
+              <div id="taFilterList" style="padding:4px 0;"></div>
+            </div>
+          </div>
+        </div>
+        <div style="overflow-x:auto;max-height:440px;overflow-y:auto;" id="taScrollWrap">
+          <table class="walls-table" id="taTable" style="width:100%;min-width:1200px;">
+            <thead style="position:sticky;top:0;background:white;z-index:2;">
+              <tr>
+                <th style="text-align:left;padding:10px 8px;">Coin</th>
+                <th>Price</th>
+                <th>Regime</th>
+                <th style="background:#EFF6FF;">1h RSI</th>
+                <th style="background:#EFF6FF;">1h Trend</th>
+                <th style="background:#EFF6FF;">1h Support</th>
+                <th style="background:#EFF6FF;">1h Resist</th>
+                <th style="background:#F0FDF4;">15m RSI</th>
+                <th style="background:#F0FDF4;">15m S</th>
+                <th style="background:#F0FDF4;">15m R</th>
+                <th style="background:#FFFBEB;">5m RSI</th>
+                <th style="background:#FFFBEB;">5m S</th>
+                <th style="background:#FFFBEB;">5m R</th>
+                <th>BB Pos</th>
+                <th>Signal</th>
+              </tr>
+            </thead>
+            <tbody id="taTableBody">
+              <tr>
+                <td colspan="15" style="text-align:center;color:var(--text-secondary);padding:24px;">Waiting for bot
+                  analysis cycle…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <!-- AI TA Insight -->
+        <div id="taInsight"
+          style="margin-top:12px;padding:10px 12px;background:linear-gradient(135deg,#EFF6FF,#DBEAFE);border-radius:8px;font-size:11px;color:#1D4ED8;line-height:1.5;">
+          <strong>TA Insight:</strong> Waiting for analysis...
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ════════════════════════════════════════════════════════════ -->
+    <!--  INTELLIGENCE: ORDER FLOW (all-coins table)                -->
+    <!-- ════════════════════════════════════════════════════════════ -->
+    <div class="intel-section">
+      <div class="section-header">
+
+        <div>
+          <div class="section-title">Order Flow Intelligence</div>
+          <div class="section-sub">L2 Order Book · Taker Buy/Sell · Cumulative Delta · Long/Short Ratio · All Coins
+          </div>
+        </div>
+      </div>
+      <div class="icard">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+          <div class="icard-title" style="margin-bottom:0;">Order Flow — All Tracked Coins
+            <span style="font-size:10px;color:var(--text-secondary);margin-left:8px;">Aggregated from Binance + OKX +
+              Bybit</span>
+          </div>
+          <!-- Multiselect Coin Filter -->
+          <div style="position:relative;" id="ofFilterWrap">
+            <button id="ofFilterBtn"
+              style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:5px 12px;font-size:11px;font-weight:600;color:#334155;cursor:pointer;display:flex;align-items:center;gap:4px;">
+              🔍 Filter Coins <span style="font-size:9px;opacity:0.6;" id="ofFilterCount">(all)</span>
+              <span style="font-size:8px;">▼</span>
+            </button>
+            <div id="ofFilterDropdown"
+              style="display:none;position:absolute;right:0;top:32px;background:white;border:1px solid #E2E8F0;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);z-index:100;min-width:220px;max-height:340px;overflow-y:auto;padding:8px 0;">
+              <div style="padding:6px 12px;border-bottom:1px solid #F1F5F9;display:flex;gap:8px;">
+                <button id="ofSelectAll"
+                  style="flex:1;background:#EEF2FF;border:none;border-radius:6px;padding:4px 0;font-size:10px;font-weight:600;color:#4F46E5;cursor:pointer;">Select
+                  All</button>
+                <button id="ofDeselectAll"
+                  style="flex:1;background:#FEF2F2;border:none;border-radius:6px;padding:4px 0;font-size:10px;font-weight:600;color:#DC2626;cursor:pointer;">Clear
+                  All</button>
+              </div>
+              <div id="ofFilterList" style="padding:4px 0;"></div>
+            </div>
+          </div>
+        </div>
+        <div style="overflow-x:auto;max-height:440px;overflow-y:auto;" id="ofScrollWrap">
+          <table class="walls-table" id="wallsTable" style="width:100%;min-width:1100px;">
+            <thead style="position:sticky;top:0;background:white;z-index:2;">
+              <tr>
+                <th style="text-align:left;padding:10px 8px;">Coin</th>
+                <th>Regime</th>
+                <th>Exch</th>
+                <th>Imbalance</th>
+                <th>Taker Buy%</th>
+                <th>Cum Delta</th>
+                <th>Agg Bid $</th>
+                <th>Agg Ask $</th>
+                <th>Next Upper Wall</th>
+                <th>Next Lower Wall</th>
+                <th>OB Zones</th>
+                <th>Signal</th>
+              </tr>
+            </thead>
+            <tbody id="orderFlowAllBody">
+              <tr>
+                <td colspan="12" style="text-align:center;color:var(--text-secondary);padding:24px;">Waiting for bot
+                  analysis cycle…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <!-- AI Insight below table -->
+        <div id="orderFlowInsight"
+          style="margin-top:12px;padding:10px 12px;background:linear-gradient(135deg,#F0FDF4,#ECFDF5);border-radius:8px;font-size:11px;color:#15803D;line-height:1.5;">
+          <strong>Insight:</strong> Waiting for analysis...
+        </div>
+      </div>
+
+      <!-- Order Flow Heatmap — Tile Grid -->
+      <div style="margin-top:16px;">
+        <div class="icard">
+          <div class="icard-title">Order Flow Heatmap — All Coins
+            <span style="font-size:10px;color:var(--text-secondary);margin-left:8px;">Sentiment-weighted flow
+              signals</span>
+          </div>
+          <div class="funding-grid" id="flowHeatmap">
+            <div style="color:var(--text-secondary);font-size:13px;padding:16px;text-align:center;">Waiting for bot
+              analysis cycle…</div>
+          </div>
+          <!-- AI Insight -->
+          <div id="flowHeatmapInsight"
+            style="margin-top:12px;padding:10px 12px;background:linear-gradient(135deg,#EFF6FF,#DBEAFE);border-radius:8px;font-size:11px;color:#1D4ED8;line-height:1.5;">
+            <strong>Insight:</strong> Waiting for analysis...
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ════════════════════════════════════════════════════════════ -->
+    <!--  INTELLIGENCE: FUNDING RATES (compact card)                -->
+    <!-- ════════════════════════════════════════════════════════════ -->
+    <div class="intel-section">
+      <div class="section-header">
+
+        <div>
+          <div class="section-title">Funding Rates &amp; Open Interest</div>
+          <div class="section-sub">Binance Futures perpetual swap rates · Smart-money signals</div>
+        </div>
+      </div>
+      <div class="icard">
+        <div class="icard-title">Funding Rates — All Coins
+          <span style="font-size:10px;color:var(--text-secondary);margin-left:8px;">Updated from last bot analysis
+            cycle</span>
+        </div>
+        <div class="funding-grid" id="fundingGrid">
+          <div style="color:var(--text-secondary);font-size:13px;padding:16px;text-align:center;">Loading…</div>
+        </div>
+        <!-- Funding Insight — inline text below grid -->
+        <div id="fundingInsight"
+          style="margin-top:12px;padding:10px 12px;background:linear-gradient(135deg,#F0F9FF,#E0F2FE);border-radius:8px;font-size:11px;color:#0369A1;line-height:1.5;">
+          <strong>Funding Insight:</strong> Loading funding data...
+        </div>
+      </div>
+    </div>
+
 
     <!-- ════════════════════════════════════════════════════════════ -->
     <!--  INTELLIGENCE: SENTIMENT INTELLIGENCE                      -->
     <!-- ════════════════════════════════════════════════════════════ -->
     <div class="intel-section">
       <div class="section-header">
-        <div class="section-icon sent">📰</div>
+
         <div>
           <div class="section-title">Sentiment Intelligence</div>
           <div class="section-sub">VADER NLP · RSS · Reddit · CryptoPanic · Fear &amp; Greed Index</div>
         </div>
       </div>
+
+      <!-- 4 Small Cards: Bias, Conviction, Source, Buzz -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:16px;">
+        <!-- Market Sentiment Bias -->
+        <div class="icard">
+          <div class="icard-title">Market Sentiment Bias</div>
+          <div class="bias-val" id="biasVal">—</div>
+          <div class="bias-labels"><span>Bearish -1</span><span>0</span><span>Bullish +1</span></div>
+          <div class="bias-meter">
+            <div class="bias-fill" id="biasFill" style="width:50%;background:#E2E8F0;"></div>
+          </div>
+        </div>
+        <!-- Conviction Distribution -->
+        <div class="icard">
+          <div class="icard-title">Conviction Distribution</div>
+          <canvas id="convictionDist" height="80"></canvas>
+        </div>
+        <!-- Source Breakdown -->
+        <div class="icard">
+          <div class="icard-title">Source Breakdown</div>
+          <div class="source-pills" id="sourcePills"></div>
+        </div>
+        <!-- Hourly Buzz Volume -->
+        <div class="icard">
+          <div class="icard-title">Hourly Buzz Volume</div>
+          <canvas id="buzzChart" height="80"></canvas>
+        </div>
+      </div>
+
+
 
       <!-- Alert Banner -->
       <div class="alert-banner hidden" id="alertBanner">
@@ -576,212 +794,21 @@
           <!-- AI Insight -->
           <div id="sentimentInsight"
             style="margin-top:12px;padding:10px 12px;background:linear-gradient(135deg,#F0FDF4,#ECFDF5);border-radius:8px;font-size:11px;color:#15803D;line-height:1.5;">
-            <strong>💡 Insight:</strong> Waiting for analysis...
-          </div>
-        </div>
-      </div>
-
-      <!-- ════════════════════════════════════════════════════════════ -->
-      <!--  INTELLIGENCE: FUNDING RATES (compact card)                -->
-      <!-- ════════════════════════════════════════════════════════════ -->
-      <div class="intel-section">
-        <div class="section-header">
-          <div class="section-icon fund">💹</div>
-          <div>
-            <div class="section-title">Funding Rates &amp; Open Interest</div>
-            <div class="section-sub">Binance Futures perpetual swap rates · Smart-money signals</div>
-          </div>
-        </div>
-        <div class="icard">
-          <div class="icard-title">Funding Rates — All Coins
-            <span style="font-size:10px;color:var(--text-secondary);margin-left:8px;">Updated from last bot analysis
-              cycle</span>
-          </div>
-          <div class="funding-grid" id="fundingGrid">
-            <div style="color:var(--text-secondary);font-size:13px;padding:16px;text-align:center;">Loading…</div>
-          </div>
-          <!-- Funding Insight — inline text below grid -->
-          <div id="fundingInsight"
-            style="margin-top:12px;padding:10px 12px;background:linear-gradient(135deg,#F0F9FF,#E0F2FE);border-radius:8px;font-size:11px;color:#0369A1;line-height:1.5;">
-            <strong>💡 Funding Insight:</strong> Loading funding data...
-          </div>
-        </div>
-      </div>
-
-      <!-- ════════════════════════════════════════════════════════════ -->
-      <!--  INTELLIGENCE: ORDER FLOW (all-coins table)                -->
-      <!-- ════════════════════════════════════════════════════════════ -->
-      <div class="intel-section">
-        <div class="section-header">
-          <div class="section-icon flow">📊</div>
-          <div>
-            <div class="section-title">Order Flow Intelligence</div>
-            <div class="section-sub">L2 Order Book · Taker Buy/Sell · Cumulative Delta · Long/Short Ratio · All Coins
-            </div>
-          </div>
-        </div>
-        <div class="icard">
-          <div class="icard-title">Order Flow — All Tracked Coins
-            <span style="font-size:10px;color:var(--text-secondary);margin-left:8px;">Aggregated from Binance + OKX +
-              Bybit</span>
-          </div>
-          <div style="overflow-x:auto;">
-            <table class="walls-table" id="orderFlowAllTable" style="width:100%;min-width:1000px;">
-              <thead>
-                <tr>
-                  <th style="text-align:left;padding:10px 8px;">Coin</th>
-                  <th>Regime</th>
-                  <th>Exch</th>
-                  <th>Imbalance</th>
-                  <th>Taker Buy%</th>
-                  <th>Cum Delta</th>
-                  <th>Agg Bid $</th>
-                  <th>Agg Ask $</th>
-                  <th>Next Upper Wall</th>
-                  <th>Next Lower Wall</th>
-                  <th>OB Zones</th>
-                  <th>Signal</th>
-                </tr>
-              </thead>
-              <tbody id="orderFlowAllBody">
-                <tr>
-                  <td colspan="12" style="text-align:center;color:var(--text-secondary);padding:24px;">Waiting for bot
-                    analysis cycle…</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <!-- AI Insight -->
-          <div id="orderFlowInsight"
-            style="margin-top:12px;padding:10px 12px;background:linear-gradient(135deg,#FAF5FF,#F3E8FF);border-radius:8px;font-size:11px;color:#7C3AED;line-height:1.5;">
-            <strong>💡 Insight:</strong> Waiting for analysis...
-          </div>
-        </div>
-
-        <!-- Order Flow Heatmap — Tile Grid -->
-        <div style="margin-top:16px;">
-          <div class="icard">
-            <div class="icard-title">Order Flow Heatmap — All Coins
-              <span style="font-size:10px;color:var(--text-secondary);margin-left:8px;">Sentiment-weighted flow
-                signals</span>
-            </div>
-            <div class="funding-grid" id="flowHeatmap">
-              <div style="color:var(--text-secondary);font-size:13px;padding:16px;text-align:center;">Waiting for bot
-                analysis cycle…</div>
-            </div>
-            <!-- AI Insight -->
-            <div id="flowHeatmapInsight"
-              style="margin-top:12px;padding:10px 12px;background:linear-gradient(135deg,#EFF6FF,#DBEAFE);border-radius:8px;font-size:11px;color:#1D4ED8;line-height:1.5;">
-              <strong>💡 Insight:</strong> Waiting for analysis...
-            </div>
+            <strong>Insight:</strong> Waiting for analysis...
           </div>
         </div>
       </div>
 
 
-      <!-- ─── Section: Technical Analysis — Deployed Trades ─── -->
-      <div class="section-header" style="grid-column:1/-1;">
-        <h2>Technical Analysis — Deployed Trades</h2>
-        <span class="line"></span>
-      </div>
-
-      <div class="positions-table-wrapper card" style="grid-column:1/-1;">
-        <div style="overflow-x:auto;">
-          <table class="data-table" id="taTable">
-            <thead>
-              <tr>
-                <th>Coin</th>
-                <th>Side</th>
-                <th>Entry</th>
-                <th>Current</th>
-                <th>ATR</th>
-                <th>RSI</th>
-                <th>Trend 1h</th>
-                <th>Trend 4h</th>
-                <th>BB Width</th>
-                <th>Vol Ratio</th>
-                <th>SL</th>
-                <th>TP</th>
-                <th>P&L%</th>
-              </tr>
-            </thead>
-            <tbody id="taTableBody">
-              <tr>
-                <td colspan="13" style="text-align:center;color:#8899AA;padding:24px;">No deployed trades</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
 
 
 
-      <!-- ─── Controls ─── -->
-      <div class="controls-bar">
-        <button class="btn" id="engineToggleBtn" onclick="toggleEngine()"
-          style="background:linear-gradient(135deg,#F59E0B,#D97706); min-width:160px; font-weight:700;">
-          ⏸️ Pause Engine
-        </button>
-        <button class="btn btn-refresh" onclick="triggerCycle()">Run Cycle</button>
-        <button class="btn btn-kill" onclick="deleteAllTrades()"
-          style="background:linear-gradient(135deg,#EF4444,#DC2626)">Delete</button>
-      </div>
 
-      <!-- ─── Section: Live Bot Kernel ─── -->
-      <div class="section-header">
-        <h2>Bot Kernel — Live Logs</h2>
-        <span class="line"></span>
-      </div>
 
-      <div class="card log-viewer-card">
-        <div class="log-toolbar">
-          <span class="log-status" id="logStatus">● Connected</span>
-          <div class="log-actions">
-            <button class="btn-log" onclick="toggleAutoScroll()" id="autoScrollBtn">Auto-scroll</button>
-            <button class="btn-log" onclick="clearLogs()">Clear</button>
-          </div>
-        </div>
-        <div class="log-output" id="logOutput">
-          <div class="log-empty">Waiting for bot output...</div>
-        </div>
-      </div>
 
-      <!-- ─── Section: Regime Engine Execution Log ─── -->
-      <div class="section-header">
-        <h2>Regime Engine — Execution Log</h2>
-        <span class="line"></span>
-      </div>
 
-      <div class="exec-timing" style="grid-column:1/-1; display:flex; gap:24px; margin-bottom:8px;">
-        <span class="stat-sub" style="font-size:11px;">⏱ Last run: <strong id="execLastRun">—</strong></span>
-        <span class="stat-sub" style="font-size:11px;">⏭ Next run: <strong id="execNextRun">—</strong></span>
-      </div>
 
-      <div class="positions-table-wrapper card" style="grid-column:1/-1;">
-        <table class="data-table" id="execLogTable">
-          <thead>
-            <tr>
-              <th>Timestamp</th>
-              <th>Cycle</th>
-              <th>Coins Scanned</th>
-              <th>Eligible</th>
-              <th>Deployed</th>
-              <th>Total Trades</th>
-              <th>Closed</th>
-              <th>Exec Time</th>
-            </tr>
-          </thead>
-          <tbody id="execLogBody">
-            <tr>
-              <td colspan="8" style="text-align:center;color:#8899AA;padding:24px;">Waiting for first analysis cycle...
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <div class="exec-log-pagination" id="execLogPagination"
-          style="display:flex; align-items:center; justify-content:center; gap:12px; padding:12px 16px; border-top:1px solid rgba(0,0,0,0.06); font-size:13px; color:#5A6A7E;">
-        </div>
-      </div>
+
 
   </main>
 

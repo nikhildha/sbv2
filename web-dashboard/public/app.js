@@ -99,7 +99,8 @@ function updateStats(multi, tradebook) {
     const activeCount = tradebook?.trades ? tradebook.trades.filter(t => t.status === 'ACTIVE').length : 0;
     animateValue('activePositions', activeCount);
     animateValue('eligibleCount', multi?.eligible_count ?? '—');
-    animateValue('deployedCount', multi?.deployed_count ?? '—');
+    // Deployed count from tradebook active trades (not multi_bot_state which may be stale)
+    animateValue('deployedCount', activeCount || multi?.deployed_count || 0);
     // Use tradebook trade count if available
     const tbCount = tradebook?.trades?.length;
     animateValue('totalTrades', tbCount || multi?.total_trades || '—');
@@ -865,6 +866,149 @@ function updateFeatureHeatmap(coinStates) {
     area.innerHTML = html;
 }
 
+// ─── Signal Summary Table ────────────────────────────────────────────────────
+function updateSignalSummary(coinStates) {
+    const tbody = document.getElementById('signalSummaryBody');
+    if (!tbody) return;
+    const coins = coinStates ? Object.values(coinStates) : [];
+    if (coins.length === 0) return;
+
+    coins.sort((a, b) => (b.volume_24h || 0) - (a.volume_24h || 0));
+
+    const pill = (label, color, bg) =>
+        `<span style="background:${bg};color:${color};padding:3px 10px;border-radius:12px;font-size:10px;font-weight:700;white-space:nowrap;">${label}</span>`;
+
+    const bullPill = (label) => pill(label || 'Bullish', '#15803D', '#DCFCE7');
+    const bearPill = (label) => pill(label || 'Bearish', '#B91C1C', '#FEE2E2');
+    const neutPill = (label) => pill(label || 'Neutral', '#64748B', '#F1F5F9');
+
+    tbody.innerHTML = coins.map(c => {
+        const f = c.features || {};
+        const d = c.orderflow_details || {};
+        const name = (c.symbol || '').replace('USDT', '');
+        const price = c.current_price || c.price || 0;
+
+        // ── 1. TA Signal: RSI + trend from features ──
+        const rsi = f.rsi_norm;  // 0-1 normalized
+        const logret = f.log_return;
+        let taScore = 0; // -1 bear, 0 neutral, +1 bull
+        let taLabel = 'Neutral';
+        if (rsi !== undefined && rsi !== null) {
+            if (rsi < 0.3 && (logret === undefined || logret > -0.01)) {
+                taScore = 1; taLabel = 'Oversold';
+            } else if (rsi > 0.7 && (logret === undefined || logret < 0.01)) {
+                taScore = -1; taLabel = 'Overbought';
+            } else if (rsi < 0.4) {
+                taScore = 0.5; taLabel = 'Lean Bull';
+            } else if (rsi > 0.6) {
+                taScore = -0.5; taLabel = 'Lean Bear';
+            }
+        }
+        const taPill = taScore > 0 ? bullPill(taLabel) : (taScore < 0 ? bearPill(taLabel) : neutPill(taLabel));
+
+        // ── 2. Order Flow Signal ──
+        const imb = d.imbalance;
+        const taker = d.taker_buy_ratio;
+        let ofScore = 0;
+        let ofLabel = 'Neutral';
+        if (imb !== undefined && taker !== undefined) {
+            if (imb > 0.1 && taker > 0.55) { ofScore = 1; ofLabel = 'Bullish'; }
+            else if (imb < -0.1 && taker < 0.45) { ofScore = -1; ofLabel = 'Bearish'; }
+            else if (imb > 0.05 || taker > 0.52) { ofScore = 0.5; ofLabel = 'Lean Bull'; }
+            else if (imb < -0.05 || taker < 0.48) { ofScore = -0.5; ofLabel = 'Lean Bear'; }
+        }
+        const ofPill = ofScore > 0 ? bullPill(ofLabel) : (ofScore < 0 ? bearPill(ofLabel) : neutPill(ofLabel));
+
+        // ── 3. Funding Signal ──
+        const funding = f.funding;
+        let fundScore = 0;
+        let fundLabel = 'Neutral';
+        if (funding !== undefined && funding !== null) {
+            if (funding > 0.0005) { fundScore = -1; fundLabel = 'Longs Pay'; }  // crowded longs = bearish
+            else if (funding < -0.0005) { fundScore = 1; fundLabel = 'Shorts Pay'; }  // crowded shorts = bullish
+            else if (funding > 0.0001) { fundScore = -0.3; fundLabel = 'Slight +'; }
+            else if (funding < -0.0001) { fundScore = 0.3; fundLabel = 'Slight −'; }
+        }
+        const fundPill = fundScore > 0 ? bullPill(fundLabel) : (fundScore < 0 ? bearPill(fundLabel) : neutPill(fundLabel));
+
+        // ── 4. Sentiment Signal ──
+        const sent = c.coin_sentiment;
+        let sentScore = 0;
+        let sentLabel = 'Neutral';
+        if (sent !== undefined && sent !== null) {
+            if (sent > 0.3) { sentScore = 1; sentLabel = 'Bullish'; }
+            else if (sent < -0.3) { sentScore = -1; sentLabel = 'Bearish'; }
+            else if (sent > 0.1) { sentScore = 0.5; sentLabel = 'Lean Bull'; }
+            else if (sent < -0.1) { sentScore = -0.5; sentLabel = 'Lean Bear'; }
+        }
+        const sentPill = sentScore > 0 ? bullPill(sentLabel) : (sentScore < 0 ? bearPill(sentLabel) : neutPill(sentLabel));
+
+        // ── 5. Action Signal (5th signal) ──
+        const action = (c.action || '');
+        let actScore = 0;
+        if (action.includes('ELIGIBLE') && action.toUpperCase().includes('BUY')) { actScore = 1; }
+        else if (action.includes('ELIGIBLE') && action.toUpperCase().includes('SELL')) { actScore = -1; }
+        else if (action.includes('SKIP') || action.includes('VETO')) { actScore = -0.5; }
+
+        // ── Composite Score (5 signals, Strong Buy needs ≥4/5) ──
+        const scores = [taScore, ofScore, fundScore, sentScore, actScore];
+        const composite = scores.reduce((a, b) => a + b, 0) / scores.length;
+        const bullCount = scores.filter(s => s > 0).length;
+        const bearCount = scores.filter(s => s < 0).length;
+        const totalSignals = 5;
+        let compLabel, compPillHtml;
+        if (bullCount >= 4 && composite > 0.2) {
+            compLabel = `Strong Buy ${bullCount}/${totalSignals}`;
+            compPillHtml = pill(compLabel, '#fff', '#16A34A');
+        } else if (composite > 0.1) {
+            compLabel = `Buy ${bullCount}/${totalSignals}`;
+            compPillHtml = bullPill(compLabel);
+        } else if (bearCount >= 4 && composite < -0.2) {
+            compLabel = `Strong Sell ${bearCount}/${totalSignals}`;
+            compPillHtml = pill(compLabel, '#fff', '#DC2626');
+        } else if (composite < -0.1) {
+            compLabel = `Sell ${bearCount}/${totalSignals}`;
+            compPillHtml = bearPill(compLabel);
+        } else {
+            compLabel = `Hold`;
+            compPillHtml = neutPill(compLabel);
+        }
+
+        // Regime pill
+        let regColor = '#64748B', regBg = '#F1F5F9';
+        if (c.regime?.includes('BULL')) { regColor = '#15803D'; regBg = '#DCFCE7'; }
+        if (c.regime?.includes('BEAR')) { regColor = '#B91C1C'; regBg = '#FEE2E2'; }
+        if (c.regime?.includes('CHOP')) { regColor = '#B45309'; regBg = '#FEF3C7'; }
+
+        // Action display
+        let actColor = '#64748B';
+        const actionDisp = action.replace(/_/g, ' ');
+        if (action.includes('ELIGIBLE')) actColor = '#16A34A';
+        if (action.includes('SKIP') || action.includes('VETO')) actColor = '#DC2626';
+
+        // Confidence
+        const conf = c.confidence;
+        const confPct = conf !== undefined && conf !== null ? (conf * 100).toFixed(1) + '%' : '—';
+        const confColor = conf > 0.95 ? '#16A34A' : (conf > 0.90 ? '#D97706' : '#64748B');
+
+        const fmtPrice = price > 1000 ? price.toLocaleString('en-US', { maximumFractionDigits: 1 })
+            : price > 1 ? price.toFixed(2) : price.toFixed(4);
+
+        return `<tr style="border-bottom:1px solid #F1F5F9;font-size:11px;">
+            <td style="padding:10px 8px;font-weight:700;">${name}</td>
+            <td style="padding:8px;text-align:center;"><span style="background:${regBg};color:${regColor};padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">${c.regime || '—'}</span></td>
+            <td style="padding:8px;text-align:center;font-weight:700;color:${actColor};font-size:10px;">${actionDisp || '—'}</td>
+            <td style="padding:8px;text-align:center;font-weight:700;color:${confColor};">${confPct}</td>
+            <td style="padding:8px;text-align:right;font-family:monospace;font-weight:600;">$${fmtPrice}</td>
+            <td style="padding:8px;text-align:center;">${taPill}</td>
+            <td style="padding:8px;text-align:center;">${ofPill}</td>
+            <td style="padding:8px;text-align:center;">${fundPill}</td>
+            <td style="padding:8px;text-align:center;">${sentPill}</td>
+            <td style="padding:8px;text-align:center;">${compPillHtml}</td>
+        </tr>`;
+    }).join('');
+}
+
 // ─── Conviction Score (Dashboard card) ───────────────────────────────────────
 function updateDeploymentCard(coinStates, tradebook) {
     const countEl = document.getElementById('deployedCount');
@@ -873,8 +1017,8 @@ function updateDeploymentCard(coinStates, tradebook) {
     const capitalEl = document.getElementById('deployedCapital');
     if (!countEl) return;
 
-    // Get active trades from tradebook
-    const trades = Array.isArray(tradebook) ? tradebook : [];
+    // Get active trades from tradebook (tradebook is {trades:[], summary:{}} object)
+    const trades = Array.isArray(tradebook) ? tradebook : (tradebook?.trades || []);
     const active = trades.filter(t => t.status === 'ACTIVE' || t.status === 'OPEN');
     const count = active.length;
     const totalCapital = active.reduce((s, t) => s + (t.capital || t.margin || 0), 0);
@@ -925,57 +1069,10 @@ function updateRegimeTable(coinStates) {
     });
 }
 
-// ─── Technical Analysis — Deployed Trades ────────────────────────────────────
-function updateTechnicalAnalysis(coinStates, tradebook) {
-    const body = document.getElementById('taTableBody');
-    if (!body) return;
-
-    // Get active trades from tradebook
-    const active = (tradebook?.trades || []).filter(t => t.status === 'ACTIVE');
-    if (active.length === 0) {
-        body.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#8899AA;padding:24px;">No deployed trades</td></tr>';
-        return;
-    }
-
-    body.innerHTML = '';
-    active.forEach(trade => {
-        const sym = (trade.symbol || '').replace('USDT', '');
-        const coinState = coinStates ? coinStates[trade.symbol] : null;
-        const features = coinState?.features || {};
-
-        const side = trade.position || (trade.side === 'BUY' ? 'LONG' : 'SHORT');
-        const sideColor = side === 'LONG' ? '#22C55E' : '#EF4444';
-        const entry = formatPrice(trade.entry_price || 0);
-        const current = formatPrice(trade.current_price || 0);
-        const atr = trade.atr_at_entry ? trade.atr_at_entry.toFixed(4) : '—';
-        const rsi = features.rsi_norm !== undefined ? ((features.rsi_norm + 1) * 50).toFixed(1) : '—';
-        const regime1h = coinState?.regime || '—';
-        const regime4h = coinState?.macro_regime || '—';
-        const bbWidth = features.volatility !== undefined ? (features.volatility * 100).toFixed(2) + '%' : '—';
-        const volRatio = features.volume_change !== undefined ? (features.volume_change > 0 ? '+' : '') + (features.volume_change * 100).toFixed(1) + '%' : '—';
-        const sl = formatPrice(trade.trailing_sl || trade.stop_loss || 0);
-        const tp = formatPrice(trade.trailing_tp || trade.take_profit || 0);
-        const pnl = trade.unrealized_pnl_pct || 0;
-        const pnlColor = pnl >= 0 ? '#22C55E' : '#EF4444';
-
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td><strong>${sym}</strong></td>
-            <td style="color:${sideColor};font-weight:700;">${side}</td>
-            <td>${entry}</td>
-            <td>${current}</td>
-            <td style="font-size:11px;">${atr}</td>
-            <td>${rsi}</td>
-            <td style="font-size:11px;">${regime1h}</td>
-            <td style="font-size:11px;">${regime4h}</td>
-            <td>${bbWidth}</td>
-            <td>${volRatio}</td>
-            <td style="color:#EF4444;font-weight:600;">${sl}</td>
-            <td style="color:#22C55E;font-weight:600;">${tp}</td>
-            <td style="color:${pnlColor};font-weight:700;">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%</td>
-        `;
-        body.appendChild(tr);
-    });
+// ─── Technical Analysis — now handled by intelligence-app.js ─────────────────
+function updateTechnicalAnalysis(/* coinStates, tradebook */) {
+    // No-op: TA table is now rendered by intelligence-app.js (multi-timeframe S/R)
+    return;
 }
 
 // ─── Scanned Coins — Volume ──────────────────────────────────────────────────
@@ -1059,6 +1156,7 @@ function updateAll(data) {
     addExecLogEntry(multiState);
     updateConvictionScore(multiState?.coin_states);
     updateDeploymentCard(multiState?.coin_states, tradebookData);
+    updateSignalSummary(multiState?.coin_states);
 
     // Intelligence sections (from intelligence-app.js IIFE)
     if (window._intelUpdateSentiment) window._intelUpdateSentiment(multiState);

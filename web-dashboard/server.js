@@ -1325,6 +1325,69 @@ except Exception as e:
     }
 });
 
+// POST /api/test-exchange — test connection to Binance or CoinDCX from Settings page
+app.post('/api/test-exchange', (req, res) => {
+    const exchange = (req.body.exchange || '').toLowerCase();
+    const apiKey = req.body.apiKey || '';
+    const apiSecret = req.body.apiSecret || '';
+
+    if (exchange === 'binance') {
+        const pythonScript = `
+import sys, json
+sys.path.insert(0, '${path.join(__dirname, '..').replace(/'/g, "\\'")}')
+try:
+    from binance.client import Client
+    key = ${apiKey ? `"${apiKey}"` : 'None'}
+    secret = ${apiSecret ? `"${apiSecret}"` : 'None'}
+    if not key or not secret:
+        import config
+        key = config.BINANCE_API_KEY
+        secret = config.BINANCE_API_SECRET
+    client = Client(key, secret, testnet=${apiKey ? 'False' : 'True'})
+    info = client.get_account()
+    balances = info.get('balances', [])
+    usdt = next((b for b in balances if b['asset'] == 'USDT'), None)
+    bal = float(usdt['free']) if usdt else 0.0
+    server_time = client.get_server_time()
+    print(json.dumps({"success": True, "exchange": "Binance", "balance": round(bal, 2), "server_time": "OK", "assets": len([b for b in balances if float(b['free']) > 0])}))
+except Exception as e:
+    print(json.dumps({"success": False, "error": str(e)}))
+`;
+        try {
+            const result = execSync(`python3 -c '${pythonScript.replace(/'/g, "'\"'\"'")}'`, {
+                timeout: 15000, encoding: 'utf8', cwd: path.join(__dirname, '..'),
+            });
+            res.json(JSON.parse(result.trim()));
+        } catch (e) {
+            res.json({ success: false, error: e.stderr || e.message || 'Binance connection failed' });
+        }
+    } else if (exchange === 'coindcx') {
+        const pythonScript = `
+import sys, json
+sys.path.insert(0, '${path.join(__dirname, '..').replace(/'/g, "\\'")}')
+try:
+    import config
+    import coindcx_client as cdx
+    balance = cdx.get_usdt_balance()
+    instruments = cdx.get_active_instruments()
+    print(json.dumps({"success": True, "exchange": "CoinDCX", "balance": balance, "instruments": len(instruments), "server_time": "OK"}))
+except Exception as e:
+    print(json.dumps({"success": False, "error": str(e)}))
+`;
+        try {
+            const result = execSync(`python3 -c '${pythonScript.replace(/'/g, "'\"'\"'")}'`, {
+                timeout: 15000, encoding: 'utf8', cwd: path.join(__dirname, '..'),
+            });
+            res.json(JSON.parse(result.trim()));
+        } catch (e) {
+            res.json({ success: false, error: e.stderr || e.message || 'CoinDCX connection failed' });
+        }
+    } else {
+        res.status(400).json({ success: false, error: 'Unknown exchange: ' + exchange });
+    }
+});
+
+
 // POST /api/deploy/kill-switch
 app.post('/api/deploy/kill-switch', (req, res) => {
     try {
@@ -1516,6 +1579,7 @@ app.get('/api/config', (req, res) => {
 
         const config = {
             // Trading
+            EXCHANGE_LIVE: extract('EXCHANGE_LIVE', 'coindcx'),
             PAPER_MAX_CAPITAL: num('PAPER_MAX_CAPITAL', 2500),
             PRIMARY_SYMBOL: extract('PRIMARY_SYMBOL', 'BTCUSDT'),
 
@@ -1592,11 +1656,54 @@ app.get('/api/config', (req, res) => {
             CAPITAL_PER_COIN_PCT: num('CAPITAL_PER_COIN_PCT', 0.03),
             SCAN_INTERVAL_CYCLES: num('SCAN_INTERVAL_CYCLES', 4),
             MULTI_COIN_MODE: bool('MULTI_COIN_MODE', true),
+
+            // Settings page fields
+            PAPER_TRADE: bool('PAPER_TRADE', true),
+            TELEGRAM_ENABLED: bool('TELEGRAM_ENABLED', false),
+            SENTIMENT_ENABLED: bool('SENTIMENT_ENABLED', true),
+            SENTIMENT_VETO_THRESHOLD: num('SENTIMENT_VETO_THRESHOLD', -0.65),
+            ORDERFLOW_ENABLED: bool('ORDERFLOW_ENABLED', true),
+            ORDERFLOW_MULTI_EXCHANGE: bool('ORDERFLOW_MULTI_EXCHANGE', true),
         };
 
         res.json(config);
     } catch (e) {
         res.status(500).json({ error: 'Failed to read config: ' + e.message });
+    }
+});
+
+// POST /api/config — save settings to config.py
+app.post('/api/config', (req, res) => {
+    try {
+        const configPath = path.join(__dirname, '..', 'config.py');
+        let content = fs.readFileSync(configPath, 'utf8');
+        const updates = req.body;
+        if (!updates || typeof updates !== 'object') {
+            return res.status(400).json({ error: 'Invalid payload' });
+        }
+
+        // Map of setting name -> how to format the value in Python
+        const fmtVal = (key, val) => {
+            if (typeof val === 'boolean') return val ? 'True' : 'False';
+            if (typeof val === 'string') return `"${val}"`;
+            return String(val);
+        };
+
+        for (const [key, val] of Object.entries(updates)) {
+            const pyVal = fmtVal(key, val);
+            // Try to replace existing line: KEY = old_value  # comment
+            const regex = new RegExp(`^(${key}\\s*=\\s*)(.+?)( +#.*)?$`, 'm');
+            if (regex.test(content)) {
+                content = content.replace(regex, (match, prefix, oldVal, comment) => {
+                    return prefix + pyVal + (comment || '');
+                });
+            }
+        }
+
+        fs.writeFileSync(configPath, content, 'utf8');
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to save config: ' + e.message });
     }
 });
 

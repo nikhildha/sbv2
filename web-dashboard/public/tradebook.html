@@ -34,9 +34,6 @@
             <a href="/" class="nav-link">Dashboard</a>
             <a href="/tradebook" class="nav-link active">Tradebook</a>
             <a href="/charts" class="nav-link">Charts</a>
-            <a href="/backtest" class="nav-link">Backtest</a>
-            <a href="/intelligence" class="nav-link">Intelligence</a>
-            <a href="/deploy" class="nav-link">Deploy</a>
             <a href="/settings" class="nav-link">Settings</a>
         </nav>
         <div class="header-right">
@@ -51,206 +48,386 @@
     <!-- ═══ Main Content ═══ -->
     <main class="main tradebook-main">
 
-        <!-- ─── Portfolio Summary Cards ─── -->
-        <div class="section-header" style="margin-top: 16px;">
-
-            <h2>Portfolio Summary</h2>
-            <span class="line"></span>
+        <!-- ─── Paper / Live Tab Bar ─── -->
+        <div style="display:flex;gap:0;margin-bottom:0;border-bottom:2px solid #E2E8F0;max-width:1200px;">
+            <button id="tabPaper" onclick="switchTradeTab('PAPER')"
+                style="flex:1;padding:12px 24px;font-size:14px;font-weight:700;letter-spacing:0.04em;border:none;
+                background:transparent;cursor:pointer;border-bottom:3px solid #22C55E;color:#22C55E;transition:all 0.2s;">
+                Paper Trades
+            </button>
+            <button id="tabLive" onclick="switchTradeTab('LIVE')"
+                style="flex:1;padding:12px 24px;font-size:14px;font-weight:700;letter-spacing:0.04em;border:none;
+                background:transparent;cursor:pointer;border-bottom:3px solid transparent;color:#94A3B8;transition:all 0.2s;">
+                Live Trades
+            </button>
         </div>
 
-        <div class="portfolio-row">
-            <!-- ─── Portfolio Stats (compact table) ─── -->
-            <div class="portfolio-stats-card card" style="flex: 1 1 100%">
-                <table class="portfolio-stats-table">
-                    <thead>
-                        <tr>
-                            <th>Total Trades</th>
-                            <th>Active</th>
-                            <th>Closed</th>
-                            <th>Wins</th>
-                            <th>Losses</th>
-                            <th>Win Rate</th>
-                            <th>Profit Factor</th>
-                            <th>Sharpe</th>
-                            <th>R:R</th>
-                            <th>Max DD</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td id="summTotalTrades">—</td>
-                            <td class="cyan" id="summActiveTrades">—</td>
-                            <td id="summClosedTrades">—</td>
-                            <td class="green" id="summWins">—</td>
-                            <td class="red" id="summLosses">—</td>
-                            <td class="purple" id="summWinRate">—</td>
-                            <td id="summProfitFactor">—</td>
-                            <td id="summSharpe">—</td>
-                            <td id="summRiskReward">—</td>
-                            <td class="red" id="summMaxDrawdown">—</td>
-                        </tr>
-                    </tbody>
-                </table>
+        <!-- ═══ PAPER TRADE SECTION ═══ -->
+        <div id="paperSection">
+
+            <!-- ─── Deployment Mode Banner ─── -->
+            <div class="tradebook-deploy-banner paper" id="tradebookModeBanner">
+                PAPER TRADE MODE — No real orders are placed
             </div>
-        </div>
 
-        <div class="portfolio-row">
-            <!-- ─── P&L Metrics ─── -->
-            <div class="pnl-grid">
-                <div class="pnl-card">
-                    <div class="pnl-content">
-                        <div class="pnl-label">Realized P&L</div>
-                        <div class="pnl-row">
-                            <span class="pnl-value" id="summRealizedPnl">$0.00</span>
-                            <span class="pnl-pct" id="summRealizedPnlPct">0%</span>
+            <!-- ─── Portfolio Summary Cards ─── -->
+            <div class="section-header" style="margin-top: 16px;">
+
+                <h2>Portfolio Summary</h2>
+                <span class="line"></span>
+            </div>
+
+            <div class="portfolio-row">
+                <!-- ─── Portfolio Stats (compact table) ─── -->
+                <div class="portfolio-stats-card card" style="flex: 1 1 100%">
+                    <table class="portfolio-stats-table">
+                        <thead>
+                            <tr>
+                                <th>Total Trades</th>
+                                <th>Active</th>
+                                <th>Closed</th>
+                                <th>Wins</th>
+                                <th>Losses</th>
+                                <th>Win Rate</th>
+                                <th>Profit Factor</th>
+                                <th>Sharpe</th>
+                                <th>R:R</th>
+                                <th>Max DD</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td id="summTotalTrades">—</td>
+                                <td class="cyan" id="summActiveTrades">—</td>
+                                <td id="summClosedTrades">—</td>
+                                <td class="green" id="summWins">—</td>
+                                <td class="red" id="summLosses">—</td>
+                                <td class="purple" id="summWinRate">—</td>
+                                <td id="summProfitFactor">—</td>
+                                <td id="summSharpe">—</td>
+                                <td id="summRiskReward">—</td>
+                                <td class="red" id="summMaxDrawdown">—</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="portfolio-row">
+                <!-- ─── P&L Metrics ─── -->
+                <div class="pnl-grid">
+                    <div class="pnl-card">
+                        <div class="pnl-content">
+                            <div class="pnl-label">Realized P&L</div>
+                            <div class="pnl-row">
+                                <span class="pnl-value" id="summRealizedPnl">$0.00</span>
+                                <span class="pnl-pct" id="summRealizedPnlPct">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="pnl-card">
+                        <div class="pnl-content">
+                            <div class="pnl-label">Unrealized P&L</div>
+                            <div class="pnl-row">
+                                <span class="pnl-value" id="summUnrealizedPnl">$0.00</span>
+                                <span class="pnl-pct" id="summUnrealizedPnlPct">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="pnl-card">
+                        <div class="pnl-content">
+                            <div class="pnl-label">Cumulative P&L</div>
+                            <div class="pnl-row">
+                                <span class="pnl-value" id="summCumulativePnl">$0.00</span>
+                                <span class="pnl-pct" id="summCumulativePnlPct">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="pnl-card">
+                        <div class="pnl-content">
+                            <div class="pnl-label">Best / Worst Trade</div>
+                            <div class="pnl-row">
+                                <span class="pnl-value green" id="summBestTrade">$0</span>
+                                <span class="pnl-value red" id="summWorstTrade">$0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="pnl-card">
+                        <div class="pnl-content">
+                            <div class="pnl-label">Win / Loss Streak</div>
+                            <div class="pnl-row">
+                                <span class="pnl-value green" id="summWinStreak">0</span>
+                                <span class="pnl-value red" id="summLossStreak">0</span>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <div class="pnl-card">
-                    <div class="pnl-content">
-                        <div class="pnl-label">Unrealized P&L</div>
-                        <div class="pnl-row">
-                            <span class="pnl-value" id="summUnrealizedPnl">$0.00</span>
-                            <span class="pnl-pct" id="summUnrealizedPnlPct">0%</span>
+            </div>
+
+            <!-- ─── Filter & Controls ─── -->
+            <div class="section-header">
+
+                <h2>Trade Journal</h2>
+                <span class="line"></span>
+            </div>
+
+            <div class="filter-bar card">
+                <div class="filter-group">
+                    <label>Status</label>
+                    <select id="filterStatus" onchange="applyFilters()">
+                        <option value="ALL">All</option>
+                        <option value="ACTIVE" selected>Active</option>
+                        <option value="CLOSED">Closed</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Position</label>
+                    <select id="filterPosition" onchange="applyFilters()">
+                        <option value="ALL">All</option>
+                        <option value="LONG">Long</option>
+                        <option value="SHORT">Short</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Regime</label>
+                    <select id="filterRegime" onchange="applyFilters()">
+                        <option value="ALL">All</option>
+                        <option value="BULLISH">Bullish</option>
+                        <option value="BEARISH">Bearish</option>
+                        <option value="SIDEWAYS/CHOP">Sideways</option>
+                        <option value="CRASH/PANIC">Crash</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>P&L</label>
+                    <select id="filterPnl" onchange="applyFilters()">
+                        <option value="ALL">All</option>
+                        <option value="PROFIT">Profit ▲</option>
+                        <option value="LOSS">Loss ▼</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Symbol</label>
+                    <input type="text" id="filterSymbol" placeholder="e.g. BTC" oninput="applyFilters()">
+                </div>
+                <button class="btn btn-sm" onclick="refreshData()" id="syncCdxBtn"
+                    style="background:linear-gradient(135deg,#0EA5E9,#3B82F6);color:#fff;display:none;">🔄 Sync
+                    CoinDCX</button>
+                <button class="btn btn-refresh btn-sm" onclick="exportCSV()">Export CSV</button>
+                <button class="btn btn-sm" onclick="generatePdfReport()"
+                    style="background:linear-gradient(135deg,#8B5CF6,#6D28D9);color:#fff;">Insights</button>
+                <button class="btn btn-danger btn-sm" onclick="closeSelectedTrades()" id="closeSelectedBtn"
+                    style="display:none;">Close Selected</button>
+                <span id="selectedCount" style="font-size:12px;color:#64748B;"></span>
+                <button class="btn btn-danger btn-sm" onclick="deleteAllTrades()">Delete</button>
+            </div>
+
+            <!-- ─── Trade Table ─── -->
+            <div class="positions-table-wrapper card tradebook-table-wrapper">
+                <div id="tradebookArea">
+                    <div class="empty-state">
+                        <div class="icon">📝</div>
+                        <p>No trades recorded yet. Paper trades will appear here when the bot deploys.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ─── P&L Charts Row ─── -->
+            <div style="display:flex; gap:16px; flex-wrap:wrap;">
+                <!-- P&L Curve -->
+                <div style="flex:1; min-width:300px;">
+                    <div class="section-header">
+                        <h2>P&L Curve</h2>
+                        <span class="line"></span>
+                    </div>
+                    <div class="card chart-container pnl-chart-wrapper">
+                        <canvas id="pnlChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- P&L Timeline -->
+                <div style="flex:1; min-width:300px;">
+                    <div class="section-header">
+                        <h2>P&L Timeline</h2>
+                        <span class="line"></span>
+                    </div>
+                    <div class="card chart-container pnl-chart-wrapper">
+                        <canvas id="pnlTimelineChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ─── Report History ─── -->
+            <div class="section-header">
+                <h2>Report History</h2>
+                <span class="line"></span>
+            </div>
+            <div class="positions-table-wrapper card tradebook-table-wrapper">
+                <div id="reportHistoryArea">
+                    <div class="empty-state" style="padding:24px">
+                        <p style="color:#64748B;font-size:13px">No reports generated yet. Click "Insights" to
+                            create one.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ─── Engine Controls ─── -->
+            <div class="section-header">
+                <h2>Engine Controls</h2>
+                <span class="line"></span>
+            </div>
+            <div class="controls-bar" style="margin-bottom:16px;">
+                <button class="btn" id="tbEngineToggleBtn" onclick="tbToggleEngine()"
+                    style="background:linear-gradient(135deg,#22C55E,#16A34A); min-width:160px; font-weight:700;">
+                    ▶️ Start Engine
+                </button>
+                <button class="btn btn-refresh" onclick="tbTriggerCycle()">⚡ Run Cycle</button>
+                <button class="btn btn-refresh" onclick="refreshData()">🔄 Refresh</button>
+            </div>
+
+        </div> <!-- /paperSection -->
+
+        <!-- ═══ LIVE TRADE SECTION (completely independent) ═══ -->
+        <div id="liveSection" style="display:none;">
+
+            <!-- ─── Live Mode Banner ─── -->
+            <div class="tradebook-deploy-banner live"
+                style="background:linear-gradient(135deg,#FEE2E2,#FECACA);color:#991B1B;">
+                LIVE TRADE MODE — Real orders on exchange
+            </div>
+
+            <!-- ─── Live Portfolio Summary ─── -->
+            <div class="section-header" style="margin-top:16px;">
+                <h2>Live Portfolio Summary</h2><span class="line"></span>
+            </div>
+            <div class="portfolio-row">
+                <div class="portfolio-stats-card card" style="flex:1 1 100%">
+                    <table class="portfolio-stats-table">
+                        <thead>
+                            <tr>
+                                <th>Total Trades</th>
+                                <th>Active</th>
+                                <th>Closed</th>
+                                <th>Wins</th>
+                                <th>Losses</th>
+                                <th>Win Rate</th>
+                                <th>Profit Factor</th>
+                                <th>Sharpe</th>
+                                <th>R:R</th>
+                                <th>Max DD</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td id="liveSummTotalTrades">—</td>
+                                <td class="cyan" id="liveSummActiveTrades">—</td>
+                                <td id="liveSummClosedTrades">—</td>
+                                <td class="green" id="liveSummWins">—</td>
+                                <td class="red" id="liveSummLosses">—</td>
+                                <td class="purple" id="liveSummWinRate">—</td>
+                                <td id="liveSummProfitFactor">—</td>
+                                <td id="liveSummSharpe">—</td>
+                                <td id="liveSummRiskReward">—</td>
+                                <td class="red" id="liveSummMaxDrawdown">—</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="portfolio-row">
+                <div class="pnl-grid">
+                    <div class="pnl-card">
+                        <div class="pnl-content">
+                            <div class="pnl-label">Realized P&L</div>
+                            <div class="pnl-row"><span class="pnl-value" id="liveSummRealizedPnl">$0.00</span><span
+                                    class="pnl-pct" id="liveSummRealizedPnlPct">0%</span></div>
+                        </div>
+                    </div>
+                    <div class="pnl-card">
+                        <div class="pnl-content">
+                            <div class="pnl-label">Unrealized P&L</div>
+                            <div class="pnl-row"><span class="pnl-value" id="liveSummUnrealizedPnl">$0.00</span><span
+                                    class="pnl-pct" id="liveSummUnrealizedPnlPct">0%</span></div>
+                        </div>
+                    </div>
+                    <div class="pnl-card">
+                        <div class="pnl-content">
+                            <div class="pnl-label">Cumulative P&L</div>
+                            <div class="pnl-row"><span class="pnl-value" id="liveSummCumulativePnl">$0.00</span><span
+                                    class="pnl-pct" id="liveSummCumulativePnlPct">0%</span></div>
+                        </div>
+                    </div>
+                    <div class="pnl-card">
+                        <div class="pnl-content">
+                            <div class="pnl-label">Best / Worst Trade</div>
+                            <div class="pnl-row"><span class="pnl-value green" id="liveSummBestTrade">$0</span><span
+                                    class="pnl-value red" id="liveSummWorstTrade">$0</span></div>
+                        </div>
+                    </div>
+                    <div class="pnl-card">
+                        <div class="pnl-content">
+                            <div class="pnl-label">Win / Loss Streak</div>
+                            <div class="pnl-row"><span class="pnl-value green" id="liveSummWinStreak">0</span><span
+                                    class="pnl-value red" id="liveSummLossStreak">0</span></div>
                         </div>
                     </div>
                 </div>
-                <div class="pnl-card">
-                    <div class="pnl-content">
-                        <div class="pnl-label">Cumulative P&L</div>
-                        <div class="pnl-row">
-                            <span class="pnl-value" id="summCumulativePnl">$0.00</span>
-                            <span class="pnl-pct" id="summCumulativePnlPct">0%</span>
-                        </div>
+            </div>
+
+            <!-- ─── Live Trade Journal ─── -->
+            <div class="section-header">
+                <h2>Live Trade Journal</h2><span class="line"></span>
+            </div>
+            <div class="filter-bar card">
+                <div class="filter-group"><label>Status</label>
+                    <select id="liveFilterStatus" onchange="applyLiveFilters()">
+                        <option value="ALL">All</option>
+                        <option value="ACTIVE" selected>Active</option>
+                        <option value="CLOSED">Closed</option>
+                    </select>
+                </div>
+                <div class="filter-group"><label>Position</label>
+                    <select id="liveFilterPosition" onchange="applyLiveFilters()">
+                        <option value="ALL">All</option>
+                        <option value="LONG">Long</option>
+                        <option value="SHORT">Short</option>
+                    </select>
+                </div>
+                <div class="filter-group"><label>Symbol</label>
+                    <input type="text" id="liveFilterSymbol" placeholder="e.g. BTC" oninput="applyLiveFilters()">
+                </div>
+                <button class="btn btn-sm" onclick="syncExchangePositions()"
+                    style="background:linear-gradient(135deg,#0EA5E9,#3B82F6);color:#fff;">Sync Exchange</button>
+                <button class="btn btn-refresh btn-sm" onclick="exportLiveCSV()">Export CSV</button>
+            </div>
+
+            <div class="positions-table-wrapper card tradebook-table-wrapper">
+                <div id="liveTradesArea">
+                    <div class="empty-state">
+                        <p>No live trades recorded yet. Live trades will appear when you trade on exchange.</p>
                     </div>
                 </div>
-                <div class="pnl-card">
-                    <div class="pnl-content">
-                        <div class="pnl-label">Best / Worst Trade</div>
-                        <div class="pnl-row">
-                            <span class="pnl-value green" id="summBestTrade">$0</span>
-                            <span class="pnl-value red" id="summWorstTrade">$0</span>
-                        </div>
+            </div>
+
+            <!-- ─── Live P&L Charts ─── -->
+            <div style="display:flex;gap:16px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:300px;">
+                    <div class="section-header">
+                        <h2>Live P&L Curve</h2><span class="line"></span>
+                    </div>
+                    <div class="card chart-container pnl-chart-wrapper"><canvas id="livePnlChart"></canvas></div>
+                </div>
+                <div style="flex:1;min-width:300px;">
+                    <div class="section-header">
+                        <h2>Live P&L Timeline</h2><span class="line"></span>
+                    </div>
+                    <div class="card chart-container pnl-chart-wrapper"><canvas id="livePnlTimelineChart"></canvas>
                     </div>
                 </div>
-                <div class="pnl-card">
-                    <div class="pnl-content">
-                        <div class="pnl-label">Win / Loss Streak</div>
-                        <div class="pnl-row">
-                            <span class="pnl-value green" id="summWinStreak">0</span>
-                            <span class="pnl-value red" id="summLossStreak">0</span>
-                        </div>
-                    </div>
-                </div>
             </div>
-        </div>
 
-        <!-- ─── Filter & Controls ─── -->
-        <div class="section-header">
-
-            <h2>Trade Journal</h2>
-            <span class="line"></span>
-        </div>
-
-        <div class="filter-bar card">
-            <div class="filter-group">
-                <label>Status</label>
-                <select id="filterStatus" onchange="applyFilters()">
-                    <option value="ALL">All</option>
-                    <option value="ACTIVE" selected>Active</option>
-                    <option value="CLOSED">Closed</option>
-                </select>
-            </div>
-            <div class="filter-group">
-                <label>Position</label>
-                <select id="filterPosition" onchange="applyFilters()">
-                    <option value="ALL">All</option>
-                    <option value="LONG">Long</option>
-                    <option value="SHORT">Short</option>
-                </select>
-            </div>
-            <div class="filter-group">
-                <label>Regime</label>
-                <select id="filterRegime" onchange="applyFilters()">
-                    <option value="ALL">All</option>
-                    <option value="BULLISH">Bullish</option>
-                    <option value="BEARISH">Bearish</option>
-                    <option value="SIDEWAYS/CHOP">Sideways</option>
-                    <option value="CRASH/PANIC">Crash</option>
-                </select>
-            </div>
-            <div class="filter-group">
-                <label>P&L</label>
-                <select id="filterPnl" onchange="applyFilters()">
-                    <option value="ALL">All</option>
-                    <option value="PROFIT">Profit ▲</option>
-                    <option value="LOSS">Loss ▼</option>
-                </select>
-            </div>
-            <div class="filter-group">
-                <label>Symbol</label>
-                <input type="text" id="filterSymbol" placeholder="e.g. BTC" oninput="applyFilters()">
-            </div>
-            <button class="btn btn-sm" onclick="refreshData()" id="syncCdxBtn"
-                style="background:linear-gradient(135deg,#0EA5E9,#3B82F6);color:#fff;display:none;">🔄 Sync
-                CoinDCX</button>
-            <button class="btn btn-refresh btn-sm" onclick="exportCSV()">Export CSV</button>
-            <button class="btn btn-sm" onclick="generatePdfReport()"
-                style="background:linear-gradient(135deg,#8B5CF6,#6D28D9);color:#fff;">Insights</button>
-            <button class="btn btn-danger btn-sm" onclick="closeSelectedTrades()" id="closeSelectedBtn"
-                style="display:none;">Close Selected</button>
-            <span id="selectedCount" style="font-size:12px;color:#64748B;"></span>
-            <button class="btn btn-danger btn-sm" onclick="deleteAllTrades()">Delete</button>
-        </div>
-
-        <!-- ─── Trade Table ─── -->
-        <div class="positions-table-wrapper card tradebook-table-wrapper">
-            <div id="tradebookArea">
-                <div class="empty-state">
-                    <div class="icon">📝</div>
-                    <p>No trades recorded yet. Paper trades will appear here when the bot deploys.</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- ─── P&L Chart ─── -->
-        <div class="section-header">
-
-            <h2>P&L Curve</h2>
-            <span class="line"></span>
-        </div>
-        <div class="card chart-container pnl-chart-wrapper">
-            <canvas id="pnlChart"></canvas>
-        </div>
-
-        <!-- ─── P&L Timeline ─── -->
-        <div class="section-header">
-            <h2>P&L Timeline</h2>
-            <span class="line"></span>
-        </div>
-        <div class="card chart-container pnl-chart-wrapper">
-            <canvas id="pnlTimelineChart"></canvas>
-        </div>
-
-        <!-- ─── Report History ─── -->
-        <div class="section-header">
-            <h2>Report History</h2>
-            <span class="line"></span>
-        </div>
-        <div class="positions-table-wrapper card tradebook-table-wrapper">
-            <div id="reportHistoryArea">
-                <div class="empty-state" style="padding:24px">
-                    <p style="color:#64748B;font-size:13px">No reports generated yet. Click "Insights" to
-                        create one.</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- ─── Controls ─── -->
-        <div class="controls-bar">
-            <button class="btn btn-refresh" onclick="refreshData()">Refresh</button>
-        </div>
-
+        </div> <!-- /liveSection -->
     </main>
 
     <!-- ═══ Footer ═══ -->
@@ -278,6 +455,50 @@
 
     <script src="/mode-toggle.js"></script>
     <script src="/tradebook-app.js"></script>
+    <script>
+        // ─── Tradebook: Engine Controls ──────────────────────────
+        (function () {
+            const sock = typeof io !== 'undefined' ? io() : null;
+            if (!sock) return;
+
+            let tbEngineRunning = true;
+
+            function updateTbEngineBtn() {
+                const btn = document.getElementById('tbEngineToggleBtn');
+                if (!btn) return;
+                if (tbEngineRunning) {
+                    btn.innerHTML = 'Pause Engine';
+                    btn.style.background = 'linear-gradient(135deg,#F59E0B,#D97706)';
+                } else {
+                    btn.innerHTML = 'Start Engine';
+                    btn.style.background = 'linear-gradient(135deg,#22C55E,#16A34A)';
+                }
+            }
+
+            window.tbToggleEngine = function () {
+                tbEngineRunning = !tbEngineRunning;
+                sock.emit('toggle-engine', tbEngineRunning);
+                updateTbEngineBtn();
+            };
+
+            window.tbTriggerCycle = function () {
+                sock.emit('trigger-cycle');
+            };
+
+            // Check initial pause state
+            fetch('/api/status').then(r => r.json()).then(d => {
+                tbEngineRunning = d.botActive !== false;
+                updateTbEngineBtn();
+            }).catch(() => { });
+
+            // Also re-render live tab when tradebook data updates via socket
+            sock.on('multi-state', () => {
+                if (typeof activeTradeTab !== 'undefined' && activeTradeTab === 'LIVE') {
+                    renderLiveTab();
+                }
+            });
+        })();
+    </script>
 </body>
 
 </html>

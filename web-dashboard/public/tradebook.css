@@ -6,8 +6,12 @@
 
 /* ─── Layout Overrides ────────────────────────────────────────────────────────── */
 .tradebook-main {
+    display: block;
     max-width: 1800px;
+    padding: 24px 32px;
+    margin: 0 auto;
 }
+
 /* ─── Connection Status ───────────────────────────────────────────────────── */
 .status-pill.online {
     background: rgba(34, 197, 94, 0.08);
@@ -188,6 +192,44 @@
 .pnl-chart-wrapper {
     height: 280px;
     margin-bottom: 24px;
+}
+
+/* chart-container on tradebook page — allow flex side-by-side layout */
+.tradebook-main .chart-container {
+    display: block;
+}
+
+/* ─── Deployment Banner (tradebook) ───────────────────────────────────────── */
+.tradebook-deploy-banner {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 10px 20px;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+}
+
+.tradebook-deploy-banner.paper {
+    background: rgba(34, 197, 94, 0.06);
+    border: 1px solid rgba(34, 197, 94, 0.18);
+    color: #15803D;
+}
+
+.tradebook-deploy-banner.live {
+    background: rgba(239, 68, 68, 0.06);
+    border: 1px solid rgba(239, 68, 68, 0.18);
+    color: #B91C1C;
+}
+
+.tradebook-deploy-banner.dual {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.06), rgba(239, 68, 68, 0.06));
+    border: 1px solid rgba(139, 92, 246, 0.18);
+    color: #6D28D9;
 }
 
 /* ─── Filter Bar ──────────────────────────────────────────────────────────── */

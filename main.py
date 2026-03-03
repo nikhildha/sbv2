@@ -12,7 +12,7 @@ from datetime import datetime
 import config
 from hmm_brain import HMMBrain
 from data_pipeline import fetch_klines, get_multi_timeframe_data, _get_binance_client
-from feature_engine import compute_all_features, compute_hmm_features
+from feature_engine import compute_all_features, compute_hmm_features, compute_trend, compute_support_resistance, compute_ema
 from execution_engine import ExecutionEngine
 from risk_manager import RiskManager
 from sideways_strategy import evaluate_mean_reversion
@@ -562,6 +562,64 @@ class RegimeMasterBot:
             "features": _features,
             "volume_24h": _volume_24h,
         }
+
+        # ── Multi-Timeframe TA (1h / 15m / 5m) ──
+        try:
+            ta_multi = {"price": current_price}
+            # 1h — already have df_1h_feat
+            rsi_1h = float(df_1h_feat["rsi"].iloc[-1]) if "rsi" in df_1h_feat.columns else None
+            atr_1h = float(df_1h_feat["atr"].iloc[-1]) if "atr" in df_1h_feat.columns else None
+            ema20_1h = float(compute_ema(df_1h_feat["close"], 20).iloc[-1])
+            ema50_1h = float(compute_ema(df_1h_feat["close"], 50).iloc[-1])
+            sr_1h = compute_support_resistance(df_1h_feat)
+            ta_multi["1h"] = {
+                "rsi": round(rsi_1h, 2) if rsi_1h else None,
+                "atr": round(atr_1h, 4) if atr_1h else None,
+                "trend": compute_trend(df_1h_feat),
+                "support": sr_1h["support"],
+                "resistance": sr_1h["resistance"],
+                "bb_pos": sr_1h["bb_pos"],
+            }
+            ta_multi["ema_20_1h"] = round(ema20_1h, 4)
+            ta_multi["ema_50_1h"] = round(ema50_1h, 4)
+
+            # 15m
+            try:
+                df_15m_ta = fetch_klines(symbol, "15m", limit=100)
+                if df_15m_ta is not None and len(df_15m_ta) >= 30:
+                    df_15m_ta = compute_all_features(df_15m_ta)
+                    sr_15m = compute_support_resistance(df_15m_ta)
+                    ta_multi["15m"] = {
+                        "rsi": round(float(df_15m_ta["rsi"].iloc[-1]), 2) if "rsi" in df_15m_ta.columns else None,
+                        "atr": round(float(df_15m_ta["atr"].iloc[-1]), 4) if "atr" in df_15m_ta.columns else None,
+                        "trend": compute_trend(df_15m_ta),
+                        "support": sr_15m["support"],
+                        "resistance": sr_15m["resistance"],
+                        "bb_pos": sr_15m["bb_pos"],
+                    }
+            except Exception as e:
+                logger.debug("15m TA failed for %s: %s", symbol, e)
+
+            # 5m
+            try:
+                df_5m_ta = fetch_klines(symbol, "5m", limit=100)
+                if df_5m_ta is not None and len(df_5m_ta) >= 30:
+                    df_5m_ta = compute_all_features(df_5m_ta)
+                    sr_5m = compute_support_resistance(df_5m_ta)
+                    ta_multi["5m"] = {
+                        "rsi": round(float(df_5m_ta["rsi"].iloc[-1]), 2) if "rsi" in df_5m_ta.columns else None,
+                        "atr": round(float(df_5m_ta["atr"].iloc[-1]), 4) if "atr" in df_5m_ta.columns else None,
+                        "trend": compute_trend(df_5m_ta),
+                        "support": sr_5m["support"],
+                        "resistance": sr_5m["resistance"],
+                        "bb_pos": sr_5m["bb_pos"],
+                    }
+            except Exception as e:
+                logger.debug("5m TA failed for %s: %s", symbol, e)
+
+            self._coin_states[symbol]["ta_multi"] = ta_multi
+        except Exception as e:
+            logger.debug("Multi-TF TA failed for %s: %s", symbol, e)
 
         # ── CRASH on either timeframe → skip ──
         if regime == config.REGIME_CRASH:

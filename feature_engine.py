@@ -137,6 +137,86 @@ def compute_indicators(df):
 
 
 
+def compute_ema(series, length):
+    """Compute Exponential Moving Average."""
+    return series.ewm(span=length, adjust=False).mean()
+
+
+def compute_trend(df):
+    """
+    Determine trend direction using EMA 20/50 crossover + price position.
+    Returns: 'UP', 'DOWN', or 'FLAT'
+    """
+    close = df["close"]
+    ema_20 = compute_ema(close, 20)
+    ema_50 = compute_ema(close, 50)
+
+    last_close = float(close.iloc[-1])
+    last_ema20 = float(ema_20.iloc[-1])
+    last_ema50 = float(ema_50.iloc[-1])
+
+    if last_ema20 > last_ema50 and last_close > last_ema20:
+        return "UP"
+    elif last_ema20 < last_ema50 and last_close < last_ema20:
+        return "DOWN"
+    return "FLAT"
+
+
+def compute_support_resistance(df, n_swing=3, max_levels=3):
+    """
+    Identify support & resistance levels using swing high/low detection.
+    
+    Parameters
+    ----------
+    df : pd.DataFrame with 'high', 'low', 'close' columns (must have indicators)
+    n_swing : int — lookback window on each side for swing detection
+    max_levels : int — max number of S/R levels to return
+    
+    Returns
+    -------
+    dict with keys: support (list[float]), resistance (list[float]),
+                    pivot (float), bb_pos (float 0-1)
+    """
+    highs = df["high"].values
+    lows = df["low"].values
+    close = float(df["close"].iloc[-1])
+    
+    swing_highs = []
+    swing_lows = []
+    
+    for i in range(n_swing, len(df) - n_swing):
+        # Swing high: local maximum
+        if highs[i] == max(highs[i - n_swing: i + n_swing + 1]):
+            swing_highs.append(float(highs[i]))
+        # Swing low: local minimum
+        if lows[i] == min(lows[i - n_swing: i + n_swing + 1]):
+            swing_lows.append(float(lows[i]))
+    
+    # Filter: support = swing lows below current price, sorted closest first
+    support = sorted([s for s in swing_lows if s < close], reverse=True)[:max_levels]
+    # Filter: resistance = swing highs above current price, sorted closest first
+    resistance = sorted([r for r in swing_highs if r > close])[:max_levels]
+    
+    # Pivot (traditional: (H + L + C) / 3 over last candle)
+    last = df.iloc[-1]
+    pivot = round((float(last["high"]) + float(last["low"]) + close) / 3, 6)
+    
+    # Bollinger Band position: 0 = at lower band, 1 = at upper band
+    bb_pos = 0.5
+    if "bb_upper" in df.columns and "bb_lower" in df.columns:
+        bb_u = float(df["bb_upper"].iloc[-1])
+        bb_l = float(df["bb_lower"].iloc[-1])
+        if bb_u != bb_l:
+            bb_pos = max(0, min(1, (close - bb_l) / (bb_u - bb_l)))
+    
+    return {
+        "support": [round(s, 6) for s in support],
+        "resistance": [round(r, 6) for r in resistance],
+        "pivot": pivot,
+        "bb_pos": round(bb_pos, 4),
+    }
+
+
 def compute_all_features(df):
     """
     Convenience: computes BOTH HMM features AND technical indicators.

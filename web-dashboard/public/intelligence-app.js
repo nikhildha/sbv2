@@ -636,7 +636,7 @@
                     const art = c.news[0]; // Top article
                     html += `<div style="margin-top:2px; font-size:11px; color:#475569; display:flex; gap:4px; align-items:flex-start;">
                     <span>📰</span>
-                    <a href="${art.url}" target="_blank" style="color:#475569; text-decoration:underline; line-height:1.4;">
+                    <a href="${art.url}" style="color:#475569; text-decoration:underline; line-height:1.4;">
                         ${art.title}
                     </a>
                     <span style="color:#94A3B8; white-space:nowrap;">(${art.source.split(':')[0]})</span>
@@ -667,7 +667,7 @@
                     const art = c.news[0]; // Top article
                     html += `<div style="margin-top:2px; font-size:11px; color:#475569; display:flex; gap:4px; align-items:flex-start;">
                     <span>📰</span>
-                    <a href="${art.url}" target="_blank" style="color:#475569; text-decoration:underline; line-height:1.4;">
+                    <a href="${art.url}" style="color:#475569; text-decoration:underline; line-height:1.4;">
                         ${art.title}
                     </a>
                     <span style="color:#94A3B8; white-space:nowrap;">(${art.source.split(':')[0]})</span>
@@ -723,7 +723,7 @@
         // 1. Regime Drivers Table
         if (els.regimeDriversBody) {
             els.regimeDriversBody.innerHTML = '';
-            coins.sort((a, b) => a.symbol.localeCompare(b.symbol));
+            coins.sort((a, b) => (b.volume_24h || 0) - (a.volume_24h || 0));
 
             coins.forEach(c => {
                 const tr = document.createElement('tr');
@@ -783,6 +783,104 @@
 
         // 2. All-coins Order Flow Table
         updateOrderFlowAllCoins(coins);
+
+        // 3. Technical Analysis — Multi-Timeframe S/R Table
+        updateTechnicalAnalysisTable(coins);
+    }
+
+    // ─── Order Flow Filter State ───────────────────────────────────────────
+    let ofFilterSelected = new Set(); // empty = show all
+    let ofAllCoins = []; // full coin list for re-render
+    let ofFilterInitialized = false;
+
+    function initOrderFlowFilter() {
+        if (ofFilterInitialized) return;
+        ofFilterInitialized = true;
+
+        const btn = document.getElementById('ofFilterBtn');
+        const dropdown = document.getElementById('ofFilterDropdown');
+        const selectAll = document.getElementById('ofSelectAll');
+        const deselectAll = document.getElementById('ofDeselectAll');
+        if (!btn || !dropdown) return;
+
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!document.getElementById('ofFilterWrap')?.contains(e.target)) {
+                dropdown.style.display = 'none';
+            }
+        });
+
+        if (selectAll) selectAll.addEventListener('click', () => {
+            ofFilterSelected.clear();
+            document.querySelectorAll('#ofFilterList input[type=checkbox]').forEach(cb => cb.checked = true);
+            updateOFFilterCount();
+            renderOrderFlowRows();
+        });
+
+        if (deselectAll) deselectAll.addEventListener('click', () => {
+            const allSyms = ofAllCoins.map(c => c.symbol);
+            ofFilterSelected = new Set(['__NONE__']); // special flag: show nothing
+            document.querySelectorAll('#ofFilterList input[type=checkbox]').forEach(cb => cb.checked = false);
+            updateOFFilterCount();
+            renderOrderFlowRows();
+        });
+    }
+
+    function updateOFFilterCount() {
+        const countEl = document.getElementById('ofFilterCount');
+        if (!countEl) return;
+        if (ofFilterSelected.size === 0 || ofFilterSelected.size === ofAllCoins.length) {
+            countEl.textContent = '(all)';
+        } else if (ofFilterSelected.has('__NONE__')) {
+            countEl.textContent = '(0)';
+        } else {
+            countEl.textContent = `(${ofFilterSelected.size})`;
+        }
+    }
+
+    function buildFilterCheckboxes(coins) {
+        const list = document.getElementById('ofFilterList');
+        if (!list) return;
+
+        const sorted = [...coins].sort((a, b) => a.symbol.localeCompare(b.symbol));
+        list.innerHTML = sorted.map(c => {
+            const sym = c.symbol;
+            const name = sym.replace('USDT', '');
+            const checked = ofFilterSelected.size === 0 || ofFilterSelected.has(sym) ? 'checked' : '';
+            return `<label style="display:flex;align-items:center;gap:6px;padding:4px 12px;cursor:pointer;font-size:11px;font-weight:500;color:#334155;" onmouseover="this.style.background='#F8FAFC'" onmouseout="this.style.background='transparent'">
+                <input type="checkbox" ${checked} value="${sym}" style="accent-color:#4F46E5;cursor:pointer;">
+                ${name}
+            </label>`;
+        }).join('');
+
+        // Bind checkbox change events
+        list.querySelectorAll('input[type=checkbox]').forEach(cb => {
+            cb.addEventListener('change', () => {
+                if (cb.checked) {
+                    ofFilterSelected.delete('__NONE__');
+                    if (ofFilterSelected.size === 0) {
+                        // Was showing all, now we need explicit set
+                        coins.forEach(c => ofFilterSelected.add(c.symbol));
+                    }
+                    ofFilterSelected.add(cb.value);
+                    // If all are selected, clear to mean "all"
+                    if (ofFilterSelected.size === coins.length) ofFilterSelected.clear();
+                } else {
+                    if (ofFilterSelected.size === 0) {
+                        // Was showing all, now create set without this one
+                        coins.forEach(c => ofFilterSelected.add(c.symbol));
+                    }
+                    ofFilterSelected.delete(cb.value);
+                    if (ofFilterSelected.size === 0) ofFilterSelected.add('__NONE__');
+                }
+                updateOFFilterCount();
+                renderOrderFlowRows();
+            });
+        });
     }
 
     function updateOrderFlowAllCoins(coins) {
@@ -793,6 +891,16 @@
             tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text-secondary);padding:24px;">Waiting for bot analysis cycle…</td></tr>';
             return;
         }
+
+        ofAllCoins = coins;
+        initOrderFlowFilter();
+        buildFilterCheckboxes(coins);
+        renderOrderFlowRows();
+    }
+
+    function renderOrderFlowRows() {
+        const tbody = els.orderFlowAllBody;
+        if (!tbody) return;
 
         const fmt = (val, dec = 2) => val !== undefined && val !== null ? val.toFixed(dec) : '—';
         const fmtUSD = (val) => {
@@ -806,7 +914,20 @@
             return val > 0 ? '#16A34A' : (val < 0 ? '#DC2626' : '#64748B');
         };
 
-        tbody.innerHTML = coins.sort((a, b) => a.symbol.localeCompare(b.symbol)).map(c => {
+        // Filter coins
+        let filtered = [...ofAllCoins].sort((a, b) => a.symbol.localeCompare(b.symbol));
+        if (ofFilterSelected.has('__NONE__')) {
+            filtered = [];
+        } else if (ofFilterSelected.size > 0) {
+            filtered = filtered.filter(c => ofFilterSelected.has(c.symbol));
+        }
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text-secondary);padding:24px;">No coins selected — use filter to add coins</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = filtered.map(c => {
             const d = c.orderflow_details || {};
             const imbPct = d.imbalance !== undefined ? Math.round(d.imbalance * 100) : null;
             const takerPct = d.taker_buy_ratio !== undefined ? Math.round(d.taker_buy_ratio * 100) : null;
@@ -861,10 +982,6 @@
             // Exchange count badge color
             const exchColor = exchCount >= 3 ? '#16A34A' : (exchCount >= 2 ? '#D97706' : '#64748B');
 
-            // Depth imbalance bar
-            const depthTotal = aggBid + aggAsk;
-            const bidPct = depthTotal > 0 ? Math.round(aggBid / depthTotal * 100) : 50;
-
             return `<tr style="border-bottom:1px solid #F1F5F9;font-size:11px;font-weight:600;">
             <td style="padding:10px 8px;font-weight:700;">${c.symbol.replace('USDT', '')}</td>
             <td style="padding:8px;text-align:center;"><span style="background:${regBg};color:${regColor};padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">${c.regime}</span></td>
@@ -882,6 +999,243 @@
         }).join('');
     }
 
+
+    // ─── Technical Analysis Filter State ───────────────────────────────────────
+    let taFilterSelected = new Set();
+    let taAllCoins = [];
+    let taFilterInitialized = false;
+
+    function initTAFilter() {
+        if (taFilterInitialized) return;
+        taFilterInitialized = true;
+
+        const btn = document.getElementById('taFilterBtn');
+        const dropdown = document.getElementById('taFilterDropdown');
+        const selectAll = document.getElementById('taSelectAll');
+        const deselectAll = document.getElementById('taDeselectAll');
+        if (!btn || !dropdown) return;
+
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!document.getElementById('taFilterWrap')?.contains(e.target)) {
+                dropdown.style.display = 'none';
+            }
+        });
+
+        if (selectAll) selectAll.addEventListener('click', () => {
+            taFilterSelected.clear();
+            document.querySelectorAll('#taFilterList input[type=checkbox]').forEach(cb => cb.checked = true);
+            updateTAFilterCount();
+            renderTARows();
+        });
+
+        if (deselectAll) deselectAll.addEventListener('click', () => {
+            taFilterSelected = new Set(['__NONE__']);
+            document.querySelectorAll('#taFilterList input[type=checkbox]').forEach(cb => cb.checked = false);
+            updateTAFilterCount();
+            renderTARows();
+        });
+    }
+
+    function updateTAFilterCount() {
+        const countEl = document.getElementById('taFilterCount');
+        if (!countEl) return;
+        if (taFilterSelected.size === 0 || taFilterSelected.size === taAllCoins.length) {
+            countEl.textContent = '(all)';
+        } else if (taFilterSelected.has('__NONE__')) {
+            countEl.textContent = '(0)';
+        } else {
+            countEl.textContent = `(${taFilterSelected.size})`;
+        }
+    }
+
+    function buildTAFilterCheckboxes(coins) {
+        const list = document.getElementById('taFilterList');
+        if (!list) return;
+        const sorted = [...coins].sort((a, b) => a.symbol.localeCompare(b.symbol));
+        list.innerHTML = sorted.map(c => {
+            const sym = c.symbol;
+            const name = sym.replace('USDT', '');
+            const checked = taFilterSelected.size === 0 || taFilterSelected.has(sym) ? 'checked' : '';
+            return `<label style="display:flex;align-items:center;gap:6px;padding:4px 12px;cursor:pointer;font-size:11px;font-weight:500;color:#334155;" onmouseover="this.style.background='#F8FAFC'" onmouseout="this.style.background='transparent'">
+                <input type="checkbox" ${checked} value="${sym}" style="accent-color:#4F46E5;cursor:pointer;">
+                ${name}
+            </label>`;
+        }).join('');
+
+        list.querySelectorAll('input[type=checkbox]').forEach(cb => {
+            cb.addEventListener('change', () => {
+                if (cb.checked) {
+                    taFilterSelected.delete('__NONE__');
+                    if (taFilterSelected.size === 0) {
+                        coins.forEach(c => taFilterSelected.add(c.symbol));
+                    }
+                    taFilterSelected.add(cb.value);
+                    if (taFilterSelected.size === coins.length) taFilterSelected.clear();
+                } else {
+                    if (taFilterSelected.size === 0) {
+                        coins.forEach(c => taFilterSelected.add(c.symbol));
+                    }
+                    taFilterSelected.delete(cb.value);
+                    if (taFilterSelected.size === 0) taFilterSelected.add('__NONE__');
+                }
+                updateTAFilterCount();
+                renderTARows();
+            });
+        });
+    }
+
+    function updateTechnicalAnalysisTable(coins) {
+        const tbody = document.getElementById('taTableBody');
+        if (!tbody) return;
+
+        if (!coins || coins.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="15" style="text-align:center;color:var(--text-secondary);padding:24px;">Waiting for bot analysis cycle…</td></tr>';
+            return;
+        }
+
+        taAllCoins = coins;
+        initTAFilter();
+        buildTAFilterCheckboxes(coins);
+        renderTARows();
+    }
+
+    function renderTARows() {
+        const tbody = document.getElementById('taTableBody');
+        if (!tbody) return;
+
+        // Filter
+        let filtered = [...taAllCoins].sort((a, b) => a.symbol.localeCompare(b.symbol));
+        if (taFilterSelected.has('__NONE__')) filtered = [];
+        else if (taFilterSelected.size > 0) filtered = filtered.filter(c => taFilterSelected.has(c.symbol));
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="15" style="text-align:center;color:var(--text-secondary);padding:24px;">No coins selected — use filter to add coins</td></tr>';
+            return;
+        }
+
+        const fmtPrice = (p) => {
+            if (p === undefined || p === null) return '—';
+            if (p >= 1000) return p.toLocaleString('en-US', { maximumFractionDigits: 0 });
+            if (p >= 1) return p.toLocaleString('en-US', { maximumFractionDigits: 2 });
+            return p.toLocaleString('en-US', { maximumFractionDigits: 4 });
+        };
+
+        const rsiColor = (rsi) => {
+            if (rsi === null || rsi === undefined) return '#64748B';
+            if (rsi >= 70) return '#DC2626';  // overbought
+            if (rsi <= 30) return '#16A34A';  // oversold
+            if (rsi >= 60) return '#D97706';  // warm
+            if (rsi <= 40) return '#2563EB';  // cool
+            return '#64748B';
+        };
+
+        const trendBadge = (trend) => {
+            if (!trend) return '<span style="color:#64748B;">—</span>';
+            const colors = { UP: ['#15803D', '#DCFCE7'], DOWN: ['#B91C1C', '#FEE2E2'], FLAT: ['#B45309', '#FEF3C7'] };
+            const [fg, bg] = colors[trend] || ['#64748B', '#F1F5F9'];
+            const arrow = trend === 'UP' ? '▲' : (trend === 'DOWN' ? '▼' : '→');
+            return `<span style="background:${bg};color:${fg};padding:2px 6px;border-radius:8px;font-size:9px;font-weight:700;">${arrow} ${trend}</span>`;
+        };
+
+        const fmtSR = (levels, color) => {
+            if (!levels || levels.length === 0) return '<span style="color:#94A3B8;">—</span>';
+            return levels.slice(0, 2).map(l => `<span style="color:${color};font-size:10px;font-weight:600;">${fmtPrice(l)}</span>`).join('<br>');
+        };
+
+        const bbBar = (pos) => {
+            if (pos === undefined || pos === null) return '—';
+            const pct = Math.round(pos * 100);
+            const barColor = pct > 80 ? '#DC2626' : (pct < 20 ? '#16A34A' : '#3B82F6');
+            return `<div style="display:flex;align-items:center;gap:4px;"><div style="width:40px;height:6px;background:#E2E8F0;border-radius:3px;overflow:hidden;"><div style="width:${pct}%;height:100%;background:${barColor};border-radius:3px;"></div></div><span style="font-size:9px;color:${barColor};font-weight:600;">${pct}%</span></div>`;
+        };
+
+        // Insight tracking
+        let nearSupportCoins = [];
+        let nearResistCoins = [];
+        let oversoldCoins = [];
+        let overboughtCoins = [];
+
+        tbody.innerHTML = filtered.map(c => {
+            const ta = c.ta_multi || {};
+            const price = ta.price || c.price || 0;
+            const h1 = ta['1h'] || {};
+            const m15 = ta['15m'] || {};
+            const m5 = ta['5m'] || {};
+            const name = c.symbol.replace('USDT', '');
+
+            // Regime badge
+            let regColor = '#64748B', regBg = '#F1F5F9';
+            if (c.regime.includes('BULL')) { regColor = '#15803D'; regBg = '#DCFCE7'; }
+            if (c.regime.includes('BEAR')) { regColor = '#B91C1C'; regBg = '#FEE2E2'; }
+            if (c.regime.includes('CHOP')) { regColor = '#B45309'; regBg = '#FEF3C7'; }
+
+            // Confluence signal
+            let signal = 'Neutral';
+            let sigColor = '#64748B';
+            const rsi1h = h1.rsi;
+            const rsi5m = m5.rsi;
+            const sup1h = (h1.support || [])[0];
+            const res1h = (h1.resistance || [])[0];
+
+            if (rsi1h && rsi5m) {
+                // Near 1h support + 5m oversold
+                if (sup1h && price > 0 && Math.abs(price - sup1h) / price < 0.01 && rsi5m < 35) {
+                    signal = '🟢 Bounce'; sigColor = '#16A34A';
+                    nearSupportCoins.push(name);
+                }
+                // Near 1h resistance + 5m overbought
+                else if (res1h && price > 0 && Math.abs(price - res1h) / price < 0.01 && rsi5m > 65) {
+                    signal = '🔴 Reject'; sigColor = '#DC2626';
+                    nearResistCoins.push(name);
+                }
+                // Multi-TF bullish alignment
+                else if (h1.trend === 'UP' && rsi1h > 50 && rsi5m > 50 && (m15.trend === 'UP' || !m15.trend)) {
+                    signal = '▲ Bullish'; sigColor = '#16A34A';
+                }
+                // Multi-TF bearish alignment
+                else if (h1.trend === 'DOWN' && rsi1h < 50 && rsi5m < 50 && (m15.trend === 'DOWN' || !m15.trend)) {
+                    signal = '▼ Bearish'; sigColor = '#DC2626';
+                }
+            }
+            if (rsi1h && rsi1h <= 30) oversoldCoins.push(name);
+            if (rsi1h && rsi1h >= 70) overboughtCoins.push(name);
+
+            return `<tr style="border-bottom:1px solid #F1F5F9;font-size:11px;font-weight:600;">
+            <td style="padding:10px 8px;font-weight:700;">${name}</td>
+            <td style="padding:8px;text-align:center;">${fmtPrice(price)}</td>
+            <td style="padding:8px;text-align:center;"><span style="background:${regBg};color:${regColor};padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">${c.regime}</span></td>
+            <td style="padding:8px;text-align:center;color:${rsiColor(h1.rsi)};background:#FAFBFF;">${h1.rsi !== undefined && h1.rsi !== null ? h1.rsi.toFixed(1) : '—'}</td>
+            <td style="padding:8px;text-align:center;background:#FAFBFF;">${trendBadge(h1.trend)}</td>
+            <td style="padding:8px;text-align:center;background:#FAFBFF;">${fmtSR(h1.support, '#16A34A')}</td>
+            <td style="padding:8px;text-align:center;background:#FAFBFF;">${fmtSR(h1.resistance, '#DC2626')}</td>
+            <td style="padding:8px;text-align:center;color:${rsiColor(m15.rsi)};background:#FAFFFA;">${m15.rsi !== undefined && m15.rsi !== null ? m15.rsi.toFixed(1) : '—'}</td>
+            <td style="padding:8px;text-align:center;background:#FAFFFA;">${fmtSR(m15.support, '#16A34A')}</td>
+            <td style="padding:8px;text-align:center;background:#FAFFFA;">${fmtSR(m15.resistance, '#DC2626')}</td>
+            <td style="padding:8px;text-align:center;color:${rsiColor(m5.rsi)};background:#FFFEFB;">${m5.rsi !== undefined && m5.rsi !== null ? m5.rsi.toFixed(1) : '—'}</td>
+            <td style="padding:8px;text-align:center;background:#FFFEFB;">${fmtSR(m5.support, '#16A34A')}</td>
+            <td style="padding:8px;text-align:center;background:#FFFEFB;">${fmtSR(m5.resistance, '#DC2626')}</td>
+            <td style="padding:8px;text-align:center;">${bbBar(h1.bb_pos)}</td>
+            <td style="padding:8px;text-align:center;font-weight:700;color:${sigColor};">${signal}</td>
+        </tr>`;
+        }).join('');
+
+        // Update TA insight
+        const insightEl = document.getElementById('taInsight');
+        if (insightEl) {
+            let parts = [];
+            if (nearSupportCoins.length) parts.push(`<b style="color:#16A34A">Near 1h support:</b> ${nearSupportCoins.join(', ')} — potential bounce setups.`);
+            if (nearResistCoins.length) parts.push(`<b style="color:#DC2626">Near 1h resistance:</b> ${nearResistCoins.join(', ')} — potential rejection zones.`);
+            if (oversoldCoins.length) parts.push(`<b style="color:#2563EB">1h Oversold (RSI≤30):</b> ${oversoldCoins.join(', ')}`);
+            if (overboughtCoins.length) parts.push(`<b style="color:#D97706">1h Overbought (RSI≥70):</b> ${overboughtCoins.join(', ')}`);
+            if (parts.length === 0) parts.push('No strong confluence signals detected across timeframes. Markets are in a ranging state.');
+            insightEl.innerHTML = `<strong>📐 TA Insight:</strong> ${parts.join(' · ')}`;
+        }
+    }
 
     function updateTicker() {
         const coinStates = state.multi.coin_states || {};
@@ -1041,7 +1395,7 @@
             const link = item.link || '#';
 
             return `
-            <a href="${link}" target="_blank" rel="noopener noreferrer" class="news-item" style="text-decoration:none;color:inherit;">
+            <div class="news-item" style="cursor:default;">
                 <span class="news-src-pill ${srcClass}">${(item.source || 'RSS').substring(0, 12)}</span>
                 <div class="news-body">
                     <div class="news-title" style="color:#1D4ED8;">${item.title || 'Untitled'}</div>
@@ -1051,7 +1405,7 @@
                 <div class="news-sentiment">
                     <div class="news-sent-dot" style="background:${sentColor};"></div>
                 </div>
-            </a>
+            </div>
         `;
         }).join('');
 

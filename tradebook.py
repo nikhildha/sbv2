@@ -149,6 +149,7 @@ def open_trade(symbol, side, leverage, quantity, entry_price, atr,
         "trailing_tp":      take_profit,
         "peak_price":       round(entry_price, 6),
         "trailing_active":  False,
+        "trail_sl_count":   0,
         "tp_extensions":    0,
         "status":           "ACTIVE",
         "exit_reason":      None,
@@ -426,6 +427,8 @@ def update_unrealized(prices=None, funding_rates=None):
             trade["peak_price"] = entry
         if "trailing_active" not in trade:
             trade["trailing_active"] = False
+        if "trail_sl_count" not in trade:
+            trade["trail_sl_count"] = 0
         if "tp_extensions" not in trade:
             trade["tp_extensions"] = 0
 
@@ -443,6 +446,7 @@ def update_unrealized(prices=None, funding_rates=None):
                     trade["trailing_sl"] = protect_sl
                     trade["capital_protection_active"] = True
                     trade["trailing_active"] = True
+                    trade["trail_sl_count"] = trade.get("trail_sl_count", 0) + 1
                     logger.info(
                         "🛡️ Capital protection SL activated for %s: SL moved to %.6f (+4%% profit lock)",
                         trade["trade_id"], protect_sl,
@@ -451,6 +455,7 @@ def update_unrealized(prices=None, funding_rates=None):
                     trade["trailing_sl"] = protect_sl
                     trade["capital_protection_active"] = True
                     trade["trailing_active"] = True
+                    trade["trail_sl_count"] = trade.get("trail_sl_count", 0) + 1
                     logger.info(
                         "🛡️ Capital protection SL activated for %s: SL moved to %.6f (+4%% profit lock)",
                         trade["trade_id"], protect_sl,
@@ -483,10 +488,12 @@ def update_unrealized(prices=None, funding_rates=None):
                     new_sl = round(trade["peak_price"] - trail_dist, 6)
                     if new_sl > trade["trailing_sl"]:
                         trade["trailing_sl"] = new_sl
+                        trade["trail_sl_count"] = trade.get("trail_sl_count", 0) + 1
                 else:
                     new_sl = round(trade["peak_price"] + trail_dist, 6)
                     if new_sl < trade["trailing_sl"]:
                         trade["trailing_sl"] = new_sl
+                        trade["trail_sl_count"] = trade.get("trail_sl_count", 0) + 1
 
         # --- Trailing Take Profit ---
         if config.TRAILING_TP_ENABLED and atr > 0:
@@ -520,13 +527,14 @@ def update_unrealized(prices=None, funding_rates=None):
         is_live = trade.get("mode") == "LIVE"
 
         if not is_live:
-            # HARD MAX LOSS GUARD — paper trades only
-            if pnl_pct <= config.MAX_LOSS_PER_TRADE_PCT:
+            # HARD MAX LOSS GUARD — paper trades only (leverage-tiered)
+            max_loss_limit = config.get_max_loss_pct(lev)
+            if pnl_pct <= max_loss_limit:
                 logger.warning(
-                    "🛑 MAX LOSS hit on %s (%.2f%% <= %.0f%%) — auto-closing trade %s",
-                    symbol, pnl_pct, config.MAX_LOSS_PER_TRADE_PCT, trade["trade_id"],
+                    "🛑 MAX LOSS hit on %s (%.2f%% <= %.0f%% @ %dx) — auto-closing trade %s",
+                    symbol, pnl_pct, max_loss_limit, lev, trade["trade_id"],
                 )
-                _close_trade_inline(trade, current, "MAX_LOSS")
+                _close_trade_inline(trade, current, f"MAX_LOSS_{int(max_loss_limit)}%@{lev}x")
                 changed = True
                 continue
 
@@ -544,12 +552,30 @@ def update_unrealized(prices=None, funding_rates=None):
                 tp_hit = current <= effective_tp
 
             if sl_hit:
-                reason = "TRAILING_SL" if trade["trailing_active"] else "STOP_LOSS"
+                sl_n = trade.get("trail_sl_count", 0)
+                cp = trade.get("capital_protection_active", False)
+                if trade["trailing_active"]:
+                    pf_tag = ""
+                    if cp:
+                        # Check if SL is still near the 4% protection level
+                        # or has been tightened further by regular trailing
+                        if is_long:
+                            sl_pnl_pct = (effective_sl - entry) / entry * 100 * lev
+                        else:
+                            sl_pnl_pct = (entry - effective_sl) / entry * 100 * lev
+                        if sl_pnl_pct <= 8:  # still near the 4% floor
+                            pf_tag = " (4% PF Lock)"
+                        else:
+                            pf_tag = f" ({sl_pnl_pct:.0f}% Locked)"
+                    reason = f"TRAIL_SL_{sl_n}{pf_tag}"
+                else:
+                    reason = "FIXED_SL"
                 _close_trade_inline(trade, effective_sl, reason)
                 changed = True
                 continue
             if tp_hit:
-                reason = "TRAILING_TP" if trade["tp_extensions"] > 0 else "TAKE_PROFIT"
+                ext = trade["tp_extensions"]
+                reason = f"TP_EXT_{ext}" if ext > 0 else "FIXED_TP"
                 _close_trade_inline(trade, effective_tp, reason)
                 changed = True
                 continue

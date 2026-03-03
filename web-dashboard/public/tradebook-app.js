@@ -15,6 +15,7 @@ let tradebookData = { trades: [], summary: {} };
 let pnlChart = null;
 let pnlTimelineChart = null;
 let livePositionsData = null;  // cached CoinDCX positions
+let activeTradeTab = 'PAPER'; // 'PAPER' or 'LIVE'
 
 // Live price cache — prevents flickering when file-based updates
 // overwrite with stale prices between price-tick events
@@ -80,25 +81,52 @@ function showToast(msg, type = 'success') {
     setTimeout(() => t.remove(), 3500);
 }
 
+// ─── Deploy Banner Sync ──────────────────────────────────────────────────────
+function updateDeployBanner() {
+    const banner = document.getElementById('tradebookModeBanner');
+    if (!banner) return;
+    const mode = typeof sentinelGetMode === 'function' ? sentinelGetMode() : 'PAPER';
+    banner.className = 'tradebook-deploy-banner ' + mode.toLowerCase();
+    if (mode === 'LIVE') {
+        banner.innerHTML = '🔴 LIVE TRADE MODE — Real orders are being placed';
+    } else {
+        banner.innerHTML = '🟢 PAPER TRADE MODE — No real orders are placed';
+    }
+}
+
+// Sync banner on mode change
+window.addEventListener('mode-change', updateDeployBanner);
+// Initial sync on DOM ready
+document.addEventListener('DOMContentLoaded', () => setTimeout(updateDeployBanner, 100));
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  SUMMARY UPDATE
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function updateSummary(summary) {
+function updateSummary(summary, filteredTrades) {
     if (!summary) return;
 
-    document.getElementById('summTotalTrades').textContent = summary.total_trades ?? 0;
-    document.getElementById('summActiveTrades').textContent = summary.active_trades ?? 0;
-    document.getElementById('summClosedTrades').textContent = summary.closed_trades ?? 0;
-    document.getElementById('summWins').textContent = summary.wins ?? 0;
-    document.getElementById('summLosses').textContent = summary.losses ?? 0;
-    document.getElementById('summWinRate').textContent = (summary.win_rate_pct ?? 0) + '%';
+    // Use filtered trades for per-tab stats
+    const useTrades = filteredTrades || tradebookData?.trades || [];
 
-    // ── Compute P&L fresh from trades (matches dashboard logic) ──
+    const closedArr = useTrades.filter(t => t.status === 'CLOSED');
+    const activeArr = useTrades.filter(t => t.status === 'ACTIVE');
+    const wins = closedArr.filter(t => (t.realized_pnl || 0) > 0).length;
+    const losses = closedArr.length - wins;
+    const winRate = closedArr.length > 0 ? (wins / closedArr.length * 100).toFixed(1) : '0.0';
+
+    document.getElementById('summTotalTrades').textContent = useTrades.length;
+    document.getElementById('summActiveTrades').textContent = activeArr.length;
+    document.getElementById('summClosedTrades').textContent = closedArr.length;
+    document.getElementById('summWins').textContent = wins;
+    document.getElementById('summLosses').textContent = losses;
+    document.getElementById('summWinRate').textContent = winRate + '%';
+
+    // ── Compute P&L fresh from filtered trades ──
     const MAX_CAPITAL = 2500;
     const CAPITAL_PER_TRADE = 100;
     let realizedPnl = 0, unrealizedPnl = 0, activeCount = 0;
-    (tradebookData?.trades || []).forEach(t => {
+    useTrades.forEach(t => {
         if (t.status === 'CLOSED') realizedPnl += (t.realized_pnl || 0);
         else if (t.status === 'ACTIVE') { unrealizedPnl += (t.unrealized_pnl || 0); activeCount++; }
     });
@@ -135,8 +163,8 @@ function updateSummary(summary) {
     best.textContent = formatPnl(summary.best_trade);
     worst.textContent = formatPnl(summary.worst_trade);
 
-    // ── Strategy Stats (computed from closed trades) ──
-    const closedTrades = (tradebookData?.trades || []).filter(t => t.status === 'CLOSED');
+    // ── Strategy Stats (computed from filtered closed trades) ──
+    const closedTrades = useTrades.filter(t => t.status === 'CLOSED');
     const closedPnls = closedTrades.map(t => t.realized_pnl || 0);
 
     // Profit Factor
@@ -194,6 +222,25 @@ function updateSummary(summary) {
     document.getElementById('lastUpdate').textContent = summary.last_updated
         ? `Last: ${formatTime(summary.last_updated)}`
         : 'Live';
+}
+
+// Compute summary from trades array (used when switching tabs)
+function updateSummaryFromTrades(trades) {
+    const closed = trades.filter(t => t.status === 'CLOSED');
+    const wins = closed.filter(t => (t.realized_pnl || 0) > 0).length;
+    const bestTrade = closed.reduce((b, t) => Math.max(b, t.realized_pnl || 0), 0);
+    const worstTrade = closed.reduce((w, t) => Math.min(w, t.realized_pnl || 0), 0);
+    updateSummary({
+        total_trades: trades.length,
+        active_trades: trades.filter(t => t.status === 'ACTIVE').length,
+        closed_trades: closed.length,
+        wins,
+        losses: closed.length - wins,
+        win_rate_pct: closed.length > 0 ? (wins / closed.length * 100).toFixed(1) : '0.0',
+        best_trade: bestTrade,
+        worst_trade: worstTrade,
+        last_updated: new Date().toISOString(),
+    }, trades);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -395,6 +442,12 @@ function getFilteredTrades() {
 
     let trades = [...(tradebookData.trades || [])];
 
+    // Filter by active tab (Paper / Live)
+    trades = trades.filter(t => {
+        const m = (t.mode || t.trade_type || 'PAPER').toUpperCase();
+        return m === activeTradeTab || (activeTradeTab === 'PAPER' && m !== 'LIVE');
+    });
+
     if (status !== 'ALL') trades = trades.filter(t => t.status === status);
     if (position !== 'ALL') trades = trades.filter(t => t.position === position);
     if (regime !== 'ALL') trades = trades.filter(t => t.regime === regime);
@@ -441,27 +494,27 @@ function renderTable(trades) {
         return tB - tA;
     });
 
-    let html = `<table class="tradebook-table">
+    let html = `<table class="tradebook-table" id="mainTradeTable">
     <thead><tr>
       <th style="width:32px"><input type="checkbox" id="selectAllTrades" onchange="toggleSelectAll(this)" title="Select All"></th>
-      <th>Symbol</th>
-      <th>Position</th>
-      <th>Regime</th>
-      <th>Confidence</th>
-      <th>Leverage</th>
-      <th>Capital</th>
-      <th>Entry Price</th>
-      <th>Current</th>
+      <th data-col="1" onclick="sortTradeTable(1)" style="cursor:pointer;">Symbol ⇅</th>
+      <th data-col="2" onclick="sortTradeTable(2)" style="cursor:pointer;">Position ⇅</th>
+      <th data-col="3" onclick="sortTradeTable(3)" style="cursor:pointer;">Regime ⇅</th>
+      <th data-col="4" onclick="sortTradeTable(4)" style="cursor:pointer;">Confidence ⇅</th>
+      <th data-col="5" onclick="sortTradeTable(5)" style="cursor:pointer;">Leverage ⇅</th>
+      <th data-col="6" onclick="sortTradeTable(6)" style="cursor:pointer;">Capital ⇅</th>
+      <th data-col="7" onclick="sortTradeTable(7)" style="cursor:pointer;">Entry Price ⇅</th>
+      <th data-col="8" onclick="sortTradeTable(8)" style="cursor:pointer;">Current ⇅</th>
       <th>SL / TP</th>
-      <th>Status</th>
-      <th>Unrealized P&L</th>
-      <th>Realized P&L</th>
-      <th>Duration</th>
-      <th>Exit Reason</th>
-      <th>Exit Price</th>
-      <th>Time</th>
-      <th>ID</th>
-      <th>Commission</th>
+      <th data-col="10" onclick="sortTradeTable(10)" style="cursor:pointer;">Status ⇅</th>
+      <th data-col="11" onclick="sortTradeTable(11)" style="cursor:pointer;">Unrealized P&L ⇅</th>
+      <th data-col="12" onclick="sortTradeTable(12)" style="cursor:pointer;">Realized P&L ⇅</th>
+      <th data-col="13" onclick="sortTradeTable(13)" style="cursor:pointer;">Duration ⇅</th>
+      <th data-col="14" onclick="sortTradeTable(14)" style="cursor:pointer;">Exit Reason ⇅</th>
+      <th data-col="15" onclick="sortTradeTable(15)" style="cursor:pointer;">Exit Price ⇅</th>
+      <th data-col="16" onclick="sortTradeTable(16)" style="cursor:pointer;">Time ⇅</th>
+
+      <th data-col="18" onclick="sortTradeTable(18)" style="cursor:pointer;">Commission ⇅</th>
       <th>Actions</th>
     </tr></thead><tbody>`;
 
@@ -504,14 +557,23 @@ function renderTable(trades) {
         const dur = t.duration_minutes || 0;
         const durStr = dur >= 60 ? `${(dur / 60).toFixed(1)}h` : `${dur.toFixed(0)}m`;
 
-        // Exit reason badge
+        // Exit reason badge — enriched format
         let exitBadge = '';
-        if (t.exit_reason === 'TAKE_PROFIT') exitBadge = '<span class="exit-reason-badge tp">TP</span>';
-        else if (t.exit_reason === 'TRAILING_TP') exitBadge = '<span class="exit-reason-badge tp">TRAIL TP</span>';
-        else if (t.exit_reason === 'STOP_LOSS') exitBadge = '<span class="exit-reason-badge sl">SL</span>';
-        else if (t.exit_reason === 'TRAILING_SL') exitBadge = '<span class="exit-reason-badge sl">TRAIL SL</span>';
-        else if (t.exit_reason === 'MANUAL') exitBadge = '<span class="exit-reason-badge manual">MANUAL</span>';
-        else if (t.exit_reason) exitBadge = `<span class="exit-reason-badge manual">${t.exit_reason}</span>`;
+        const er = t.exit_reason || '';
+        if (er.startsWith('FIXED_TP')) exitBadge = '<span class="exit-reason-badge tp">FIXED TP</span>';
+        else if (er.startsWith('TP_EXT_')) exitBadge = `<span class="exit-reason-badge tp">${er.replace('_', ' ')}</span>`;
+        else if (er.startsWith('FIXED_SL')) exitBadge = '<span class="exit-reason-badge sl">FIXED SL</span>';
+        else if (er.startsWith('TRAIL_SL_')) {
+            const hasPF = er.includes('PF Lock');
+            exitBadge = `<span class="exit-reason-badge ${hasPF ? 'tp' : 'sl'}">${er}</span>`;
+        }
+        else if (er.startsWith('MAX_LOSS')) exitBadge = `<span class="exit-reason-badge sl">${er.replace('MAX_LOSS_', 'MAX LOSS ')}</span>`;
+        else if (er === 'MANUAL') exitBadge = '<span class="exit-reason-badge manual">MANUAL</span>';
+        else if (er === 'TAKE_PROFIT') exitBadge = '<span class="exit-reason-badge tp">TP</span>';
+        else if (er === 'TRAILING_TP') exitBadge = '<span class="exit-reason-badge tp">TRAIL TP</span>';
+        else if (er === 'STOP_LOSS') exitBadge = '<span class="exit-reason-badge sl">SL</span>';
+        else if (er === 'TRAILING_SL') exitBadge = '<span class="exit-reason-badge sl">TRAIL SL</span>';
+        else if (er) exitBadge = `<span class="exit-reason-badge manual">${er}</span>`;
 
         html += `<tr>
       <td><input type="checkbox" class="trade-select" data-tradeid="${t.trade_id}" ${isActive ? '' : 'disabled'}></td>
@@ -531,7 +593,7 @@ function renderTable(trades) {
       <td>${exitBadge || '—'}</td>
       <td class="col-price">${t.exit_price ? formatPrice(t.exit_price) : '—'}</td>
       <td>${formatDateTime(t.entry_timestamp)}</td>
-      <td class="col-id">${t.trade_id}</td>
+
       <td class="col-price">$${(t.commission || ((t.entry_price || 0) * (t.quantity || 0) + ((t.current_price || t.entry_price || 0) * (t.quantity || 0))) * 0.0005).toFixed(2)}</td>
       <td><button class="btn-delete-trade" onclick="deleteTrade('${t.trade_id}')" title="Delete trade">Delete</button></td>
     </tr>`;
@@ -603,6 +665,282 @@ function exportCSV() {
 // ═══════════════════════════════════════════════════════════════════════════════
 //  MASTER UPDATE
 // ═══════════════════════════════════════════════════════════════════════════════
+// ─── Paper / Live Tab Switcher ───────────────────────────────────────────────
+let livePnlChartInst = null;
+let livePnlTimelineInst = null;
+
+function switchTradeTab(tab) {
+    activeTradeTab = tab;
+    const tabP = document.getElementById('tabPaper');
+    const tabL = document.getElementById('tabLive');
+    const paperSect = document.getElementById('paperSection');
+    const liveSect = document.getElementById('liveSection');
+
+    if (tab === 'PAPER') {
+        tabP.style.borderBottomColor = '#22C55E'; tabP.style.color = '#22C55E';
+        tabL.style.borderBottomColor = 'transparent'; tabL.style.color = '#94A3B8';
+        if (paperSect) paperSect.style.display = '';
+        if (liveSect) liveSect.style.display = 'none';
+        // Re-render paper with filtered data
+        if (tradebookData.trades) {
+            const pt = filterTradesByTab(tradebookData.trades);
+            updateSummaryFromTrades(pt);
+            updatePnlChart(pt);
+            updatePnlTimelineChart(pt);
+        }
+        applyFilters();
+    } else {
+        tabL.style.borderBottomColor = '#EF4444'; tabL.style.color = '#EF4444';
+        tabP.style.borderBottomColor = 'transparent'; tabP.style.color = '#94A3B8';
+        if (paperSect) paperSect.style.display = 'none';
+        if (liveSect) liveSect.style.display = '';
+        // Render live tab with its own data
+        renderLiveTab();
+    }
+}
+
+function filterTradesByTab(trades) {
+    return (trades || []).filter(t => {
+        const m = (t.mode || t.trade_type || 'PAPER').toUpperCase();
+        return m === activeTradeTab || (activeTradeTab === 'PAPER' && m !== 'LIVE');
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  LIVE TAB — Fully independent functions
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function getLiveTrades() {
+    return (tradebookData.trades || []).filter(t => {
+        const m = (t.mode || t.trade_type || '').toUpperCase();
+        return m === 'LIVE';
+    });
+}
+
+function getLiveFilteredTrades() {
+    const status = document.getElementById('liveFilterStatus')?.value || 'ALL';
+    const position = document.getElementById('liveFilterPosition')?.value || 'ALL';
+    const sym = (document.getElementById('liveFilterSymbol')?.value || '').toUpperCase();
+    let trades = getLiveTrades();
+    if (status !== 'ALL') trades = trades.filter(t => t.status === status);
+    if (position !== 'ALL') trades = trades.filter(t => t.position === position);
+    if (sym) trades = trades.filter(t => (t.symbol || '').toUpperCase().includes(sym));
+    return trades;
+}
+
+function applyLiveFilters() {
+    renderLiveTable(getLiveFilteredTrades());
+}
+
+function renderLiveTab() {
+    const liveTrades = getLiveTrades();
+    updateLiveSummary(liveTrades);
+    updateLivePnlChart(liveTrades);
+    renderLiveTable(getLiveFilteredTrades());
+}
+
+function renderLiveTable(trades) {
+    const area = document.getElementById('liveTradesArea');
+    if (!area) return;
+    if (!trades || trades.length === 0) {
+        area.innerHTML = `<div class="empty-state"><p>No live trades match current filters.</p></div>`;
+        return;
+    }
+    const sorted = [...trades].sort((a, b) => {
+        if (a.status === 'ACTIVE' && b.status !== 'ACTIVE') return -1;
+        if (a.status !== 'ACTIVE' && b.status === 'ACTIVE') return 1;
+        const tA = new Date(a.exit_timestamp || a.entry_timestamp || 0).getTime();
+        const tB = new Date(b.exit_timestamp || b.entry_timestamp || 0).getTime();
+        return tB - tA;
+    });
+    let html = `<table class="tradebook-table">
+    <thead><tr>
+      <th>Symbol</th><th>Position</th><th>Regime</th><th>Confidence</th>
+      <th>Leverage</th><th>Capital</th><th>Entry Price</th><th>Current</th>
+      <th>SL / TP</th><th>Status</th><th>Unrealized P&L</th><th>Realized P&L</th>
+      <th>Duration</th><th>Exit Reason</th><th>Exit Price</th><th>Time</th>
+      <th>Commission</th>
+    </tr></thead><tbody>`;
+    sorted.forEach(t => {
+        const posClass = t.position === 'LONG' ? 'side-buy' : 'side-sell';
+        const posIcon = t.position === 'LONG' ? '▲' : '▼';
+        const conf = ((t.confidence || 0) * 100).toFixed(1);
+        const regimeColors = { 'BULLISH': 'badge-bull', 'BEARISH': 'badge-bear', 'SIDEWAYS/CHOP': 'badge-chop', 'CRASH/PANIC': 'badge-crash' };
+        const regimeBadge = regimeColors[t.regime] || 'badge-chop';
+        const uPnl = t.unrealized_pnl || 0; const uPnlPct = t.unrealized_pnl_pct || 0;
+        const rPnl = t.realized_pnl || 0; const rPnlPct = t.realized_pnl_pct || 0;
+        const dur = t.duration_minutes || 0;
+        const durStr = dur >= 60 ? `${(dur / 60).toFixed(1)}h` : `${dur.toFixed(0)}m`;
+        const er = t.exit_reason || '';
+        let exitBadge = '';
+        if (er.startsWith('FIXED_TP')) exitBadge = '<span class="exit-reason-badge tp">FIXED TP</span>';
+        else if (er.startsWith('TP_EXT_')) exitBadge = `<span class="exit-reason-badge tp">${er}</span>`;
+        else if (er.startsWith('FIXED_SL')) exitBadge = '<span class="exit-reason-badge sl">FIXED SL</span>';
+        else if (er.startsWith('TRAIL_SL_')) exitBadge = `<span class="exit-reason-badge ${er.includes('PF') ? 'tp' : 'sl'}">${er}</span>`;
+        else if (er.startsWith('MAX_LOSS')) exitBadge = `<span class="exit-reason-badge sl">${er.replace('MAX_LOSS_', 'MAX LOSS ')}</span>`;
+        else if (er === 'MANUAL') exitBadge = '<span class="exit-reason-badge manual">MANUAL</span>';
+        else if (er) exitBadge = `<span class="exit-reason-badge manual">${er}</span>`;
+        html += `<tr>
+      <td><strong>${t.symbol || '—'}</strong></td>
+      <td class="${posClass}">${posIcon} ${t.position}</td>
+      <td><span class="regime-badge ${regimeBadge}">${(t.regime || '—').split('/')[0]}</span></td>
+      <td>${conf}%</td>
+      <td><span class="leverage-badge">${t.leverage || 1}x</span></td>
+      <td>$${(t.capital || 0).toFixed(0)}</td>
+      <td class="col-price">${formatPrice(t.entry_price)}</td>
+      <td class="col-price ${pnlClass(uPnl)}">${formatPrice(t.current_price)}</td>
+      <td style="font-size:10px;">${formatPrice(t.stop_loss)}<br>${formatPrice(t.take_profit)}</td>
+      <td><span class="status-badge ${t.status === 'ACTIVE' ? 'active' : 'closed'}">${t.status}</span></td>
+      <td class="${pnlClass(uPnl)}">${formatPnl(uPnl)}<br><span style="font-size:10px;">${formatPnlPct(uPnlPct)}</span></td>
+      <td class="${pnlClass(rPnl)}">${formatPnl(rPnl)}<br><span style="font-size:10px;">${formatPnlPct(rPnlPct)}</span></td>
+      <td>${durStr}</td>
+      <td>${exitBadge || '—'}</td>
+      <td class="col-price">${t.exit_price ? formatPrice(t.exit_price) : '—'}</td>
+      <td>${formatDateTime(t.entry_timestamp)}</td>
+      <td class="col-price">$${(t.commission || 0).toFixed(2)}</td>
+    </tr>`;
+    });
+    html += '</tbody></table>';
+    area.innerHTML = html;
+}
+
+function updateLiveSummary(trades) {
+    const closed = trades.filter(t => t.status === 'CLOSED');
+    const active = trades.filter(t => t.status === 'ACTIVE');
+    const wins = closed.filter(t => (t.realized_pnl || 0) > 0).length;
+    const losses = closed.length - wins;
+    const wr = closed.length > 0 ? (wins / closed.length * 100).toFixed(1) : '0.0';
+
+    const el = id => document.getElementById(id);
+    if (el('liveSummTotalTrades')) el('liveSummTotalTrades').textContent = trades.length;
+    if (el('liveSummActiveTrades')) el('liveSummActiveTrades').textContent = active.length;
+    if (el('liveSummClosedTrades')) el('liveSummClosedTrades').textContent = closed.length;
+    if (el('liveSummWins')) el('liveSummWins').textContent = wins;
+    if (el('liveSummLosses')) el('liveSummLosses').textContent = losses;
+    if (el('liveSummWinRate')) el('liveSummWinRate').textContent = wr + '%';
+
+    let realPnl = 0, unrealPnl = 0;
+    trades.forEach(t => {
+        if (t.status === 'CLOSED') realPnl += (t.realized_pnl || 0);
+        else unrealPnl += (t.unrealized_pnl || 0);
+    });
+    const totalPnl = realPnl + unrealPnl;
+    const MAX_CAP = 2500;
+    if (el('liveSummRealizedPnl')) { el('liveSummRealizedPnl').textContent = formatPnl(realPnl); el('liveSummRealizedPnl').className = 'pnl-value ' + pnlClass(realPnl); }
+    if (el('liveSummRealizedPnlPct')) el('liveSummRealizedPnlPct').textContent = formatPnlPct(MAX_CAP > 0 ? realPnl / MAX_CAP * 100 : 0);
+    if (el('liveSummUnrealizedPnl')) { el('liveSummUnrealizedPnl').textContent = formatPnl(unrealPnl); el('liveSummUnrealizedPnl').className = 'pnl-value ' + pnlClass(unrealPnl); }
+    if (el('liveSummUnrealizedPnlPct')) el('liveSummUnrealizedPnlPct').textContent = formatPnlPct(active.length * 100 > 0 ? unrealPnl / (active.length * 100) * 100 : 0);
+    if (el('liveSummCumulativePnl')) { el('liveSummCumulativePnl').textContent = formatPnl(totalPnl); el('liveSummCumulativePnl').className = 'pnl-value ' + pnlClass(totalPnl); }
+    if (el('liveSummCumulativePnlPct')) el('liveSummCumulativePnlPct').textContent = formatPnlPct(MAX_CAP > 0 ? totalPnl / MAX_CAP * 100 : 0);
+
+    const closedPnls = closed.map(t => t.realized_pnl || 0);
+    const best = closedPnls.length > 0 ? Math.max(...closedPnls) : 0;
+    const worst = closedPnls.length > 0 ? Math.min(...closedPnls) : 0;
+    if (el('liveSummBestTrade')) el('liveSummBestTrade').textContent = formatPnl(best);
+    if (el('liveSummWorstTrade')) el('liveSummWorstTrade').textContent = formatPnl(worst);
+
+    // Profit Factor, Sharpe, R:R, Max DD
+    const gw = closedPnls.filter(p => p > 0).reduce((s, p) => s + p, 0);
+    const gl = Math.abs(closedPnls.filter(p => p < 0).reduce((s, p) => s + p, 0));
+    const pf = gl > 0 ? gw / gl : gw > 0 ? Infinity : 0;
+    if (el('liveSummProfitFactor')) el('liveSummProfitFactor').textContent = pf === Infinity ? '∞' : pf.toFixed(2);
+    let sharpe = 0;
+    if (closedPnls.length > 1) {
+        const mean = closedPnls.reduce((s, v) => s + v, 0) / closedPnls.length;
+        const v = closedPnls.reduce((s, p) => s + (p - mean) ** 2, 0) / closedPnls.length;
+        sharpe = Math.sqrt(v) > 0 ? mean / Math.sqrt(v) : 0;
+    }
+    if (el('liveSummSharpe')) el('liveSummSharpe').textContent = sharpe.toFixed(3);
+    const wp = closedPnls.filter(p => p > 0), lp = closedPnls.filter(p => p < 0);
+    const aw = wp.length > 0 ? wp.reduce((s, v) => s + v, 0) / wp.length : 0;
+    const al = lp.length > 0 ? Math.abs(lp.reduce((s, v) => s + v, 0) / lp.length) : 0;
+    const rr = al > 0 ? aw / al : aw > 0 ? Infinity : 0;
+    if (el('liveSummRiskReward')) el('liveSummRiskReward').textContent = (rr === Infinity ? '∞' : rr.toFixed(2)) + ':1';
+    let peak = 0, maxDD = 0, eq = 0;
+    [...closed].sort((a, b) => new Date(a.exit_timestamp || 0) - new Date(b.exit_timestamp || 0)).forEach(t => { eq += (t.realized_pnl || 0); if (eq > peak) peak = eq; const dd = peak - eq; if (dd > maxDD) maxDD = dd; });
+    if (el('liveSummMaxDrawdown')) el('liveSummMaxDrawdown').textContent = '-' + (MAX_CAP > 0 ? (maxDD / MAX_CAP * 100).toFixed(1) : '0') + '%';
+    let mws = 0, mls = 0, cw = 0, cl = 0;
+    [...closed].sort((a, b) => new Date(a.exit_timestamp || 0) - new Date(b.exit_timestamp || 0)).forEach(t => { if ((t.realized_pnl || 0) > 0) { cw++; cl = 0; mws = Math.max(mws, cw); } else { cl++; cw = 0; mls = Math.max(mls, cl); } });
+    if (el('liveSummWinStreak')) el('liveSummWinStreak').textContent = mws;
+    if (el('liveSummLossStreak')) el('liveSummLossStreak').textContent = mls;
+}
+
+function updateLivePnlChart(trades) {
+    const closed = trades.filter(t => t.status === 'CLOSED' && t.exit_timestamp)
+        .sort((a, b) => new Date(a.exit_timestamp) - new Date(b.exit_timestamp));
+    if (closed.length === 0) return;
+    let cum = 0;
+    const labels = closed.map((t, i) => `#${i + 1}`);
+    const data = closed.map(t => { cum += (t.realized_pnl || 0); return parseFloat(cum.toFixed(2)); });
+
+    const ctx1 = document.getElementById('livePnlChart');
+    if (ctx1) {
+        if (livePnlChartInst) livePnlChartInst.destroy();
+        livePnlChartInst = new Chart(ctx1, {
+            type: 'line',
+            data: {
+                labels, datasets: [{
+                    label: 'Cumulative P&L', data,
+                    borderColor: data[data.length - 1] >= 0 ? '#22C55E' : '#EF4444', borderWidth: 2,
+                    fill: true, backgroundColor: data[data.length - 1] >= 0 ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                    tension: 0.3, pointRadius: 3
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: { y: { ticks: { callback: v => '$' + parseFloat(v).toFixed(2) } } }
+            }
+        });
+    }
+    const ctx2 = document.getElementById('livePnlTimelineChart');
+    if (ctx2) {
+        if (livePnlTimelineInst) livePnlTimelineInst.destroy();
+        const timeData = closed.map(t => ({ x: new Date(t.exit_timestamp), y: (cum = 0, closed.slice(0, closed.indexOf(t) + 1).reduce((s, c) => s + (c.realized_pnl || 0), 0)) }));
+        livePnlTimelineInst = new Chart(ctx2, {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: 'P&L Timeline', data: timeData,
+                    borderColor: '#3B82F6', borderWidth: 2, fill: false, tension: 0.3, pointRadius: 3
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: {
+                    x: { type: 'time', time: { unit: 'hour' } },
+                    y: { ticks: { callback: v => '$' + parseFloat(v).toFixed(2) } }
+                }
+            }
+        });
+    }
+}
+
+function syncExchangePositions() {
+    showToast('Syncing exchange positions...');
+    fetch(`${API_BASE}/api/test-exchange`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exchange: 'binance' })
+    }).then(r => r.json()).then(d => {
+        if (d.success) showToast(`Exchange connected! Balance: $${d.balance}`);
+        else showToast(d.error || 'Sync failed', 'error');
+    }).catch(e => showToast('Sync error: ' + e.message, 'error'));
+}
+
+function exportLiveCSV() {
+    const trades = getLiveFilteredTrades();
+    if (trades.length === 0) { showToast('No live trades to export', 'error'); return; }
+    const headers = ['Symbol', 'Position', 'Regime', 'Leverage', 'Capital', 'Entry Price', 'Current', 'Status', 'Realized P&L', 'Unrealized P&L', 'Duration', 'Exit Reason', 'Time'];
+    const rows = trades.map(t => [t.symbol, t.position, t.regime, t.leverage, t.capital, t.entry_price, t.current_price, t.status, t.realized_pnl, t.unrealized_pnl, t.duration_minutes, t.exit_reason || '', t.entry_timestamp]);
+    let csv = headers.join(',') + '\n';
+    rows.forEach(r => csv += r.join(',') + '\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `sentinel_live_trades_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+    showToast('Live trades exported!');
+}
+
 
 function updateAll(data) {
     if (!data) return;
@@ -632,9 +970,10 @@ function updateAll(data) {
         });
     }
 
-    updateSummary(data.summary);
-    updatePnlChart(data.trades);
-    updatePnlTimelineChart(data.trades);
+    const tabTrades = filterTradesByTab(data.trades);
+    updateSummaryFromTrades(tabTrades);
+    updatePnlChart(tabTrades);
+    updatePnlTimelineChart(tabTrades);
     applyFilters();
     renderReportHistory();
 }
@@ -1041,6 +1380,40 @@ async function deleteAllTrades() {
 // ═══════════════════════════════════════════════════════════════════════════════
 //  MULTI-SELECT CLOSE TRADES
 // ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Column Sort for Trade Journal ──────────────────────────────────────────
+let _sortCol = -1, _sortAsc = true;
+function sortTradeTable(colIndex) {
+    const table = document.getElementById('mainTradeTable');
+    if (!table) return;
+    const tbody = table.querySelector('tbody');
+    if (!tbody) return;
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    if (rows.length === 0) return;
+
+    if (_sortCol === colIndex) { _sortAsc = !_sortAsc; } else { _sortCol = colIndex; _sortAsc = true; }
+
+    rows.sort((a, b) => {
+        const cellA = a.cells[colIndex]?.textContent.trim() || '';
+        const cellB = b.cells[colIndex]?.textContent.trim() || '';
+        // Try numeric sort (strip $, %, x, commas)
+        const numA = parseFloat(cellA.replace(/[$%x,▲▼ ]/g, ''));
+        const numB = parseFloat(cellB.replace(/[$%x,▲▼ ]/g, ''));
+        if (!isNaN(numA) && !isNaN(numB)) {
+            return _sortAsc ? numA - numB : numB - numA;
+        }
+        // String sort
+        return _sortAsc ? cellA.localeCompare(cellB) : cellB.localeCompare(cellA);
+    });
+
+    rows.forEach(r => tbody.appendChild(r));
+
+    // Update header indicators
+    table.querySelectorAll('thead th[data-col]').forEach(th => {
+        const base = th.textContent.replace(/ [⇅▲▼]$/, '');
+        th.textContent = base + (parseInt(th.dataset.col) === colIndex ? (_sortAsc ? ' ▲' : ' ▼') : ' ⇅');
+    });
+}
 
 function toggleSelectAll(masterCb) {
     document.querySelectorAll('.trade-select:not(:disabled)').forEach(cb => {
