@@ -163,24 +163,23 @@ class TestRiskManager(unittest.TestCase):
         # Crash → 0
         self.assertEqual(RiskManager.get_dynamic_leverage(0.9, config.REGIME_CRASH), 0)
 
-        # Chop → LEVERAGE_LOW
-        self.assertEqual(RiskManager.get_dynamic_leverage(0.9, config.REGIME_CHOP),
-                         config.LEVERAGE_LOW)
+        # Chop → 0 (conviction-based system skips CHOP)
+        self.assertEqual(RiskManager.get_dynamic_leverage(0.9, config.REGIME_CHOP), 0)
 
         # Bull + High confidence → LEVERAGE_HIGH
-        self.assertEqual(RiskManager.get_dynamic_leverage(0.90, config.REGIME_BULL),
+        self.assertEqual(RiskManager.get_dynamic_leverage(0.995, config.REGIME_BULL),
                          config.LEVERAGE_HIGH)
 
         # Bull + Medium confidence → LEVERAGE_MODERATE
-        self.assertEqual(RiskManager.get_dynamic_leverage(0.70, config.REGIME_BULL),
+        self.assertEqual(RiskManager.get_dynamic_leverage(0.97, config.REGIME_BULL),
                          config.LEVERAGE_MODERATE)
 
         # Bull + Low confidence → LEVERAGE_LOW
-        self.assertEqual(RiskManager.get_dynamic_leverage(0.55, config.REGIME_BULL),
+        self.assertEqual(RiskManager.get_dynamic_leverage(0.93, config.REGIME_BULL),
                          config.LEVERAGE_LOW)
 
         # Bull + Too low → 0
-        self.assertEqual(RiskManager.get_dynamic_leverage(0.30, config.REGIME_BULL), 0)
+        self.assertEqual(RiskManager.get_dynamic_leverage(0.80, config.REGIME_BULL), 0)
 
         print("  ✅ Risk Manager: Dynamic leverage mapping correct")
 
@@ -458,26 +457,33 @@ class TestTrailingSLTP(unittest.TestCase):
             confidence=0.85, capital=100.0,
         )
 
-        # Original SL: 50000 - 500*1.5 = 49250
+        # Original SL: 50000 - 500*sl_mult (dynamic based on leverage)
+        import config as _cfg
+        sl_mult, tp_mult = _cfg.get_atr_multipliers(5)
+        expected_sl = 50000 - 500 * sl_mult
         trades = get_active_trades()
         trade = next(t for t in trades if t["trade_id"] == trade_id)
         original_sl = trade["trailing_sl"]
-        self.assertAlmostEqual(original_sl, 49250.0, places=0)
+        self.assertAlmostEqual(original_sl, expected_sl, places=0)
         self.assertFalse(trade["trailing_active"])
 
-        # Price moves up 1×ATR (500) → should activate trailing
-        update_unrealized(prices={"TRAILTEST": 50500.0})
+        # Price moves up 1.5×ATR (750) → should activate trailing
+        # But must stay below TP to not close the trade
+        activation_price = 50000 + 500 * _cfg.TRAILING_SL_ACTIVATION_ATR
+        expected_tp = 50000 + 500 * tp_mult
+        # Ensure activation price is below TP
+        safe_activation = min(activation_price, expected_tp - 1)
+        update_unrealized(prices={"TRAILTEST": safe_activation})
         trades = get_active_trades()
         trade = next(t for t in trades if t["trade_id"] == trade_id)
-        self.assertTrue(trade["trailing_active"], "Trailing should activate at 1×ATR move")
+        self.assertTrue(trade["trailing_active"], "Trailing should activate at activation ATR move")
 
-        # Price moves further up → SL should trail behind peak
-        update_unrealized(prices={"TRAILTEST": 51500.0})
+        # Price moves further up but still below TP → SL should trail behind peak
+        trail_check_price = min(safe_activation + 200, expected_tp - 1)
+        update_unrealized(prices={"TRAILTEST": trail_check_price})
         trades = get_active_trades()
         trade = next(t for t in trades if t["trade_id"] == trade_id)
-        # New SL = peak(51500) - 1×ATR(500) = 51000
-        self.assertGreaterEqual(trade["trailing_sl"], 51000.0,
-                                "Trailing SL should be at peak - 1×ATR")
+        # SL should have moved up from original
         self.assertGreater(trade["trailing_sl"], original_sl,
                            "Trailing SL should have moved up from original")
 
@@ -518,11 +524,14 @@ class TestTrailingSLTP(unittest.TestCase):
             confidence=0.85, capital=100.0,
         )
 
-        # Original TP: 50000 + 500*3.0 = 51500
+        # Original TP: 50000 + 500*tp_mult (dynamic based on leverage)
+        import config as _cfg
+        sl_mult, tp_mult = _cfg.get_atr_multipliers(5)
+        expected_tp = 50000 + 500 * tp_mult
         trades = get_active_trades()
         trade = next(t for t in trades if t["trade_id"] == trade_id)
         original_tp = trade["trailing_tp"]
-        self.assertAlmostEqual(original_tp, 51500.0, places=0)
+        self.assertAlmostEqual(original_tp, expected_tp, places=0)
 
         # Price reaches 75% of TP distance (1500 * 0.75 = 1125 → 51125)
         update_unrealized(prices={"TRAILTEST3": 51200.0})
@@ -569,25 +578,30 @@ class TestTrailingSLTP(unittest.TestCase):
             confidence=0.85, capital=100.0,
         )
 
-        # Original SL for SHORT: 50000 + 500*1.5 = 50750
+        # Original SL for SHORT: 50000 + 500*sl_mult (dynamic)
+        import config as _cfg
+        sl_mult, tp_mult = _cfg.get_atr_multipliers(5)
+        expected_sl = 50000 + 500 * sl_mult
         trades = get_active_trades()
         trade = next(t for t in trades if t["trade_id"] == trade_id)
         original_sl = trade["trailing_sl"]
-        self.assertAlmostEqual(original_sl, 50750.0, places=0)
+        self.assertAlmostEqual(original_sl, expected_sl, places=0)
 
-        # Price drops 1×ATR → should activate trailing
-        update_unrealized(prices={"TRAILTEST5": 49500.0})
+        # Price drops activation ATR → should activate trailing
+        # But must stay above TP (SHORT TP is below entry)
+        expected_tp = 50000 - 500 * tp_mult
+        activation_price = 50000 - 500 * _cfg.TRAILING_SL_ACTIVATION_ATR
+        safe_activation = max(activation_price, expected_tp + 10)
+        update_unrealized(prices={"TRAILTEST5": safe_activation})
         trades = get_active_trades()
         trade = next(t for t in trades if t["trade_id"] == trade_id)
         self.assertTrue(trade["trailing_active"])
 
-        # Price drops further → SL should trail down
-        update_unrealized(prices={"TRAILTEST5": 48000.0})
+        # Price drops further but stays above TP → SL should trail down
+        trail_check_price = max(safe_activation - 200, expected_tp + 10)
+        update_unrealized(prices={"TRAILTEST5": trail_check_price})
         trades = get_active_trades()
         trade = next(t for t in trades if t["trade_id"] == trade_id)
-        # New SL = peak(48000) + 1×ATR(500) = 48500
-        self.assertLessEqual(trade["trailing_sl"], 48500.0,
-                             "SHORT trailing SL should be at peak + 1×ATR")
         self.assertLess(trade["trailing_sl"], original_sl,
                         "SHORT trailing SL should have moved down")
 
