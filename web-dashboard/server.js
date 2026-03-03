@@ -232,6 +232,21 @@ app.post('/api/bot/toggle', (req, res) => {
     }
 });
 
+// ─── Lightweight Engine State (no Python, no exchange checks) ────────────────
+app.get('/api/engine-state', (req, res) => {
+    try {
+        const engineStatePath = path.join(DATA_DIR, 'engine_state.json');
+        if (fs.existsSync(engineStatePath)) {
+            const state = JSON.parse(fs.readFileSync(engineStatePath, 'utf8'));
+            res.json({ botActive: state.status !== 'paused', ...state });
+        } else {
+            res.json({ botActive: true, status: 'running' });
+        }
+    } catch (e) {
+        res.json({ botActive: true, status: 'running', error: e.message });
+    }
+});
+
 // ─── Command Endpoint ────────────────────────────────────────────────────────
 app.post('/api/command', (req, res) => {
     const { command } = req.body;
