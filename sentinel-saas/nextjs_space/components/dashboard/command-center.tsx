@@ -98,53 +98,44 @@ export function RegimeCard({ regime, confidence, symbol, macroRegime, trend15m, 
                 letterSpacing: '1.5px', color: '#9CA3AF', marginBottom: '12px',
             }}>BTC Regime</div>
 
-            {/* Regime + Confidence row */}
+            {/* Regime + BTC Price + Confidence — single row */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{ fontSize: '36px' }}>{info.emoji}</span>
-                    <div>
-                        <div style={{
-                            fontSize: '22px', fontWeight: 700, color: info.color,
-                            letterSpacing: '0.5px',
-                        }}>{regime}</div>
-                    </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '28px' }}>{info.emoji}</span>
+                    <div style={{
+                        fontSize: '18px', fontWeight: 700, color: info.color,
+                        letterSpacing: '0.5px',
+                    }}>{regime}</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{
+                        fontSize: '26px', fontWeight: 700, fontFamily: 'monospace',
+                        color: '#F0F4F8',
+                    }}>
+                        {btcPrice ? `$${btcPrice.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '...'}
+                    </span>
+                    {btcPrice && (
+                        <span style={{
+                            fontSize: '10px', fontWeight: 700,
+                            padding: '2px 6px', borderRadius: '6px',
+                            background: btcChange >= 0 ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+                            color: btcChange >= 0 ? '#22C55E' : '#EF4444',
+                        }}>
+                            {btcChange >= 0 ? '▲' : '▼'} {Math.abs(btcChange).toFixed(2)}%
+                        </span>
+                    )}
                 </div>
                 <div style={{ textAlign: 'right' }}>
                     <div style={{
-                        fontSize: '28px', fontWeight: 700, color: gaugeColor,
+                        fontSize: '24px', fontWeight: 700, color: gaugeColor,
                     }}>{pct}%</div>
                     <div style={{
-                        fontSize: '9px', textTransform: 'uppercase' as const,
+                        fontSize: '8px', textTransform: 'uppercase' as const,
                         letterSpacing: '1px', color: '#6B7280',
                     }}>Confidence</div>
                 </div>
             </div>
 
-            {/* Live BTC Price */}
-            <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px',
-                padding: '10px 0', marginBottom: '12px',
-                borderTop: '1px solid rgba(255,255,255,0.06)',
-                borderBottom: '1px solid rgba(255,255,255,0.06)',
-            }}>
-                <span style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>BTC</span>
-                <span style={{
-                    fontSize: '20px', fontWeight: 700, fontFamily: 'monospace',
-                    color: '#F0F4F8',
-                }}>
-                    {btcPrice ? `$${btcPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '...'}
-                </span>
-                {btcPrice && (
-                    <span style={{
-                        fontSize: '12px', fontWeight: 700,
-                        padding: '2px 8px', borderRadius: '6px',
-                        background: btcChange >= 0 ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
-                        color: btcChange >= 0 ? '#22C55E' : '#EF4444',
-                    }}>
-                        {btcChange >= 0 ? '▲' : '▼'} {Math.abs(btcChange).toFixed(2)}%
-                    </span>
-                )}
-            </div>
 
             {/* Coin categories by regime */}
             {categories.length > 0 && (

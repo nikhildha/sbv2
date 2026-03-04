@@ -481,10 +481,10 @@ function OrderFlowTable({ coins }: { coins: any[] }) {
                     </thead>
                     <tbody>
                         {sorted.map((c: any) => {
-                            const of = c.order_flow || {};
+                            const of = c.orderflow_details || c.order_flow || {};
                             const fmt = (v: any, d = 3) => v != null ? Number(v).toFixed(d) : '—';
                             // Use top-level orderflow if order_flow obj is empty
-                            const takerBuyRaw = of.taker_buy_pct || null;
+                            const takerBuyRaw = of.taker_buy_ratio || of.taker_buy_pct || null;
                             const takerBuy = takerBuyRaw != null ? (takerBuyRaw * 100).toFixed(1) : '—';
                             const takerColor = (takerBuyRaw || 0.5) > 0.55 ? '#22C55E' : (takerBuyRaw || 0.5) < 0.45 ? '#EF4444' : '#6B7280';
                             const signal = of.signal || c.order_flow_signal || (c.orderflow != null ? (c.orderflow > 0.05 ? 'BULLISH' : c.orderflow < -0.05 ? 'BEARISH' : 'NEUTRAL') : '—');
@@ -501,10 +501,10 @@ function OrderFlowTable({ coins }: { coins: any[] }) {
                                     </td>
                                     <td style={{ padding: '10px 12px', textAlign: 'center', color: valColor(of.imbalance) }}>{fmt(of.imbalance)}</td>
                                     <td style={{ padding: '10px 12px', textAlign: 'center', color: takerColor, fontWeight: 600 }}>{takerBuy}%</td>
-                                    <td style={{ padding: '10px 12px', textAlign: 'center', color: valColor(of.cum_delta) }}>{fmt(of.cum_delta)}</td>
-                                    <td style={{ padding: '10px 12px', textAlign: 'center', color: valColor((of.long_short_ratio || 1) - 1) }}>{fmt(of.long_short_ratio, 2)}</td>
-                                    <td style={{ padding: '10px 12px', textAlign: 'center', color: '#22C55E' }}>{fmt(of.bid_walls, 0)}</td>
-                                    <td style={{ padding: '10px 12px', textAlign: 'center', color: '#EF4444' }}>{fmt(of.ask_walls, 0)}</td>
+                                    <td style={{ padding: '10px 12px', textAlign: 'center', color: valColor(of.cumulative_delta || of.cum_delta) }}>{fmt(of.cumulative_delta || of.cum_delta)}</td>
+                                    <td style={{ padding: '10px 12px', textAlign: 'center', color: valColor((of.ls_ratio || of.long_short_ratio || 1) - 1) }}>{fmt(of.ls_ratio || of.long_short_ratio, 2)}</td>
+                                    <td style={{ padding: '10px 12px', textAlign: 'center', color: '#22C55E' }}>{Array.isArray(of.bid_walls) ? of.bid_walls.length : fmt(of.bid_walls, 0)}</td>
+                                    <td style={{ padding: '10px 12px', textAlign: 'center', color: '#EF4444' }}>{Array.isArray(of.ask_walls) ? of.ask_walls.length : fmt(of.ask_walls, 0)}</td>
                                     <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, fontSize: '10px', color: sigColor }}>{signal}</td>
                                 </tr>
                             );

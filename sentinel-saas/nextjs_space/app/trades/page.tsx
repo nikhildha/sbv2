@@ -7,6 +7,7 @@ import * as path from 'path';
 
 export const dynamic = 'force-dynamic';
 
+const ENGINE_API_URL = process.env.ENGINE_API_URL;
 const DATA_DIR = path.resolve(process.cwd(), '..', '..', 'data');
 
 function readJSON(filename: string, fallback: any = {}) {
@@ -19,6 +20,19 @@ function readJSON(filename: string, fallback: any = {}) {
   return fallback;
 }
 
+async function getTradeData() {
+  if (ENGINE_API_URL) {
+    try {
+      const res = await fetch(`${ENGINE_API_URL}/api/tradebook`, {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(8000),
+      });
+      if (res.ok) return await res.json();
+    } catch { /* fall through to local */ }
+  }
+  return readJSON('tradebook.json', { trades: [] });
+}
+
 export default async function TradesPage() {
   const session = await getServerSession(authOptions);
 
@@ -29,8 +43,7 @@ export default async function TradesPage() {
   const userId = (session.user as any)?.id;
   const isAdmin = (session.user as any)?.role === 'admin';
 
-  // Read from local data/tradebook.json (engine writes here)
-  const tradebook = readJSON('tradebook.json', { trades: [] });
+  const tradebook = await getTradeData();
   const allTrades: any[] = tradebook.trades || [];
 
   // Filter trades by user: admin sees all, regular users see only their trades

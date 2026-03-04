@@ -51,18 +51,6 @@ function StepNumber({ n }: { n: number }) {
 /* ═══ STEP DATA ═══ */
 const steps = [
     {
-        title: 'Create Your Account',
-        icon: <Rocket className="w-5 h-5" />,
-        color: '#22C55E',
-        description: 'Sign up with your name, email, mobile number, and password. Choose a plan (Free Trial, Pro, or Ultra) on the pricing page.',
-        tips: [
-            'Free Trial gives you 14 days with 5 coin scans and 1 bot',
-            'Use a referral code if you have one for special access',
-            'Your account is secured with encrypted passwords',
-        ],
-        link: { href: '/pricing', label: 'View Plans' },
-    },
-    {
         title: 'Deploy Your First Bot',
         icon: <Bot className="w-5 h-5" />,
         color: '#0891B2',

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { signIn, useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -21,13 +21,14 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const isSigningUp = useRef(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   useEffect(() => {
-    if (mounted && session) {
+    if (mounted && session && !isSigningUp.current) {
       router.replace('/dashboard');
     }
   }, [session, router, mounted]);
@@ -63,6 +64,7 @@ export default function SignupPage() {
       setSuccess(true);
 
       // Auto login after signup
+      isSigningUp.current = true;
       const result = await signIn('credentials', {
         email: formData.email,
         password: formData.password,

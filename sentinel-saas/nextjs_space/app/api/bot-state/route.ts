@@ -6,7 +6,10 @@ import * as path from 'path';
 
 export const dynamic = 'force-dynamic';
 
-// Sentinelbot reads directly from its own data/ folder
+// ─── Engine API URL (Railway internal) or local file fallback ────────────────
+const ENGINE_API_URL = process.env.ENGINE_API_URL; // e.g. http://sentinelbot-engine.railway.internal:3001
+
+// Sentinelbot reads directly from its own data/ folder (local dev)
 const DATA_DIR = path.resolve(process.cwd(), '..', '..', 'data');
 
 function readJSON(filename: string, fallback: any = {}) {
@@ -19,6 +22,20 @@ function readJSON(filename: string, fallback: any = {}) {
     return fallback;
 }
 
+async function fetchEngineData() {
+    if (!ENGINE_API_URL) return null;
+    try {
+        const res = await fetch(`${ENGINE_API_URL}/api/all`, {
+            cache: 'no-store',
+            signal: AbortSignal.timeout(8000),
+        });
+        if (res.ok) return await res.json();
+    } catch (err) {
+        console.error('[bot-state] Engine API fetch failed:', err);
+    }
+    return null;
+}
+
 export async function GET() {
     try {
         // Get session to filter trades by user
@@ -26,29 +43,40 @@ export async function GET() {
         const userId = (session?.user as any)?.id;
         const isAdmin = (session?.user as any)?.role === 'admin';
 
-        const multi = readJSON('multi_bot_state.json', {
-            coin_states: {},
-            last_analysis_time: null,
-            analysis_interval_seconds: 300,
-            deployed_count: 0,
-        });
+        // Try fetching from engine API first (production), fall back to local files
+        const engineData = await fetchEngineData();
 
-        const tradebook = readJSON('tradebook.json', { trades: [], stats: {} });
-        const engineState = readJSON('engine_state.json', { status: 'stopped' });
+        let multi: any, tradebook: any, engineState: any;
+
+        if (engineData) {
+            // Production: data from engine Express API
+            multi = engineData.multi || {};
+            tradebook = engineData.tradebook || { trades: [], summary: {} };
+            engineState = engineData.engine || { status: 'running' };
+        } else {
+            // Local dev: read from filesystem
+            multi = readJSON('multi_bot_state.json', {
+                coin_states: {},
+                last_analysis_time: null,
+                analysis_interval_seconds: 300,
+                deployed_count: 0,
+            });
+            tradebook = readJSON('tradebook.json', { trades: [], stats: {} });
+            engineState = readJSON('engine_state.json', { status: 'stopped' });
+        }
 
         // Build the response shape that the dashboard expects
         const coinStates = multi.coin_states || {};
         const allTrades = tradebook.trades || [];
 
-        // Filter trades by user: admin sees all, regular users see only their trades
-        // Safety: if no userId resolved, return empty trades (don't leak data)
+        // Filter trades by user: for now, single-engine setup — all authenticated users see all trades
+        // Engine-side user_ids don't match SaaS Prisma user IDs, so we can't filter by userId
         let trades: any[];
-        if (isAdmin) {
+        if (session) {
+            // Authenticated user sees all engine trades
             trades = allTrades;
-        } else if (userId) {
-            trades = allTrades.filter((t: any) => t.user_id === userId);
         } else {
-            trades = []; // No session or userId → empty
+            trades = [];
         }
 
         const activeTrades = trades.filter((t: any) => (t.status || '').toUpperCase() === 'ACTIVE');
@@ -59,7 +87,7 @@ export async function GET() {
                 confidence: coinStates?.BTCUSDT?.confidence || 0,
                 symbol: 'BTCUSDT',
                 btc_price: coinStates?.BTCUSDT?.price || null,
-                timestamp: multi.last_analysis_time || null,
+                timestamp: multi.last_analysis_time || multi.timestamp || null,
             },
             multi: {
                 ...multi,
@@ -72,12 +100,12 @@ export async function GET() {
                 ),
                 coin_states: coinStates,
                 cycle: multi.cycle || 0,
-                timestamp: multi.last_analysis_time || null,
+                timestamp: multi.last_analysis_time || multi.timestamp || null,
             },
             scanner: { coins: Object.keys(coinStates) },
             tradebook: {
                 trades,
-                summary: tradebook.stats || {},
+                summary: tradebook.stats || tradebook.summary || {},
             },
             engine: engineState,
         });
@@ -91,4 +119,3 @@ export async function GET() {
         });
     }
 }
-

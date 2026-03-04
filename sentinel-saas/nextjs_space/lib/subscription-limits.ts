@@ -10,6 +10,7 @@ export interface TierLimits {
     intelligencePage: boolean;
     manualClose: boolean;
     apiAccess: boolean;
+    customBots: boolean;
     label: string;
 }
 
@@ -21,6 +22,7 @@ export const TIER_LIMITS: Record<TierName, TierLimits> = {
         intelligencePage: false,
         manualClose: false,
         apiAccess: false,
+        customBots: false,
         label: 'Free Trial',
     },
     pro: {
@@ -30,15 +32,17 @@ export const TIER_LIMITS: Record<TierName, TierLimits> = {
         intelligencePage: true,
         manualClose: true,
         apiAccess: false,
+        customBots: false,
         label: 'Pro',
     },
     ultra: {
-        maxBots: 999, // effectively unlimited
+        maxBots: 10,
         coinScans: 50,
         exportCSV: true,
         intelligencePage: true,
         manualClose: true,
         apiAccess: true,
+        customBots: true,
         label: 'Ultra',
     },
 };

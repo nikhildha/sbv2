@@ -22,12 +22,12 @@ export default function PricingPage() {
       name: 'Free Trial',
       price: 'Free',
       period: '14 days',
-      coinScans: 'Unlimited',
+      coinScans: '5 coin scans',
       description: 'Perfect for testing the platform',
       features: [
-        'All bot features',
-        'CoinDCX & Binance support',
-        'Real-time trade execution',
+        '1 bot',
+        '5 coin scans',
+        'Paper trading mode',
         'Basic analytics',
         '14-day trial period',
       ],
@@ -42,12 +42,13 @@ export default function PricingPage() {
       coinScans: '15 coin scans',
       description: 'For individual traders',
       features: [
-        'All Free features',
+        '3 bots',
         '15 simultaneous coin scans',
+        'Live + Paper trading',
         'Advanced analytics',
-        'Priority support',
-        'Custom alerts',
         'Trade history export',
+        'Intelligence page access',
+        'Manual trade close',
       ],
       cta: 'Upgrade to Pro',
       href: 'https://rzp.io/rzp/ktPoQNJz',
@@ -60,13 +61,14 @@ export default function PricingPage() {
       coinScans: '50 coin scans',
       description: 'For professional traders',
       features: [
-        'All Pro features',
+        '10 bots',
         '50 simultaneous coin scans',
+        'Custom bot configurations',
         'Premium analytics dashboard',
-        'Dedicated support',
         'API access',
         'Multi-bot management',
         'Advanced risk management',
+        'Dedicated support',
       ],
       cta: 'Upgrade to Ultra',
       href: 'https://rzp.io/rzp/z89me0YV',
@@ -143,8 +145,8 @@ export default function PricingPage() {
                     target="_blank"
                     rel="noopener noreferrer"
                     className={`block w-full py-3 rounded-xl font-semibold text-center transition-colors ${plan.popular
-                        ? 'bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-dark)]'
-                        : 'bg-[var(--color-surface)] hover:bg-[var(--color-surface-light)]'
+                      ? 'bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-dark)]'
+                      : 'bg-[var(--color-surface)] hover:bg-[var(--color-surface-light)]'
                       }`}
                   >
                     {plan.cta}
@@ -153,8 +155,8 @@ export default function PricingPage() {
                   <Link
                     href={plan.href}
                     className={`block w-full py-3 rounded-xl font-semibold text-center transition-colors ${plan.popular
-                        ? 'bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-dark)]'
-                        : 'bg-[var(--color-surface)] hover:bg-[var(--color-surface-light)]'
+                      ? 'bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-dark)]'
+                      : 'bg-[var(--color-surface)] hover:bg-[var(--color-surface-light)]'
                       }`}
                   >
                     {plan.cta}

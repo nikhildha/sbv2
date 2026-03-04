@@ -64,12 +64,12 @@ export default function LandingPage() {
             transition={{ duration: 0.6 }}
           >
             <h1 className="text-5xl md:text-7xl font-bold mb-6">
-              Advanced <span className="text-gradient">Crypto Trading</span>
+              AI Powered <span className="text-gradient">Crypto Trading</span>
               <br />
               On Autopilot
             </h1>
             <p className="text-xl text-[var(--color-text-secondary)] mb-8 max-w-3xl mx-auto">
-              Harness the power of automated trading with Sentinel. Execute strategies on CoinDCX and Binance with precision, speed, and confidence.
+              Harness the power of automated trading with Sentinel. Execute strategies on trading platforms with precision, speed, and confidence.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
