@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import prisma from '@/lib/prisma';
+import { GOD_REFERRAL_CODE } from '@/lib/subscription-limits';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { email, password, confirmPassword, name } = body;
+    const { email, password, confirmPassword, name, referralCode } = body;
 
     if (!email || !password || !name) {
       return NextResponse.json(
@@ -35,28 +36,44 @@ export async function POST(request: Request) {
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
+    const isGodAccount = referralCode?.toLowerCase?.() === GOD_REFERRAL_CODE;
 
     const user = await prisma.user.create({
       data: {
         email,
         name,
         password: hashedPassword,
+        referralCode: referralCode || null,
       },
     });
 
-    // Create free trial subscription
-    const trialEndsAt = new Date();
-    trialEndsAt.setDate(trialEndsAt.getDate() + 14);
+    // Create subscription based on referral code
+    if (isGodAccount) {
+      // God account: Ultra tier, no expiry, no payment
+      await prisma.subscription.create({
+        data: {
+          userId: user.id,
+          tier: 'ultra',
+          status: 'active',
+          coinScans: 50,
+          currentPeriodEnd: null, // never expires
+        },
+      });
+    } else {
+      // Normal signup: Free trial, 14 days
+      const trialEndsAt = new Date();
+      trialEndsAt.setDate(trialEndsAt.getDate() + 14);
 
-    await prisma.subscription.create({
-      data: {
-        userId: user.id,
-        tier: 'free',
-        status: 'trial',
-        coinScans: 0,
-        trialEndsAt,
-      },
-    });
+      await prisma.subscription.create({
+        data: {
+          userId: user.id,
+          tier: 'free',
+          status: 'trial',
+          coinScans: 5,
+          trialEndsAt,
+        },
+      });
+    }
 
     // Send notification to admin
     try {
@@ -71,7 +88,8 @@ export async function POST(request: Request) {
           <div style="background: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
             <p style="margin: 10px 0;"><strong>Name:</strong> ${name}</p>
             <p style="margin: 10px 0;"><strong>Email:</strong> ${email}</p>
-            <p style="margin: 10px 0;"><strong>Trial Ends:</strong> ${trialEndsAt.toLocaleDateString()}</p>
+            <p style="margin: 10px 0;"><strong>Tier:</strong> ${isGodAccount ? 'Ultra (God Account)' : 'Free Trial'}</p>
+            <p style="margin: 10px 0;"><strong>Referral:</strong> ${referralCode || 'None'}</p>
           </div>
           <p style="color: #666; font-size: 12px;">
             Signed up at: ${new Date().toLocaleString()}

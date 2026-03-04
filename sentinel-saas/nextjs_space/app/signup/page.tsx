@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { signIn, useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Shield, Mail, Lock, User, Loader2, CheckCircle } from 'lucide-react';
+import { Shield, Mail, Lock, User, Loader2, CheckCircle, Gift } from 'lucide-react';
 
 export default function SignupPage() {
   const router = useRouter();
@@ -14,6 +14,7 @@ export default function SignupPage() {
     email: '',
     password: '',
     confirmPassword: '',
+    referralCode: '',
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -59,7 +60,7 @@ export default function SignupPage() {
       }
 
       setSuccess(true);
-      
+
       // Auto login after signup
       const result = await signIn('credentials', {
         email: formData.email,
@@ -70,7 +71,9 @@ export default function SignupPage() {
       if (result?.error) {
         setError('Signup successful but login failed. Please login manually.');
       } else {
-        router.replace('/dashboard');
+        // God account → dashboard, others → pricing page to choose plan
+        const isGod = formData.referralCode.toLowerCase() === 'godaccount';
+        router.replace(isGod ? '/dashboard' : '/pricing');
       }
     } catch (err: any) {
       setError(err?.message ?? 'An error occurred. Please try again.');
@@ -176,6 +179,23 @@ export default function SignupPage() {
                   onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                   className="w-full pl-12 pr-4 py-3 bg-[var(--color-surface)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                   placeholder="Confirm your password"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="referralCode" className="block text-sm font-medium mb-2">
+                Referral Code <span className="text-[var(--color-text-secondary)] font-normal">(optional)</span>
+              </label>
+              <div className="relative">
+                <Gift className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--color-text-secondary)]" />
+                <input
+                  id="referralCode"
+                  type="text"
+                  value={formData.referralCode}
+                  onChange={(e) => setFormData({ ...formData, referralCode: e.target.value })}
+                  className="w-full pl-12 pr-4 py-3 bg-[var(--color-surface)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                  placeholder="Enter referral code"
                 />
               </div>
             </div>

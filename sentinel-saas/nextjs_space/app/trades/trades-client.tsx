@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Header } from '@/components/header';
 import { Download, TrendingUp, TrendingDown, Clock, Search, X, BarChart3, RefreshCw } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -87,28 +87,50 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
   const [mounted, setMounted] = useState(false);
   const [trades, setTrades] = useState<Trade[]>(initialTrades);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'closed'>('active');
+  const [closingTradeId, setClosingTradeId] = useState<string | null>(null);
+  const [btcPrices, setBtcPrices] = useState<{ time: number; price: number }[]>([]);
   const [posFilter, setPosFilter] = useState<string>('all');
   const [regimeFilter, setRegimeFilter] = useState<string>('all');
   const [coinSearch, setCoinSearch] = useState('');
   const [pnlFilter, setPnlFilter] = useState<'all' | 'profit' | 'loss'>('all');
   const [modeFilter, setModeFilter] = useState<'all' | 'paper' | 'live'>('all');
   const [lastRefresh, setLastRefresh] = useState<string>('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
 
-  /* ── 15-second auto-refresh from bot-state API ── */
+  // Auto-refresh from engine every 15s
   const refreshTrades = useCallback(async () => {
+    setIsRefreshing(true);
     try {
       const res = await fetch('/api/bot-state', { cache: 'no-store' });
       if (res.ok) {
-        const d = await res.json();
-        const rawTrades = d?.tradebook?.trades || [];
-        if (rawTrades.length > 0) {
-          setTrades(rawTrades.map(mapTrade));
-          setLastRefresh(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        const data = await res.json();
+        const raw = data?.tradebook?.trades || [];
+        if (raw.length > 0) {
+          setTrades(raw.map(mapTrade));
+          setLastRefresh(new Date().toLocaleTimeString());
         }
       }
-    } catch { /* silent */ }
+    } catch {
+      // silent
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  // Fetch BTC price history for chart overlay
+  useEffect(() => {
+    async function fetchBtcHistory() {
+      try {
+        const res = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=90');
+        if (res.ok) {
+          const data = await res.json();
+          setBtcPrices(data.map((k: any) => ({ time: k[0], price: parseFloat(k[4]) })));
+        }
+      } catch { /* silent */ }
+    }
+    fetchBtcHistory();
   }, []);
 
   useEffect(() => {
@@ -274,7 +296,7 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
             </div>
           </motion.div>
 
-          {/* ═══ P&L Equity Curve ═══ */}
+          {/* ═══ P&L Timeline + BTC Price ═══ */}
           {(() => {
             const closed = (trades ?? [])
               .filter(t => (t.status || '').toLowerCase() !== 'active' && t.exitTime)
@@ -282,36 +304,106 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
             if (closed.length < 2) return null;
 
             let cum = 0;
-            const points = closed.map(t => { cum += t.totalPnl || 0; return cum; });
-            const minV = Math.min(0, ...points);
-            const maxV = Math.max(0, ...points);
-            const range = maxV - minV || 1;
-            const W = 800, H = 140, PAD = 8;
+            const pnlData = closed.map(t => {
+              cum += t.totalPnl || 0;
+              return { time: new Date(t.exitTime!).getTime(), value: cum, trade: t };
+            });
+            const minV = Math.min(0, ...pnlData.map(p => p.value));
+            const maxV = Math.max(0, ...pnlData.map(p => p.value));
+            const pnlRange = maxV - minV || 1;
 
-            const toX = (i: number) => PAD + (i / (points.length - 1)) * (W - PAD * 2);
-            const toY = (v: number) => PAD + (1 - (v - minV) / range) * (H - PAD * 2);
-            const zeroY = toY(0);
-            const polyline = points.map((v, i) => `${toX(i)},${toY(v)}`).join(' ');
-            const areaPath = `M${toX(0)},${zeroY} L${points.map((v, i) => `${toX(i)},${toY(v)}`).join(' L')} L${toX(points.length - 1)},${zeroY} Z`;
-            const lastPnl = points[points.length - 1];
-            const color = lastPnl >= 0 ? '#22C55E' : '#EF4444';
+            // BTC price data aligned to the trade timeline
+            const timeStart = pnlData[0].time;
+            const timeEnd = pnlData[pnlData.length - 1].time;
+            const btcInRange = btcPrices.filter(b => b.time >= timeStart - 86400000 && b.time <= timeEnd + 86400000);
+            const btcMin = btcInRange.length > 0 ? Math.min(...btcInRange.map(b => b.price)) : 0;
+            const btcMax = btcInRange.length > 0 ? Math.max(...btcInRange.map(b => b.price)) : 1;
+            const btcRange = btcMax - btcMin || 1;
+
+            const W = 900, H = 200, PADL = 55, PADR = 65, PADT = 20, PADB = 30;
+            const chartW = W - PADL - PADR;
+            const chartH = H - PADT - PADB;
+
+            const toX = (time: number) => PADL + ((time - timeStart) / (timeEnd - timeStart || 1)) * chartW;
+            const toYPnl = (v: number) => PADT + (1 - (v - minV) / pnlRange) * chartH;
+            const toYBtc = (v: number) => PADT + (1 - (v - btcMin) / btcRange) * chartH;
+            const zeroY = toYPnl(0);
+
+            const pnlLine = pnlData.map((p, i) => `${toX(p.time)},${toYPnl(p.value)}`).join(' ');
+            const areaPath = `M${toX(pnlData[0].time)},${zeroY} L${pnlData.map(p => `${toX(p.time)},${toYPnl(p.value)}`).join(' L')} L${toX(pnlData[pnlData.length - 1].time)},${zeroY} Z`;
+            const btcLine = btcInRange.length > 1 ? btcInRange.map(b => `${toX(b.time)},${toYBtc(b.price)}`).join(' ') : '';
+
+            const lastPnl = pnlData[pnlData.length - 1].value;
+            const pnlColor2 = lastPnl >= 0 ? '#22C55E' : '#EF4444';
+
+            // Date labels
+            const dateLabels = [pnlData[0], pnlData[Math.floor(pnlData.length / 2)], pnlData[pnlData.length - 1]];
+
+            // Gridlines
+            const gridLines = [minV, minV + pnlRange * 0.25, minV + pnlRange * 0.5, minV + pnlRange * 0.75, maxV];
 
             return (
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="mb-6">
                 <Card>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', color: '#6B7280' }}>
-                      Cumulative P&L Curve
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', color: '#6B7280' }}>
+                        P&L Timeline
+                      </div>
+                      <div style={{ display: 'flex', gap: '16px', fontSize: '10px' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ width: '12px', height: '3px', background: pnlColor2, borderRadius: '2px', display: 'inline-block' }} />
+                          <span style={{ color: '#9CA3AF' }}>Cumulative P&L</span>
+                        </span>
+                        {btcLine && (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ width: '12px', height: '3px', background: '#06B6D4', borderRadius: '2px', display: 'inline-block' }} />
+                            <span style={{ color: '#9CA3AF' }}>BTC Price</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color }}>{fmt$(lastPnl)} USD</div>
+                    <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                      <div style={{ fontSize: '14px', fontWeight: 700, color: pnlColor2 }}>{fmt$(lastPnl)} USD</div>
+                      {btcInRange.length > 0 && (
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#06B6D4' }}>
+                          BTC ${btcInRange[btcInRange.length - 1].price.toLocaleString()}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: '140px' }}>
-                    <line x1={PAD} y1={zeroY} x2={W - PAD} y2={zeroY} stroke="rgba(255,255,255,0.1)" strokeDasharray="4,4" />
-                    <path d={areaPath} fill={color} fillOpacity="0.08" />
-                    <polyline points={polyline} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" />
-                    <circle cx={toX(points.length - 1)} cy={toY(lastPnl)} r="3.5" fill={color} />
-                    <text x={PAD + 4} y={H - 4} fontSize="9" fill="#6B7280">{fmt$(minV)}</text>
-                    <text x={PAD + 4} y={12} fontSize="9" fill="#6B7280">{fmt$(maxV)}</text>
+                  <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: '200px' }}>
+                    {/* Gridlines */}
+                    {gridLines.map((v, i) => (
+                      <line key={i} x1={PADL} y1={toYPnl(v)} x2={W - PADR} y2={toYPnl(v)} stroke="rgba(255,255,255,0.05)" strokeDasharray="3,3" />
+                    ))}
+                    {/* Zero line */}
+                    <line x1={PADL} y1={zeroY} x2={W - PADR} y2={zeroY} stroke="rgba(255,255,255,0.15)" strokeDasharray="4,4" />
+                    {/* PNL area + line */}
+                    <path d={areaPath} fill={pnlColor2} fillOpacity="0.06" />
+                    <polyline points={pnlLine} fill="none" stroke={pnlColor2} strokeWidth="2" strokeLinejoin="round" />
+                    <circle cx={toX(pnlData[pnlData.length - 1].time)} cy={toYPnl(lastPnl)} r="3.5" fill={pnlColor2} />
+                    {/* BTC price line (right axis) */}
+                    {btcLine && (
+                      <polyline points={btcLine} fill="none" stroke="#06B6D4" strokeWidth="1.5" strokeLinejoin="round" strokeOpacity="0.6" />
+                    )}
+                    {/* Left Y-axis labels (PNL) */}
+                    <text x={PADL - 6} y={toYPnl(maxV) + 4} fontSize="9" fill="#6B7280" textAnchor="end">{fmt$(maxV)}</text>
+                    <text x={PADL - 6} y={zeroY + 4} fontSize="9" fill="#9CA3AF" textAnchor="end">$0</text>
+                    <text x={PADL - 6} y={toYPnl(minV) + 4} fontSize="9" fill="#6B7280" textAnchor="end">{fmt$(minV)}</text>
+                    {/* Right Y-axis labels (BTC) */}
+                    {btcInRange.length > 0 && (
+                      <>
+                        <text x={W - PADR + 6} y={toYBtc(btcMax) + 4} fontSize="9" fill="#06B6D4" textAnchor="start">${(btcMax / 1000).toFixed(1)}k</text>
+                        <text x={W - PADR + 6} y={toYBtc(btcMin) + 4} fontSize="9" fill="#06B6D4" textAnchor="start">${(btcMin / 1000).toFixed(1)}k</text>
+                      </>
+                    )}
+                    {/* Date labels */}
+                    {dateLabels.map((p, i) => (
+                      <text key={i} x={toX(p.time)} y={H - 6} fontSize="9" fill="#6B7280" textAnchor="middle">
+                        {new Date(p.time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </text>
+                    ))}
                   </svg>
                 </Card>
               </motion.div>
@@ -405,7 +497,7 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
                   <table style={{ width: '100%', minWidth: '1300px', borderCollapse: 'collapse', fontSize: '13px' }}>
                     <thead>
                       <tr style={{ borderBottom: '2px solid rgba(255,255,255,0.08)' }}>
-                        {['Bot', 'Type', 'Coin', 'Side', 'Lev', 'Capital', 'Entry', 'Current / Exit', 'SL', 'TP', 'SL Type', 'Target', 'P&L $', 'P&L %', 'Status', 'Duration'].map(h => (
+                        {['Bot', 'Type', 'Coin', 'Side', 'Lev', 'Capital', 'Entry', 'Current / Exit', 'SL', 'TP', 'SL Type', 'Target', 'P&L $', 'P&L %', 'Status', 'Action'].map(h => (
                           <th key={h} style={{
                             padding: '10px 10px', textAlign: h === 'Bot' || h === 'Coin' ? 'left' : 'center',
                             fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.8px',
@@ -490,8 +582,44 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
                                 {isActive ? '● LIVE' : t.exitReason || 'CLOSED'}
                               </span>
                             </td>
-                            <td style={{ padding: '10px', textAlign: 'center', color: '#6B7280', fontSize: '12px' }}>
-                              {duration}
+
+                            <td style={{ padding: '10px', textAlign: 'center' }}>
+                              {isActive && (
+                                <button
+                                  disabled={closingTradeId === t.id}
+                                  onClick={async () => {
+                                    if (!confirm(`Close ${t.coin} trade at current price?`)) return;
+                                    setClosingTradeId(t.id);
+                                    try {
+                                      const res = await fetch('/api/trades/close', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ tradeId: t.id }),
+                                      });
+                                      if (res.ok) {
+                                        window.location.reload();
+                                      } else {
+                                        const err = await res.json();
+                                        alert(err.error || 'Failed to close trade');
+                                      }
+                                    } catch {
+                                      alert('Network error');
+                                    } finally {
+                                      setClosingTradeId(null);
+                                    }
+                                  }}
+                                  style={{
+                                    padding: '4px 10px', borderRadius: '6px', border: 'none',
+                                    fontSize: '10px', fontWeight: 700, cursor: 'pointer',
+                                    background: pnl >= 0 ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)',
+                                    color: pnl >= 0 ? '#22C55E' : '#EF4444',
+                                    transition: 'all 0.2s',
+                                    opacity: closingTradeId === t.id ? 0.5 : 1,
+                                  }}
+                                >
+                                  {closingTradeId === t.id ? '...' : pnl >= 0 ? '💰 Book Profit' : '✕ Close'}
+                                </button>
+                              )}
                             </td>
                           </tr>
                         );

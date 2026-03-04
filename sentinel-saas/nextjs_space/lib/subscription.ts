@@ -33,7 +33,7 @@ export const TIER_LIMITS = {
         multiBotMgmt: false,
     },
     ultra: {
-        maxBots: 10,
+        maxBots: 999,
         maxCoinScans: 50,
         exchanges: 2,
         liveTrading: true,
@@ -111,7 +111,18 @@ export async function checkSubscription(userId: string): Promise<SubscriptionSta
     // ─── Active paid plans ──────────────────
     if (sub.status === 'active') {
         const tier = (sub.tier as Tier) || 'free';
-        if (sub.currentPeriodEnd && sub.currentPeriodEnd > now) {
+        // No expiry (e.g. god account) = forever active
+        if (!sub.currentPeriodEnd) {
+            return {
+                isActive: true,
+                isExpired: false,
+                tier,
+                daysRemaining: null,
+                expiresAt: null,
+                message: `${tier.charAt(0).toUpperCase() + tier.slice(1)} plan — Lifetime access`,
+            };
+        }
+        if (sub.currentPeriodEnd > now) {
             const daysRemaining = Math.ceil(
                 (sub.currentPeriodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
             );

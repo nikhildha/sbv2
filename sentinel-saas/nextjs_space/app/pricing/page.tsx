@@ -31,8 +31,8 @@ export default function PricingPage() {
         'Basic analytics',
         '14-day trial period',
       ],
-      cta: 'Start Free Trial',
-      href: '/signup',
+      cta: 'Continue with Free',
+      href: '/dashboard',
       popular: false,
     },
     {
@@ -69,7 +69,7 @@ export default function PricingPage() {
         'Advanced risk management',
       ],
       cta: 'Upgrade to Ultra',
-      href: 'https://rzp.io/rzp/ktPoQNJz',
+      href: 'https://rzp.io/rzp/z89me0YV',
       popular: false,
     },
   ];
@@ -100,9 +100,8 @@ export default function PricingPage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
-                className={`card-gradient rounded-2xl p-8 hover-lift relative ${
-                  plan.popular ? 'ring-2 ring-[var(--color-primary)] glow' : ''
-                }`}
+                className={`card-gradient rounded-2xl p-8 hover-lift relative ${plan.popular ? 'ring-2 ring-[var(--color-primary)] glow' : ''
+                  }`}
               >
                 {plan.popular && (
                   <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-[var(--color-primary)] text-white rounded-full text-sm font-medium flex items-center space-x-1">
@@ -143,22 +142,20 @@ export default function PricingPage() {
                     href={plan.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={`block w-full py-3 rounded-xl font-semibold text-center transition-colors ${
-                      plan.popular
+                    className={`block w-full py-3 rounded-xl font-semibold text-center transition-colors ${plan.popular
                         ? 'bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-dark)]'
                         : 'bg-[var(--color-surface)] hover:bg-[var(--color-surface-light)]'
-                    }`}
+                      }`}
                   >
                     {plan.cta}
                   </a>
                 ) : (
                   <Link
                     href={plan.href}
-                    className={`block w-full py-3 rounded-xl font-semibold text-center transition-colors ${
-                      plan.popular
+                    className={`block w-full py-3 rounded-xl font-semibold text-center transition-colors ${plan.popular
                         ? 'bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-dark)]'
                         : 'bg-[var(--color-surface)] hover:bg-[var(--color-surface-light)]'
-                    }`}
+                      }`}
                   >
                     {plan.cta}
                   </Link>
