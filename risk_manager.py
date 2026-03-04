@@ -398,21 +398,18 @@ class RiskManager:
         Bands
         ─────
         < 40      → 0  (no trade)
-        40–54     → 5x
-        55–69     → 8x
-        70–84     → 12x
-        85–94     → 17x
-        95–100    → 25x
+        40–54     → 10x
+        55–69     → 15x
+        70–84     → 25x
+        85–100    → 35x
         """
         if conviction_score < 40:
             return 0
         elif conviction_score < 55:
-            return 5
+            return 10
         elif conviction_score < 70:
-            return 8
+            return 15
         elif conviction_score < 85:
-            return 12
-        elif conviction_score < 95:
-            return 17
-        else:
             return 25
+        else:
+            return 35

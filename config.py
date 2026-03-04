@@ -11,7 +11,7 @@ load_dotenv()
 BINANCE_API_KEY = os.getenv("BINANCE_API_KEY", "")
 BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET", "")
 TESTNET = os.getenv("TESTNET", "true").lower() == "true"
-PAPER_TRADE = os.getenv("PAPER_TRADE", "true").lower() == "true"
+PAPER_TRADE = True
 PAPER_MAX_CAPITAL = 2500       # Total portfolio: 25 slots × $100/trade
 
 # ─── CoinDCX API (used for LIVE trading) ────────────────────────────────────────
@@ -20,7 +20,7 @@ COINDCX_API_SECRET = os.getenv("COINDCX_API_SECRET", "")
 COINDCX_BASE_URL = "https://api.coindcx.com"
 COINDCX_PUBLIC_URL = "https://public.coindcx.com"
 COINDCX_MARGIN_CURRENCY = os.getenv("COINDCX_MARGIN_CURRENCY", "USDT")
-EXCHANGE_LIVE = os.getenv("EXCHANGE_LIVE", "coindcx")  # Live exchange: coindcx
+EXCHANGE_LIVE = ""  # Live exchange: coindcx
 
 # ─── CoinDCX Fees ───────────────────────────────────────────────────────────────
 TAKER_FEE_COINDCX = 0.0005    # 0.05% per leg
@@ -69,29 +69,30 @@ CONFIDENCE_LOW = 0.92    # 92–96% → 15x  (optimized from 0.85, below 92% = n
 # ─── Risk Management ────────────────────────────────────────────────────────────
 RISK_PER_TRADE = 0.04
 KILL_SWITCH_DRAWDOWN = 0.10   # Pause bot if 10% drawdown in 24h
-MAX_LOSS_PER_TRADE_PCT = -15   # Default max loss (used as fallback)
-
-def get_max_loss_pct(leverage):
-    """Leverage-tiered max loss: higher leverage = wider stop to avoid wicks."""
-    if leverage >= 20:
-        return -30
-    elif leverage >= 15:
-        return -20
-    else:
-        return -15
+MAX_LOSS_PER_TRADE_PCT = -30
 MIN_HOLD_MINUTES = 30         # Minimum hold time before regime-change exits
 DEFAULT_QUANTITY = 0.002      # BTC quantity (overridden by position sizer)
 MARGIN_TYPE = "ISOLATED"      # Never use CROSS for high leverage
 
 # ─── Stop Loss / Take Profit ────────────────────────────────────────────────────
-ATR_SL_MULTIPLIER = 0.8       # SL = 0.8 × ATR (fixed, per user spec)
-ATR_TP_MULTIPLIER = 1.0       # TP = 1.0 × ATR (fixed, per user spec)
+ATR_SL_MULTIPLIER = 1.5       # SL = ATR * multiplier (DEFAULT, used as fallback)
+ATR_TP_MULTIPLIER = 3.0       # TP = ATR * multiplier (DEFAULT, used as fallback)
 SLIPPAGE_BUFFER = 0.0005      # 0.05% slippage estimate
 
 def get_atr_multipliers(leverage=1):
-    """Return fixed (sl_mult, tp_mult) — 0.8×ATR SL, 1.0×ATR TP.
-    Previously leverage-tiered; now fixed per user request."""
-    return (ATR_SL_MULTIPLIER, ATR_TP_MULTIPLIER)
+    """Return (sl_mult, tp_mult) adjusted for leverage.
+    Higher leverage → tighter SL/TP to keep effective portfolio risk consistent.
+    Always maintains 1:2 risk-reward ratio."""
+    if leverage >= 50:
+        return (0.5, 1.0)
+    elif leverage >= 25:
+        return (0.7, 1.4)
+    elif leverage >= 10:
+        return (1.0, 2.0)
+    elif leverage >= 5:
+        return (1.2, 2.4)
+    else:  # 1-4x
+        return (ATR_SL_MULTIPLIER, ATR_TP_MULTIPLIER)
 
 # ─── Trailing SL / TP ──────────────────────────────────────────────────────────
 TRAILING_SL_ENABLED = True
@@ -110,8 +111,6 @@ VOL_MAX_ATR_PCT = 0.06
 # ─── Fees ────────────────────────────────────────────────────────────────────────
 TAKER_FEE = 0.0005            # 0.05% Binance futures taker per leg (0.1% round trip)
 MAKER_FEE = 0.0002            # 0.02% Binance futures maker
-FUNDING_INTERVAL_HOURS = 8    # Funding charged every 8 hours on futures
-DEFAULT_FUNDING_RATE = 0.0001 # 0.01% default if live rate unavailable
 
 # ─── Sideways Strategy ──────────────────────────────────────────────────────────
 BB_LENGTH = 20
@@ -123,13 +122,12 @@ SIDEWAYS_POSITION_REDUCTION = 0.30  # 30% smaller positions in chop
 
 # ─── Bot Loop ────────────────────────────────────────────────────────────────────
 LOOP_INTERVAL_SECONDS = 60        # 1-minute heartbeat (checks commands, updates state)
-ANALYSIS_INTERVAL_SECONDS = 300   # 5-minute full analysis cycle
+ANALYSIS_INTERVAL_SECONDS = 900   # 15-minute full analysis cycle (HMM scan, trades)
 ERROR_RETRY_SECONDS = 60          # Retry after error
 
 # ─── Multi-Coin Trading ──────────────────────────────────────────────────────────
 MAX_CONCURRENT_POSITIONS = 15   # Max symbols traded at once
-
-TOP_COINS_LIMIT = 25            # Reduced from 50 to 25 per user request
+TOP_COINS_LIMIT = 15            # How many coins to scan (reduced from 50 for speed)
 CAPITAL_PER_COIN_PCT = 0.05     # 5% of balance per coin (max 15 = 75% deployed)
 SCAN_INTERVAL_CYCLES = 4        # Re-scan top coins every N analysis cycles (4 × 15m = 1h)
 MULTI_COIN_MODE = True          # Enable multi-coin scanning
@@ -137,7 +135,7 @@ MULTI_COIN_MODE = True          # Enable multi-coin scanning
 # ─── Telegram Notifications ──────────────────────────────────────────────────────
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
-TELEGRAM_ENABLED = os.getenv("TELEGRAM_ENABLED", "false").lower() == "true"
+TELEGRAM_ENABLED = False
 TELEGRAM_NOTIFY_TRADES = os.getenv("TELEGRAM_NOTIFY_TRADES", "true").lower() == "true"
 TELEGRAM_NOTIFY_ALERTS = os.getenv("TELEGRAM_NOTIFY_ALERTS", "true").lower() == "true"
 TELEGRAM_NOTIFY_SUMMARY = os.getenv("TELEGRAM_NOTIFY_SUMMARY", "true").lower() == "true"
@@ -153,7 +151,7 @@ COMMANDS_FILE = os.path.join(DATA_DIR, "commands.json")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 # ─── Sentiment Engine ─────────────────────────────────────────────────────────
-SENTIMENT_ENABLED        = os.getenv("SENTIMENT_ENABLED", "true").lower() == "true"
+SENTIMENT_ENABLED        = True
 SENTIMENT_CACHE_MINUTES  = 15          # Cache per-coin results for N minutes
 SENTIMENT_WINDOW_HOURS   = 4           # Look back N hours of articles
 SENTIMENT_MIN_ARTICLES   = 3           # Minimum articles to compute a score
@@ -174,20 +172,13 @@ SENTIMENT_RSS_FEEDS      = [
 SENTIMENT_LOG_FILE       = os.path.join(DATA_DIR, "sentiment_log.csv")
 
 # ─── Order Flow Engine ────────────────────────────────────────────────────────
-ORDERFLOW_ENABLED          = os.getenv("ORDERFLOW_ENABLED", "true").lower() == "true"
+ORDERFLOW_ENABLED          = True
 ORDERFLOW_CACHE_SECONDS    = 60        # Cache orderflow snapshot per coin (60s)
 ORDERFLOW_DEPTH_LEVELS     = 20        # Number of L2 order book levels to fetch
-ORDERFLOW_WALL_THRESHOLD   = 1.5       # A level is a "wall" if it is N× the avg level size
+ORDERFLOW_WALL_THRESHOLD   = 3.0       # A level is a "wall" if it is N× the avg level size
 ORDERFLOW_LOOKBACK_BARS    = 4         # Bars of 15m taker data to sum for cumulative delta
 ORDERFLOW_LS_ENABLED       = True      # Include L/S ratio from Binance futures
 ORDERFLOW_LARGE_ORDER_USD  = 50_000    # USD threshold to flag a single order as "large"
-
-# ─── Multi-Exchange Aggregation ──────────────────────────────────────────────
-ORDERFLOW_MULTI_EXCHANGE     = True      # Aggregate from Binance + OKX + Bybit
-ORDERFLOW_OB_DETECTION       = True      # Enable order block detection
-ORDERFLOW_OB_LOOKBACK_CANDLES = 100      # 1h candles to scan for OBs
-ORDERFLOW_OB_IMPULSE_SIGMA   = 1.5      # Min σ move to qualify as impulse
-ORDERFLOW_OB_PROXIMITY_PCT   = 0.005    # 0.5% — how close price must be to OB zone
 
 # ─── Conviction Score Weights (must sum to 100) ───────────────────────────────
 CONVICTION_WEIGHT_HMM       = 22   # HMM regime confidence
@@ -199,13 +190,3 @@ CONVICTION_WEIGHT_VOL       = 5    # Volatility quality
 CONVICTION_WEIGHT_SENTIMENT = 15   # Social/news sentiment
 CONVICTION_WEIGHT_ORDERFLOW = 10   # Order book flow
 
-# ─── Backtesting Configs ──────────────────────────────────────────────────────
-SKIP_CHOP_TRADES = True
-COUNTER_TREND_CONF_PENALTY = 0.04
-TRAILING_SL_ENABLED = True
-TRAILING_SL_ACTIVATION_ATR = 1.5
-TRAILING_SL_DISTANCE_ATR = 1.0
-TRAILING_TP_ENABLED = True
-TRAILING_TP_MAX_EXTENSIONS = 2
-TRAILING_TP_ACTIVATION_PCT = 0.8
-TRAILING_TP_EXTENSION_ATR = 0.5
