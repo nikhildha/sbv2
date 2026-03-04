@@ -550,6 +550,7 @@ function renderTable(trades) {
       <th data-col="15" onclick="sortTradeTable(15)" style="cursor:pointer;">Exit Price ⇅</th>
       <th data-col="16" onclick="sortTradeTable(16)" style="cursor:pointer;">Entry Time ⇅</th>
       <th data-col="17" onclick="sortTradeTable(17)" style="cursor:pointer;">Exit Time ⇅</th>
+      <th>SL Type</th>
     </tr></thead><tbody>`;
 
     // For cumulative P&L
@@ -628,6 +629,7 @@ function renderTable(trades) {
       <td class="col-price">${t.exit_price ? formatPrice(t.exit_price) : '—'}</td>
       <td>${formatDateTime(t.entry_timestamp)}</td>
       <td>${t.exit_timestamp ? formatDateTime(t.exit_timestamp) : '—'}</td>
+      <td>${t.capital_protection_active ? '<span class="exit-reason-badge tp">🛡️ Protect</span>' : t.trailing_active ? '<span class="exit-reason-badge sl">Trail ×' + (t.trail_sl_count || 1) + '</span>' : '<span class="exit-reason-badge manual">Fixed</span>'}</td>
     </tr>`;
     });
 
@@ -792,7 +794,7 @@ function renderLiveTable(trades) {
       <th>Lev. X</th><th>Capital</th><th>Entry Price</th><th>CMP</th>
       <th>SL / TP</th><th>Status</th><th>Active PnL</th><th>Total PnL</th>
       <th>Duration</th><th>Exit R</th><th>Exit Price</th><th>Entry Time</th>
-      <th>Exit Time</th>
+      <th>Exit Time</th><th>SL Type</th>
     </tr></thead><tbody>`;
     sorted.forEach(t => {
         const posClass = t.position === 'LONG' ? 'side-buy' : 'side-sell';
@@ -831,6 +833,7 @@ function renderLiveTable(trades) {
       <td class="col-price">${t.exit_price ? formatPrice(t.exit_price) : '—'}</td>
       <td>${formatDateTime(t.entry_timestamp)}</td>
       <td>${t.exit_timestamp ? formatDateTime(t.exit_timestamp) : '—'}</td>
+      <td>${t.capital_protection_active ? '<span class="exit-reason-badge tp">🛡️ Protect</span>' : t.trailing_active ? '<span class="exit-reason-badge sl">Trail ×' + (t.trail_sl_count || 1) + '</span>' : '<span class="exit-reason-badge manual">Fixed</span>'}</td>
     </tr>`;
     });
     html += '</tbody></table>';
