@@ -595,7 +595,12 @@ function renderTable(trades) {
         // Exit reason badge — enriched format
         let exitBadge = '';
         const er = t.exit_reason || '';
-        if (er.startsWith('FIXED_TP')) exitBadge = '<span class="exit-reason-badge tp">FIXED TP</span>';
+        if (er === 'T1') exitBadge = '<span class="exit-reason-badge tp">🎯 T1 (25%)</span>';
+        else if (er === 'T2') exitBadge = '<span class="exit-reason-badge tp">🎯 T2 (50%)</span>';
+        else if (er === 'T3') exitBadge = '<span class="exit-reason-badge tp">🏆 T3 FULL</span>';
+        else if (er === 'SL_T1') exitBadge = '<span class="exit-reason-badge sl">SL @ BE</span>';
+        else if (er === 'SL_T2') exitBadge = '<span class="exit-reason-badge sl">SL @ T1</span>';
+        else if (er.startsWith('FIXED_TP')) exitBadge = '<span class="exit-reason-badge tp">FIXED TP</span>';
         else if (er.startsWith('TP_EXT_')) exitBadge = `<span class="exit-reason-badge tp">${er.replace('_', ' ')}</span>`;
         else if (er.startsWith('FIXED_SL')) exitBadge = '<span class="exit-reason-badge sl">FIXED SL</span>';
         else if (er.startsWith('TRAIL_SL_')) {
@@ -629,7 +634,19 @@ function renderTable(trades) {
       <td class="col-price">${t.exit_price ? formatPrice(t.exit_price) : '—'}</td>
       <td>${formatDateTime(t.entry_timestamp)}</td>
       <td>${t.exit_timestamp ? formatDateTime(t.exit_timestamp) : '—'}</td>
-      <td>${t.capital_protection_active ? '<span class="exit-reason-badge tp">🛡️ Protect</span>' : t.trailing_active ? '<span class="exit-reason-badge sl">Trail ×' + (t.trail_sl_count || 1) + '</span>' : '<span class="exit-reason-badge manual">Fixed</span>'}</td>
+      <td>${(() => {
+                // Multi-target status display
+                if (t.t1_price) {
+                    const t1 = t.t1_hit ? '✅' : '⬜';
+                    const t2 = t.t2_hit ? '✅' : '⬜';
+                    const t3 = (t.exit_reason === 'T3') ? '✅' : '⬜';
+                    return `<span class="exit-reason-badge tp" style="font-size:10px">${t1}T1 ${t2}T2 ${t3}T3</span>`;
+                }
+                if (t.parent_trade_id) return `<span class="exit-reason-badge tp" style="font-size:10px">📊 Partial</span>`;
+                if (t.capital_protection_active) return '<span class="exit-reason-badge tp">🛡️ Protect</span>';
+                if (t.trailing_active) return `<span class="exit-reason-badge sl">Trail ×${t.trail_sl_count || 1}</span>`;
+                return '<span class="exit-reason-badge manual">Fixed</span>';
+            })()}</td>
     </tr>`;
     });
 

@@ -119,12 +119,32 @@ def open_trade(symbol, side, leverage, quantity, entry_price, atr,
 
     # Compute SL/TP based on ATR (adjusted for leverage)
     sl_mult, tp_mult = config.get_atr_multipliers(leverage)
-    if position == "LONG":
-        stop_loss = round(entry_price - atr * sl_mult, 6)
-        take_profit = round(entry_price + atr * tp_mult, 6)
+
+    # ── Multi-Target System (0304_v1) ──
+    if getattr(config, 'MULTI_TARGET_ENABLED', False):
+        sl_dist = atr * sl_mult
+        t3_dist = sl_dist * config.MT_RR_RATIO  # 1:5 R:R
+        if position == "LONG":
+            stop_loss = round(entry_price - sl_dist, 6)
+            t1_price = round(entry_price + t3_dist * config.MT_T1_FRAC, 6)
+            t2_price = round(entry_price + t3_dist * config.MT_T2_FRAC, 6)
+            t3_price = round(entry_price + t3_dist, 6)
+        else:
+            stop_loss = round(entry_price + sl_dist, 6)
+            t1_price = round(entry_price - t3_dist * config.MT_T1_FRAC, 6)
+            t2_price = round(entry_price - t3_dist * config.MT_T2_FRAC, 6)
+            t3_price = round(entry_price - t3_dist, 6)
+        take_profit = t3_price  # TP = T3 for display
     else:
-        stop_loss = round(entry_price + atr * sl_mult, 6)
-        take_profit = round(entry_price - atr * tp_mult, 6)
+        if position == "LONG":
+            stop_loss = round(entry_price - atr * sl_mult, 6)
+            take_profit = round(entry_price + atr * tp_mult, 6)
+        else:
+            stop_loss = round(entry_price + atr * sl_mult, 6)
+            take_profit = round(entry_price - atr * tp_mult, 6)
+        t1_price = None
+        t2_price = None
+        t3_price = None
 
     now_iso = datetime.utcnow().isoformat()
     trade = {
@@ -151,6 +171,14 @@ def open_trade(symbol, side, leverage, quantity, entry_price, atr,
         "trailing_active":  False,
         "trail_sl_count":   0,
         "tp_extensions":    0,
+        # Multi-target fields
+        "t1_price":         t1_price,
+        "t2_price":         t2_price,
+        "t3_price":         t3_price,
+        "t1_hit":           False,
+        "t2_hit":           False,
+        "original_qty":     round(quantity, 6),
+        "original_capital": capital,
         "status":           "ACTIVE",
         "exit_reason":      None,
         "realized_pnl":     0,
@@ -261,6 +289,107 @@ def close_trade(trade_id=None, symbol=None, exit_price=None, reason="MANUAL"):
     _save_book(book)
 
     return closed[0] if len(closed) == 1 else closed
+
+
+def _book_partial_inline(trade, book, exit_price, qty_frac, reason):
+    """
+    Book partial profit for a fraction of the active position.
+    Creates a CLOSED child trade entry in the tradebook with the booked P&L.
+    Reduces the parent trade's quantity and capital proportionally.
+    """
+    px = round(exit_price, 6)
+    entry = trade["entry_price"]
+    parent_qty = trade["quantity"]
+    parent_capital = trade["capital"]
+    lev = trade["leverage"]
+
+    # Quantity and capital for this booking
+    book_qty = round(parent_qty * qty_frac, 6)
+    book_capital = round(parent_capital * qty_frac, 4)
+
+    if trade["position"] == "LONG":
+        raw_pnl = (px - entry) * book_qty
+    else:
+        raw_pnl = (entry - px) * book_qty
+
+    entry_notional = entry * book_qty
+    exit_notional = px * book_qty
+    commission = round((entry_notional + exit_notional) * config.TAKER_FEE, 4)
+    leveraged_pnl = round(raw_pnl * lev - commission, 4)
+    pnl_pct = round(leveraged_pnl / book_capital * 100, 2) if book_capital else 0
+
+    entry_time = datetime.fromisoformat(trade["entry_timestamp"])
+    duration = (datetime.utcnow() - entry_time).total_seconds() / 60
+
+    # Create child trade ID
+    child_id = f"{trade['trade_id']}-{reason}"
+
+    child_trade = {
+        "trade_id":         child_id,
+        "parent_trade_id":  trade["trade_id"],
+        "entry_timestamp":  trade["entry_timestamp"],
+        "exit_timestamp":   datetime.utcnow().isoformat(),
+        "symbol":           trade["symbol"],
+        "position":         trade["position"],
+        "side":             trade["side"],
+        "regime":           trade.get("regime", ""),
+        "confidence":       trade.get("confidence", 0),
+        "leverage":         lev,
+        "capital":          book_capital,
+        "quantity":         book_qty,
+        "entry_price":      entry,
+        "exit_price":       px,
+        "current_price":    px,
+        "stop_loss":        trade["stop_loss"],
+        "take_profit":      trade["take_profit"],
+        "atr_at_entry":     trade.get("atr_at_entry", 0),
+        "trailing_sl":      trade.get("trailing_sl", trade["stop_loss"]),
+        "trailing_tp":      trade.get("trailing_tp", trade["take_profit"]),
+        "peak_price":       trade.get("peak_price", entry),
+        "trailing_active":  False,
+        "trail_sl_count":   0,
+        "tp_extensions":    0,
+        "t1_price":         trade.get("t1_price"),
+        "t2_price":         trade.get("t2_price"),
+        "t3_price":         trade.get("t3_price"),
+        "t1_hit":           trade.get("t1_hit", False),
+        "t2_hit":           trade.get("t2_hit", False),
+        "original_qty":     trade.get("original_qty", parent_qty),
+        "original_capital": trade.get("original_capital", parent_capital),
+        "status":           "CLOSED",
+        "exit_reason":      reason,
+        "realized_pnl":     leveraged_pnl,
+        "realized_pnl_pct": pnl_pct,
+        "unrealized_pnl":   0,
+        "unrealized_pnl_pct": 0,
+        "max_favorable":    0,
+        "max_adverse":      0,
+        "duration_minutes":  round(duration, 1),
+        "mode":             trade.get("mode", "PAPER"),
+        "commission":       commission,
+        "funding_cost":     0,
+        "funding_payments": 0,
+        "last_funding_check": datetime.utcnow().isoformat(),
+    }
+
+    # Add child trade to the tradebook
+    book["trades"].append(child_trade)
+
+    # Reduce parent trade's quantity and capital
+    trade["quantity"] = round(parent_qty - book_qty, 6)
+    trade["capital"] = round(parent_capital - book_capital, 4)
+
+    logger.info("📊 Partial booking %s: %s %.6f qty @ %.6f | P&L: $%.4f (%.2f%%) | Remaining: %.1f%%",
+                child_id, reason, book_qty, px, leveraged_pnl, pnl_pct,
+                (trade['quantity'] / trade.get('original_qty', parent_qty)) * 100)
+
+    # Telegram notification
+    try:
+        tg.notify_trade_close(child_trade)
+    except Exception:
+        pass
+
+    return child_trade
 
 
 def _close_trade_inline(trade, exit_price, reason):
@@ -530,43 +659,94 @@ def update_unrealized(prices=None, funding_rates=None):
         is_live = trade.get("mode") == "LIVE"
 
         if not is_live:
-            # HARD MAX LOSS GUARD — paper trades only (leverage-tiered)
-            max_loss_limit = config.get_max_loss_pct(lev)
+            # HARD MAX LOSS GUARD — paper trades only (flat -15%)
+            max_loss_limit = config.MAX_LOSS_PER_TRADE_PCT
             if pnl_pct <= max_loss_limit:
                 logger.warning(
-                    "🛑 MAX LOSS hit on %s (%.2f%% <= %.0f%% @ %dx) — auto-closing trade %s",
-                    symbol, pnl_pct, max_loss_limit, lev, trade["trade_id"],
+                    "🛑 MAX LOSS hit on %s (%.2f%% <= %.0f%%) — auto-closing trade %s",
+                    symbol, pnl_pct, max_loss_limit, trade["trade_id"],
                 )
-                _close_trade_inline(trade, current, f"MAX_LOSS_{int(max_loss_limit)}%@{lev}x")
+                _close_trade_inline(trade, current, f"MAX_LOSS_{int(max_loss_limit)}%")
                 changed = True
                 continue
 
-            # Use trailing values for SL/TP hit checks
+            # ── MULTI-TARGET EXIT CHECKS ──
+            mt_enabled = getattr(config, 'MULTI_TARGET_ENABLED', False)
+            t1_price = trade.get("t1_price")
+            t2_price = trade.get("t2_price")
+            t3_price = trade.get("t3_price")
+
+            if mt_enabled and t1_price is not None:
+                # Initialize fields for legacy trades
+                if "t1_hit" not in trade:
+                    trade["t1_hit"] = False
+                if "t2_hit" not in trade:
+                    trade["t2_hit"] = False
+                if "original_qty" not in trade:
+                    trade["original_qty"] = trade["quantity"]
+                if "original_capital" not in trade:
+                    trade["original_capital"] = trade["capital"]
+
+                # T1 check
+                if not trade["t1_hit"]:
+                    t1_hit = (is_long and current >= t1_price) or (not is_long and current <= t1_price)
+                    if t1_hit:
+                        book_frac = config.MT_T1_BOOK_PCT  # 25%
+                        _book_partial_inline(trade, book, current, book_frac, "T1")
+                        trade["t1_hit"] = True
+                        trade["trailing_sl"] = trade["entry_price"]  # SL → breakeven
+                        trade["trailing_active"] = True
+                        logger.info("🎯 T1 hit on %s — booked 25%%, SL → breakeven (%.6f)",
+                                    trade["trade_id"], trade["entry_price"])
+                        changed = True
+
+                # T2 check
+                if trade["t1_hit"] and not trade["t2_hit"]:
+                    t2_hit = (is_long and current >= t2_price) or (not is_long and current <= t2_price)
+                    if t2_hit:
+                        book_frac = config.MT_T2_BOOK_PCT  # 50% of remaining
+                        _book_partial_inline(trade, book, current, book_frac, "T2")
+                        trade["t2_hit"] = True
+                        trade["trailing_sl"] = t1_price  # SL → T1
+                        logger.info("🎯 T2 hit on %s — booked 50%% remaining, SL → T1 (%.6f)",
+                                    trade["trade_id"], t1_price)
+                        changed = True
+
+                # T3 check (close everything remaining)
+                if trade["t2_hit"]:
+                    t3_hit = (is_long and current >= t3_price) or (not is_long and current <= t3_price)
+                    if t3_hit:
+                        logger.info("🏆 T3 hit on %s — closing remaining position",
+                                    trade["trade_id"])
+                        _close_trade_inline(trade, current, "T3")
+                        changed = True
+                        continue
+
+            # Use trailing values for SL hit checks
             effective_sl = trade.get("trailing_sl", trade["stop_loss"])
-            effective_tp = trade.get("trailing_tp", trade["take_profit"])
 
             sl_hit = False
-            tp_hit = False
             if is_long:
                 sl_hit = current <= effective_sl
-                tp_hit = current >= effective_tp
             else:
                 sl_hit = current >= effective_sl
-                tp_hit = current <= effective_tp
 
             if sl_hit:
                 sl_n = trade.get("trail_sl_count", 0)
                 cp = trade.get("capital_protection_active", False)
-                if trade["trailing_active"]:
+                # Determine SL reason based on target state
+                if trade.get("t2_hit"):
+                    reason = "SL_T2"  # SL hit after T2 (at T1 price)
+                elif trade.get("t1_hit"):
+                    reason = "SL_T1"  # SL hit after T1 (at breakeven)
+                elif trade["trailing_active"]:
                     pf_tag = ""
                     if cp:
-                        # Check if SL is still near the 4% protection level
-                        # or has been tightened further by regular trailing
                         if is_long:
                             sl_pnl_pct = (effective_sl - entry) / entry * 100 * lev
                         else:
                             sl_pnl_pct = (entry - effective_sl) / entry * 100 * lev
-                        if sl_pnl_pct <= 8:  # still near the 4% floor
+                        if sl_pnl_pct <= 8:
                             pf_tag = " (4% PF Lock)"
                         else:
                             pf_tag = f" ({sl_pnl_pct:.0f}% Locked)"
@@ -576,12 +756,21 @@ def update_unrealized(prices=None, funding_rates=None):
                 _close_trade_inline(trade, current, reason)
                 changed = True
                 continue
-            if tp_hit:
-                ext = trade["tp_extensions"]
-                reason = f"TP_EXT_{ext}" if ext > 0 else "FIXED_TP"
-                _close_trade_inline(trade, current, reason)
-                changed = True
-                continue
+
+            # Old TP hit (only when multi-target is NOT active for this trade)
+            if not mt_enabled or t1_price is None:
+                effective_tp = trade.get("trailing_tp", trade["take_profit"])
+                tp_hit = False
+                if is_long:
+                    tp_hit = current >= effective_tp
+                else:
+                    tp_hit = current <= effective_tp
+                if tp_hit:
+                    ext = trade["tp_extensions"]
+                    reason = f"TP_EXT_{ext}" if ext > 0 else "FIXED_TP"
+                    _close_trade_inline(trade, current, reason)
+                    changed = True
+                    continue
 
         changed = True
 

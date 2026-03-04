@@ -69,7 +69,7 @@ CONFIDENCE_LOW = 0.92    # 92–96% → 15x  (optimized from 0.85, below 92% = n
 # ─── Risk Management ────────────────────────────────────────────────────────────
 RISK_PER_TRADE = 0.04
 KILL_SWITCH_DRAWDOWN = 0.10   # Pause bot if 10% drawdown in 24h
-MAX_LOSS_PER_TRADE_PCT = -30
+MAX_LOSS_PER_TRADE_PCT = -15     # Hard max-loss per trade – flat for all leverage
 MIN_HOLD_MINUTES = 30         # Minimum hold time before regime-change exits
 DEFAULT_QUANTITY = 0.002      # BTC quantity (overridden by position sizer)
 MARGIN_TYPE = "ISOLATED"      # Never use CROSS for high leverage
@@ -98,10 +98,22 @@ def get_atr_multipliers(leverage=1):
 TRAILING_SL_ENABLED = True
 TRAILING_SL_ACTIVATION_ATR = 1.0     # Start trailing after price moves 1×ATR in favor
 TRAILING_SL_DISTANCE_ATR = 1.0       # Trail distance: SL stays 1×ATR behind peak price
-TRAILING_TP_ENABLED = True
-TRAILING_TP_ACTIVATION_PCT = 0.75    # Start extending TP once 75% of TP distance reached
-TRAILING_TP_EXTENSION_ATR = 1.5      # Extend TP by 1.5×ATR each time threshold is hit
-TRAILING_TP_MAX_EXTENSIONS = 3       # Max TP extensions (prevents runaway)
+TRAILING_TP_ENABLED = False       # Disabled — replaced by multi-target T1/T2/T3
+TRAILING_TP_ACTIVATION_PCT = 0.75    # (legacy, unused when MT enabled)
+TRAILING_TP_EXTENSION_ATR = 1.5      # (legacy, unused when MT enabled)
+TRAILING_TP_MAX_EXTENSIONS = 3       # (legacy, unused when MT enabled)
+
+# ─── Multi-Target Partial Profit Booking (0304_v1) ─────────────────────────────
+MULTI_TARGET_ENABLED = True
+MT_RR_RATIO = 5                  # SL : T3 = 1:5
+MT_T1_FRAC = 0.333               # T1 at 33.3% of T3 distance (Even spacing)
+MT_T2_FRAC = 0.666               # T2 at 66.6% of T3 distance
+MT_T1_BOOK_PCT = 0.25            # Book 25% of original qty at T1
+MT_T2_BOOK_PCT = 0.50            # Book 50% of remaining qty at T2
+
+# ─── Capital Protection (Profit Lock) ──────────────────────────────────────────
+CAPITAL_PROTECT_TRIGGER_PCT = 10.0   # Activate when leveraged P&L ≥ 10%
+CAPITAL_PROTECT_LOCK_PCT = 4.0       # Move SL to lock in +4% profit above/below entry
 
 # ─── Volatility Filter ─────────────────────────────────────────────────────────
 VOL_FILTER_ENABLED = True
