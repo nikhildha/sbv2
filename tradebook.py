@@ -37,12 +37,22 @@ def _save_book(book):
 
 
 def _next_id(book):
-    """Generate next trade ID."""
+    """Generate next trade ID by scanning ALL existing IDs for the maximum."""
     if not book["trades"]:
         return "T-0001"
-    last = book["trades"][-1]["trade_id"]
-    num = int(last.split("-")[1]) + 1
-    return f"T-{num:04d}"
+    max_num = 0
+    for t in book["trades"]:
+        tid = t.get("trade_id", "")
+        # Handle IDs like "T-0030", "T-0030-T1", "T-0030-T2" etc.
+        parts = tid.split("-")
+        if len(parts) >= 2:
+            try:
+                num = int(parts[1])
+                if num > max_num:
+                    max_num = num
+            except ValueError:
+                pass
+    return f"T-{max_num + 1:04d}"
 
 
 def _compute_summary(book):

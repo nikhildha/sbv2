@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
-import { clearUserTrades } from '@/lib/sync-engine-trades';
-import { prisma } from '@/lib/prisma';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export const dynamic = 'force-dynamic';
+
+const ENGINE_API_URL = process.env.ENGINE_API_URL;
+const DATA_DIR = path.resolve(process.cwd(), '..', '..', 'data');
 
 export async function POST() {
     try {
@@ -13,20 +16,45 @@ export async function POST() {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const userId = (session.user as any).id;
+        let deletedCount = 0;
 
-        // Delete only THIS user's trades from Prisma — no other user affected
-        const deletedCount = await clearUserTrades(userId);
+        // ─── Clear tradebook.json (the actual data source) ───────────────
+        const tbPath = path.join(DATA_DIR, 'tradebook.json');
+        if (fs.existsSync(tbPath)) {
+            try {
+                const tbData = JSON.parse(fs.readFileSync(tbPath, 'utf-8'));
+                deletedCount = (tbData.trades || []).length;
+                const emptyBook = {
+                    trades: [],
+                    summary: {
+                        total_trades: 0,
+                        active_trades: 0,
+                        closed_trades: 0,
+                        total_pnl: 0,
+                        win_rate: 0,
+                        best_trade: 0,
+                        worst_trade: 0,
+                    },
+                };
+                fs.writeFileSync(tbPath, JSON.stringify(emptyBook, null, 2));
+            } catch (err) {
+                console.error('[reset-trades] Error clearing tradebook.json:', err);
+            }
+        }
 
-        // Move bot.startedAt to NOW so re-sync won't re-import old engine trades
-        await prisma.bot.updateMany({
-            where: { userId },
-            data: { startedAt: new Date() },
-        });
+        // ─── Also try engine API (production) ────────────────────────────
+        if (ENGINE_API_URL) {
+            try {
+                await fetch(`${ENGINE_API_URL}/api/reset-trades`, {
+                    method: 'POST',
+                    signal: AbortSignal.timeout(5000),
+                });
+            } catch { /* best effort */ }
+        }
 
         return NextResponse.json({
             success: true,
-            message: `Cleared ${deletedCount} trades for your account`,
+            message: `Cleared ${deletedCount} trades`,
             deletedCount,
         });
     } catch (error) {

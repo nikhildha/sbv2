@@ -53,34 +53,43 @@ export default async function TradesPage() {
 
   return (
     <TradesClient
-      trades={rawTrades.map((t: any) => ({
-        id: t.trade_id || t.id || `T-${Math.random().toString(36).slice(2, 8)}`,
-        coin: (t.symbol || t.coin || '').replace('USDT', ''),
-        symbol: t.symbol || t.coin || '',
-        position: (t.side || t.position || '').toLowerCase(),
-        regime: t.regime || '',
-        confidence: t.confidence || 0,
-        leverage: t.leverage || 1,
-        capital: t.capital || t.position_size || 0,
-        entryPrice: t.entry_price || t.entryPrice || 0,
-        currentPrice: t.current_price || t.currentPrice || null,
-        exitPrice: t.exit_price || t.exitPrice || null,
-        stopLoss: t.stop_loss || t.stopLoss || 0,
-        takeProfit: t.take_profit || t.takeProfit || 0,
-        slType: t.sl_type || t.slType || 'Default',
-        status: (t.status || '').toLowerCase(),
-        mode: t.mode || 'paper',
-        activePnl: t.unrealized_pnl || t.active_pnl || t.activePnl || 0,
-        activePnlPercent: t.unrealized_pnl_pct || t.activePnlPercent || 0,
-        totalPnl: t.realized_pnl || t.pnl || t.total_pnl || t.totalPnl || 0,
-        totalPnlPercent: t.realized_pnl_pct || t.pnl_pct || t.totalPnlPercent || 0,
-        exitPercent: t.exit_percent || null,
-        exitReason: t.exit_reason || t.exitReason || null,
-        entryTime: t.entry_time || t.entry_timestamp || t.entryTime || t.timestamp || new Date().toISOString(),
-        exitTime: t.exit_time || t.exit_timestamp || t.exitTime || null,
-        botName: 'Sentinel Marshal',
-        targetType: t.target_type || t.targetType || null,
-      }))}
+      trades={rawTrades.map((t: any) => {
+        const rawStatus = (t.status || '').toLowerCase().trim();
+        const hasExit = !!(t.exit_time || t.exit_timestamp || t.exitTime || t.exit_price || t.exitPrice);
+        const hasExitReason = !!(t.exit_reason || t.exitReason);
+        const status = (rawStatus === 'active' && !hasExit && !hasExitReason) ? 'active' : 'closed';
+        // Use trade_id + symbol as unique key to avoid React key collisions
+        const baseId = t.trade_id || t.id || `T-${Math.random().toString(36).slice(2, 8)}`;
+        const sym = t.symbol || t.coin || '';
+        return {
+          id: `${baseId}-${sym}`,
+          coin: sym.replace('USDT', ''),
+          symbol: sym,
+          position: (t.side || t.position || '').toLowerCase(),
+          regime: t.regime || '',
+          confidence: t.confidence || 0,
+          leverage: t.leverage || 1,
+          capital: t.capital || t.position_size || 0,
+          entryPrice: t.entry_price || t.entryPrice || 0,
+          currentPrice: t.current_price || t.currentPrice || null,
+          exitPrice: t.exit_price || t.exitPrice || null,
+          stopLoss: t.trailing_sl || t.trailingSl || t.stop_loss || t.stopLoss || 0,
+          takeProfit: t.trailing_tp || t.trailingTp || t.take_profit || t.takeProfit || 0,
+          slType: (t.trailing_active || t.trailingActive) ? `Trail (${t.sl_type || t.slType || 'Default'})` : (t.sl_type || t.slType || 'Default'),
+          status,
+          mode: t.mode || 'paper',
+          activePnl: t.unrealized_pnl || t.active_pnl || t.activePnl || 0,
+          activePnlPercent: t.unrealized_pnl_pct || t.activePnlPercent || 0,
+          totalPnl: t.realized_pnl || t.pnl || t.total_pnl || t.totalPnl || 0,
+          totalPnlPercent: t.realized_pnl_pct || t.pnl_pct || t.totalPnlPercent || 0,
+          exitPercent: t.exit_percent || null,
+          exitReason: t.exit_reason || t.exitReason || null,
+          entryTime: t.entry_time || t.entry_timestamp || t.entryTime || t.timestamp || new Date().toISOString(),
+          exitTime: t.exit_time || t.exit_timestamp || t.exitTime || null,
+          botName: 'Sentinel Marshal',
+          targetType: t.target_type || t.targetType || null,
+        };
+      })}
     />
   );
 }
