@@ -10,7 +10,7 @@ COPY package.json package-lock.json* ./
 COPY prisma ./prisma/
 
 # Install dependencies with npm (bypasses yarn TS patch issue)
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 
 # Generate Prisma client
 RUN npx prisma generate
