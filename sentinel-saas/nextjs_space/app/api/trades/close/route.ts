@@ -16,13 +16,24 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const { tradeId, symbol } = await request.json();
-        if (!tradeId && !symbol) {
+        const { tradeId: rawTradeId, symbol: rawSymbol } = await request.json();
+        if (!rawTradeId && !rawSymbol) {
             return NextResponse.json({ error: 'tradeId or symbol required' }, { status: 400 });
         }
 
         const userId = (session.user as any)?.id;
         const isAdmin = (session.user as any)?.role === 'admin';
+
+        // ─── Parse composite IDs (e.g. "T-0030-BTCUSDT" → tradeId="T-0030", symbol="BTCUSDT") ──
+        let tradeId = rawTradeId;
+        let symbol = rawSymbol;
+        if (tradeId && tradeId.match(/^T-\d+-\w+/)) {
+            const parts = tradeId.match(/^(T-\d+)-(.+)$/);
+            if (parts) {
+                tradeId = parts[1];
+                symbol = symbol || parts[2];
+            }
+        }
 
         // ─── Find the trade in Prisma ────────────────────────────────────
         let trade = null;
