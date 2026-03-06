@@ -88,7 +88,7 @@ export async function GET() {
                 // Sync engine trades into Prisma for this user's bot
                 // Only syncs trades whose entry_time >= bot.startedAt
                 try {
-                    await syncEngineTrades(engineTradesRaw, userBot.id, null);
+                    await syncEngineTrades(engineTradesRaw, userBot.id, userBot.startedAt ?? null);
                 } catch (err) {
                     console.error('[bot-state] Trade sync failed:', err);
                 }

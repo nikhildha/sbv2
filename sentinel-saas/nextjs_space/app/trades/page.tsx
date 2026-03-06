@@ -85,7 +85,7 @@ export default async function TradesPage() {
     if (userBot && engineTrades.length > 0) {
       try {
         // Pass null to sync ALL engine trades regardless of bot start time
-        await syncEngineTrades(engineTrades, userBot.id, null);
+        await syncEngineTrades(engineTrades, userBot.id, userBot.startedAt ?? null);
       } catch (err) {
         console.error('[trades-page] Sync failed:', err);
       }

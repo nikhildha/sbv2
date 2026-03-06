@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
             try {
                 const engineTrades = await fetchEngineTrades();
                 if (engineTrades.length > 0) {
-                    await syncEngineTrades(engineTrades, userBot.id, null);
+                    await syncEngineTrades(engineTrades, userBot.id, userBot.startedAt ?? null);
                 }
             } catch (err) {
                 console.error('[trades] Sync failed:', err);
