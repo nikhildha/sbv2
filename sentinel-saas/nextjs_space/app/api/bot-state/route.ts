@@ -9,7 +9,7 @@ import * as path from 'path';
 export const dynamic = 'force-dynamic';
 
 // ─── Engine API URL (Railway internal) or local file fallback ────────────────
-const ENGINE_API_URL = process.env.ENGINE_API_URL; // e.g. http://sentinelbot-engine.railway.internal:3001
+const ENGINE_API_URL = process.env.ENGINE_API_URL || process.env.PYTHON_ENGINE_URL;
 
 // Sentinelbot reads directly from its own data/ folder (local dev)
 const DATA_DIR = path.resolve(process.cwd(), '..', '..', 'data');
@@ -102,10 +102,7 @@ export async function GET() {
                 trades = [];
             }
 
-            // Fallback: if Prisma has no trades but engine does, use raw engine trades
-            if (trades.length === 0 && engineTradesRaw.length > 0) {
-                trades = engineTradesRaw;
-            }
+            // NOTE: No fallback to raw engine trades — that would expose all users' data to everyone
         }
 
         const activeTrades = trades.filter((t: any) => (t.status || '').toUpperCase() === 'ACTIVE');

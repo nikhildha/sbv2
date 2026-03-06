@@ -139,10 +139,10 @@ def api_reset_trades():
     """Clear all trades from the tradebook."""
     import tradebook as tb
     try:
-        book = tb.load()
+        book = tb._load_book()
         count = len(book.get("trades", []))
         book["trades"] = []
-        tb.save(book)
+        tb._save_book(book)
         return jsonify({"success": True, "deletedCount": count})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
