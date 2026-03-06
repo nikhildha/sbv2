@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import prisma from '@/lib/prisma';
+import { closeBotSession } from '@/lib/bot-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,7 +65,14 @@ export async function POST(request: Request) {
             });
         }
 
-        // 3. Update bot status
+        // 3. Close active session + compute metrics (trades already closed above)
+        try {
+            await closeBotSession(botId);
+        } catch (err) {
+            console.error('[kill] closeBotSession failed:', err);
+        }
+
+        // 4. Update bot status
         await prisma.bot.update({
             where: { id: botId },
             data: {
@@ -74,7 +82,7 @@ export async function POST(request: Request) {
             },
         });
 
-        // 4. Update bot state
+        // 5. Update bot state
         await prisma.botState.upsert({
             where: { botId },
             update: { engineStatus: 'killed', errorMessage: 'Kill switch activated' },

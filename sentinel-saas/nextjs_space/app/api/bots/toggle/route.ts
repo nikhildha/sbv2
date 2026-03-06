@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import prisma from '@/lib/prisma';
 import { checkSubscription } from '@/lib/subscription';
+import { createBotSession, closeBotSession } from '@/lib/bot-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,13 +33,31 @@ export async function POST(request: Request) {
       }
     }
 
-    // Verify ownership
+    // Verify ownership (include config for mode)
     const bot = await prisma.bot.findFirst({
       where: { id: botId, userId: session.user.id },
+      include: { config: true },
     });
 
     if (!bot) {
       return NextResponse.json({ error: 'Bot not found' }, { status: 404 });
+    }
+
+    // ─── Session lifecycle ────────────────────────────────────────────────────
+    if (isActive) {
+      // Starting: open a new session
+      try {
+        await createBotSession(botId, bot.config?.mode ?? 'paper');
+      } catch (err) {
+        console.error('[toggle] createBotSession failed:', err);
+      }
+    } else {
+      // Stopping: close active session + close paper trades + signal engine
+      try {
+        await closeBotSession(botId);
+      } catch (err) {
+        console.error('[toggle] closeBotSession failed:', err);
+      }
     }
 
     // Call the Python orchestrator to start/stop the engine worker
@@ -53,11 +72,9 @@ export async function POST(request: Request) {
       if (!orchResponse.ok) {
         const err = await orchResponse.json().catch(() => ({}));
         console.error('Orchestrator error:', err);
-        // Still update DB status even if orchestrator call fails
       }
     } catch (orchError) {
       console.error('Orchestrator unreachable:', orchError);
-      // Don't fail — update DB status anyway (orchestrator might be starting up)
     }
 
     // Update bot status in database

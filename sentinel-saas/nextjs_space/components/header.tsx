@@ -46,6 +46,9 @@ export function Header() {
                 <Link href="/trades" className="text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors">
                   Trade Book
                 </Link>
+                <Link href="/performance" className="text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors">
+                  Performance
+                </Link>
                 <Link href="/intelligence" className="text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors">
                   Intelligence
                 </Link>
@@ -104,6 +107,9 @@ export function Header() {
                 </Link>
                 <Link href="/trades" className="block text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors">
                   Trade Book
+                </Link>
+                <Link href="/performance" className="block text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors">
+                  Performance
                 </Link>
                 <Link href="/intelligence" className="block text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors">
                   Intelligence

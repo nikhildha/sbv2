@@ -5,7 +5,7 @@ import { Header } from '@/components/header';
 import { StatsCard } from '@/components/stats-card';
 import { BotCard } from '@/components/bot-card';
 import { RegimeCard, PnlCard, ActivePositionsCard, SignalSummaryTable } from '@/components/dashboard/command-center';
-import { Bot, TrendingUp, Activity, DollarSign, RefreshCw, Zap } from 'lucide-react';
+import { Bot, TrendingUp, Activity, DollarSign, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 
@@ -49,6 +49,7 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
   const [lastRefresh, setLastRefresh] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [feedHealth, setFeedHealth] = useState<any>(null);
+  const [pnlScope, setPnlScope] = useState<'session' | 'all'>('session');
 
   const fetchBotState = useCallback(async () => {
     try {
@@ -131,7 +132,21 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
   const trend15m = btcState?.ta_multi?.['15m']?.trend || undefined;
 
   // Live stats from engine data (overrides stale DB stats)
-  const liveTrades = trades || [];
+  const allTrades = trades || [];
+
+  // Detect the current session: most recent sessionId from active trades
+  const currentSessionId: string | null = (() => {
+    const active = allTrades.find((t: any) => (t.status || '').toUpperCase() === 'ACTIVE' && t.sessionId);
+    if (active) return active.sessionId;
+    const recent = allTrades.find((t: any) => t.sessionId);
+    return recent?.sessionId ?? null;
+  })();
+
+  // Apply session scope filter
+  const liveTrades = pnlScope === 'session' && currentSessionId
+    ? allTrades.filter((t: any) => t.sessionId === currentSessionId)
+    : allTrades;
+
   const liveActiveTrades = liveTrades.filter((t: any) => (t.status || '').toUpperCase() === 'ACTIVE');
   const liveClosedTrades = liveTrades.filter((t: any) => (t.status || '').toUpperCase() === 'CLOSED');
   const liveTotalPnl = liveClosedTrades.reduce((sum: number, t: any) => sum + (t.realized_pnl || t.pnl || t.total_pnl || 0), 0);
@@ -248,6 +263,40 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
               <RegimeCard regime={regime} confidence={confidence} symbol={symbol} macroRegime={macroRegime} trend15m={trend15m} coinStates={multi?.coin_states} />
               <PnlCard trades={trades} />
             </div>
+          </motion.div>
+
+          {/* ═══ Session Scope Toggle ═══ */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.12 }}
+            className="mb-4"
+            style={{ display: 'flex', alignItems: 'center', gap: '12px' }}
+          >
+            <span style={{ fontSize: '12px', color: '#6B7280', fontWeight: 500 }}>PnL Scope:</span>
+            <div style={{
+              display: 'inline-flex', borderRadius: '8px', overflow: 'hidden',
+              border: '1px solid rgba(6,182,212,0.2)', background: 'rgba(17,24,39,0.6)',
+            }}>
+              {(['session', 'all'] as const).map((scope) => (
+                <button
+                  key={scope}
+                  onClick={() => setPnlScope(scope)}
+                  style={{
+                    padding: '5px 14px', fontSize: '12px', fontWeight: 600,
+                    border: 'none', cursor: 'pointer', transition: 'all 0.15s',
+                    background: pnlScope === scope ? 'rgba(6,182,212,0.2)' : 'transparent',
+                    color: pnlScope === scope ? '#06B6D4' : '#6B7280',
+                    borderRight: scope === 'session' ? '1px solid rgba(6,182,212,0.15)' : 'none',
+                  }}
+                >
+                  {scope === 'session' ? 'This Session' : 'All Time'}
+                </button>
+              ))}
+            </div>
+            {pnlScope === 'session' && !currentSessionId && (
+              <span style={{ fontSize: '11px', color: '#F59E0B' }}>No active session detected</span>
+            )}
           </motion.div>
 
           {/* ═══ Row 2: Quick SaaS Stats ═══ */}

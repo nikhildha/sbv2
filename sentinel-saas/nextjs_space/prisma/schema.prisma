@@ -79,23 +79,24 @@ model Bot {
   id                String    @id @default(cuid())
   userId            String
   user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   name              String
   exchange          String    // binance, coindcx
   status            String    @default("stopped") // running, stopped, paused, error
-  
+
   isActive          Boolean   @default(false)
-  
+
   startedAt         DateTime?
   stoppedAt         DateTime?
-  
+
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
-  
+
   trades            Trade[]
+  sessions          BotSession[]
   config            BotConfig?
   state             BotState?
-  
+
   @@index([userId])
   @@index([status])
 }
@@ -215,21 +216,60 @@ model Trade {
   // ─── Exchange Order References ─────────────────
   exchangeOrderId   String?
   exchangePositionId String?
-  
+
+  // ─── Session Reference ─────────────────────────
+  sessionId         String?
+  session           BotSession? @relation(fields: [sessionId], references: [id])
+
   // ─── Timestamps ────────────────────────────────
   entryTime         DateTime  @default(now())
   exitTime          DateTime?
-  
+
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
-  
+
   // ─── Partial bookings linked to this trade ─────
   partialBookings   PartialBooking[]
-  
+
   @@index([botId])
   @@index([status])
   @@index([coin])
   @@index([mode])
+  @@index([sessionId])
+}
+
+// ─── Bot Session (start-to-stop run record) ──────────────────────────────────
+
+model BotSession {
+  id            String    @id @default(cuid())
+  botId         String
+  bot           Bot       @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+  sessionIndex  Int       @default(1)   // 0=legacy backfill, 1=first real run, 2=second, etc.
+  startedAt     DateTime
+  endedAt       DateTime?
+  status        String    @default("active")  // active | closed
+  mode          String    @default("paper")   // paper | live
+
+  // Metrics — computed on session close
+  totalTrades   Int       @default(0)
+  closedTrades  Int       @default(0)
+  winTrades     Int       @default(0)
+  totalPnl      Float     @default(0)
+  roi           Float     @default(0)   // totalPnl / totalCapital × 100
+  winRate       Float     @default(0)   // winTrades / closedTrades × 100
+  maxDrawdown   Float     @default(0)   // worst single trade loss (proxy)
+  bestTrade     Float     @default(0)
+  worstTrade    Float     @default(0)
+  totalCapital  Float     @default(0)   // Σ(trade.capital) — ROI denominator
+
+  trades        Trade[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([botId])
+  @@index([status])
 }
 
 // ─── Partial Booking Records (T1/T2 exits) ───────────────────────────────────

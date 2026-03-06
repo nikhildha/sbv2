@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { getActiveBotSession } from '@/lib/bot-session';
 
 /**
  * Sync engine trades into Prisma, scoped to a specific bot.
@@ -15,6 +16,9 @@ export async function syncEngineTrades(
     botStartedAt: Date | null
 ): Promise<number> {
     if (!engineTrades || engineTrades.length === 0) return 0;
+
+    // Look up active session once per sync call (not per trade)
+    const activeSession = await getActiveBotSession(botId);
 
     let synced = 0;
 
@@ -86,6 +90,7 @@ export async function syncEngineTrades(
                     t2Hit: t.t2_hit || false,
                     trailingSl: t.trailing_sl || null,
                     trailingActive: t.trailing_active || false,
+                    sessionId: activeSession?.id ?? null,
                 },
                 update: {
                     status,
@@ -171,6 +176,8 @@ export async function getUserTrades(userId: string, statusFilter?: string) {
         realized_pnl: t.status === 'closed' ? t.totalPnl : 0,
         active_pnl: t.activePnl,
         total_pnl: t.totalPnl,
+        // Session tracking
+        sessionId: t.sessionId ?? null,
     }));
 }
 

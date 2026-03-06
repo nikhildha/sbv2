@@ -58,6 +58,7 @@ function mapTrade(t: any) {
     exitTime: t.exit_time || t.exit_timestamp || t.exitTime || null,
     botName: 'Sentinel Marshal',
     targetType: t.target_type || t.targetType || null,
+    sessionId: t.sessionId ?? null,
   };
 }
 

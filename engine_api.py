@@ -120,6 +120,20 @@ def api_close_trade():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/close-all", methods=["POST"])
+def api_close_all():
+    """Write a CLOSE_ALL command so main.py closes all open positions on next cycle."""
+    import json
+    from datetime import datetime
+    try:
+        cmd = {"command": "CLOSE_ALL", "timestamp": datetime.utcnow().isoformat()}
+        with open(config.COMMANDS_FILE, "w") as f:
+            json.dump(cmd, f)
+        return jsonify({"success": True, "message": "CLOSE_ALL command queued"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/reset-trades", methods=["POST"])
 def api_reset_trades():
     """Clear all trades from the tradebook."""

@@ -17,6 +17,7 @@ interface Trade {
   exitPercent?: number | null; exitReason?: string | null;
   entryTime: string; exitTime?: string | null;
   botName?: string;
+  sessionId?: string | null;
 }
 
 /* ═══ Utilities ═══ */
@@ -121,6 +122,7 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
   const [coinSearch, setCoinSearch] = useState('');
   const [pnlFilter, setPnlFilter] = useState<'all' | 'profit' | 'loss'>('all');
   const [modeFilter, setModeFilter] = useState<'all' | 'paper' | 'live'>('all');
+  const [sessionFilter, setSessionFilter] = useState<string>('all');
   const [lastRefresh, setLastRefresh] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
@@ -209,6 +211,7 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
       if (statusFilter === 'active' && !tradeIsActive) return false;
       if (statusFilter === 'closed' && tradeIsActive) return false;
       if (modeFilter !== 'all' && tMode !== modeFilter) return false;
+      if (sessionFilter !== 'all' && t.sessionId !== sessionFilter) return false;
       if (posFilter !== 'all') {
         const posMatch = posFilter === 'long'
           ? ['long', 'buy'].includes(tPos)
@@ -227,7 +230,7 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
       }
       return true;
     });
-  }, [trades, statusFilter, modeFilter, posFilter, regimeFilter, coinSearch, pnlFilter]);
+  }, [trades, statusFilter, modeFilter, posFilter, regimeFilter, coinSearch, pnlFilter, sessionFilter]);
 
   /* ── Portfolio Stats ── */
   const CAPITAL_PER_TRADE = 100;
@@ -303,6 +306,17 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
   };
 
   const uniqueRegimes = useMemo(() => [...new Set(trades?.map(t => t.regime?.toLowerCase()).filter(Boolean))], [trades]);
+
+  // Unique sessions for dropdown: { id, label }
+  const uniqueSessions = useMemo(() => {
+    const seen = new Map<string, string>();
+    (trades ?? []).forEach(t => {
+      if (t.sessionId && !seen.has(t.sessionId)) {
+        seen.set(t.sessionId, t.sessionId);
+      }
+    });
+    return Array.from(seen.keys());
+  }, [trades]);
 
   const clearAllTrades = async () => {
     if (!confirm('⚠️ Clear ALL trades from the tradebook? This cannot be undone.')) return;
@@ -418,6 +432,19 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
 
                 <div style={{ width: '1px', height: '20px', background: 'rgba(255,255,255,0.1)' }} />
 
+                {/* Session filter — only shown when multiple sessions exist */}
+                {uniqueSessions.length > 1 && (
+                  <select value={sessionFilter} onChange={e => setSessionFilter(e.target.value)} style={{
+                    padding: '6px 10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)',
+                    background: 'rgba(255,255,255,0.04)', color: '#D1D5DB', fontSize: '13px',
+                  }}>
+                    <option value="all">All Sessions</option>
+                    {uniqueSessions.map((sid, i) => (
+                      <option key={sid} value={sid}>Run #{uniqueSessions.length - i}</option>
+                    ))}
+                  </select>
+                )}
+
                 <select value={posFilter} onChange={e => setPosFilter(e.target.value)} style={{
                   padding: '6px 10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)',
                   background: 'rgba(255,255,255,0.04)', color: '#D1D5DB', fontSize: '13px',
@@ -502,6 +529,14 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
                           <tr key={t.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                             <td style={{ padding: '10px', color: '#0891B2', fontWeight: 600, fontSize: '12px' }}>
                               SM-Standard
+                              {t.sessionId && (
+                                <div style={{ fontSize: '9px', color: '#6B7280', marginTop: '2px' }}>
+                                  {(() => {
+                                    const idx = uniqueSessions.indexOf(t.sessionId);
+                                    return idx === -1 ? 'Legacy' : `Run #${uniqueSessions.length - idx}`;
+                                  })()}
+                                </div>
+                              )}
                             </td>
                             <td style={{ padding: '10px', textAlign: 'center' }}>
                               <span style={{

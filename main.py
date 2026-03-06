@@ -1187,6 +1187,14 @@ class RegimeMasterBot:
                 self.risk.reset_kill_switch()
                 os.remove(config.COMMANDS_FILE)
 
+            elif cmd.get("command") == "CLOSE_ALL":
+                logger.info("🛑 External CLOSE_ALL command received — closing all positions.")
+                for sym in list(self._active_positions.keys()):
+                    tradebook.close_trade(symbol=sym, reason="BOT_STOPPED")
+                    self.executor.close_all_positions(sym)
+                self._active_positions.clear()
+                os.remove(config.COMMANDS_FILE)
+
         except (json.JSONDecodeError, KeyError):
             pass
         except Exception as e:
