@@ -14,13 +14,16 @@ const ENGINE_API_URL = process.env.ENGINE_API_URL || process.env.PYTHON_ENGINE_U
  */
 export async function GET(request: Request) {
     const session = await getServerSession(authOptions);
-    const isAdmin = (session?.user as any)?.role === 'admin';
-    if (!isAdmin) {
-        return NextResponse.json({ error: 'Admin only' }, { status: 403 });
+    if (!session?.user) {
+        return NextResponse.json({ error: 'Not logged in' }, { status: 401 });
     }
+    const isAdmin = (session?.user as any)?.role === 'admin';
 
     const { searchParams } = new URL(request.url);
-    const email = searchParams.get('email');
+    // Admin can look up any email; regular user always sees their own data
+    const email = isAdmin
+        ? (searchParams.get('email') || session.user.email)
+        : session.user.email;
 
     // ─── 1. Engine data ───────────────────────────────────────────────────────
     let engineTrades: any[] = [];
