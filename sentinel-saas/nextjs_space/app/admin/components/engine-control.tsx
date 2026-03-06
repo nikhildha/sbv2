@@ -7,13 +7,27 @@ import {
     Cpu, Zap, Signal, Terminal, Loader2
 } from 'lucide-react';
 
-// ─── Local Engine State ──────────────────────────────────────────────────────
+// ─── Engine State ────────────────────────────────────────────────────────────
 
 interface EngineState {
     status: 'running' | 'stopped' | 'unknown';
     pid: number | null;
     uptime: string | null;
     logs: string[];
+}
+
+interface RemoteEngineState {
+    status: 'running' | 'stopped' | 'unreachable' | 'no_remote' | null;
+    source: 'remote' | 'local' | null;
+    uptime_human?: string;
+    cycle_count?: number;
+    last_analysis?: string;
+    coins_scanned?: number;
+    deployed_count?: number;
+    loop_interval?: number;
+    top_coins_limit?: number;
+    hmm_states?: number;
+    error?: string;
 }
 
 // ─── Bot / Orchestrator types (existing) ─────────────────────────────────────
@@ -36,17 +50,42 @@ export default function EngineControl() {
     const [engineActionLoading, setEngineActionLoading] = useState(false);
     const logRef = useRef<HTMLDivElement>(null);
 
+    // Remote engine state (production)
+    const [remote, setRemote] = useState<RemoteEngineState>({ status: null, source: null });
+    const isRemote = remote.source === 'remote';
+
     // Existing bot list (orchestrator)
     const [bots, setBots] = useState<BotInfo[]>([]);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [orchestratorOnline, setOrchestratorOnline] = useState(false);
 
+    // Check if remote engine is configured
+    const fetchRemoteHealth = async () => {
+        try {
+            const res = await fetch('/api/admin/engine/health');
+            if (res.ok) {
+                const data = await res.json();
+                setRemote(data);
+            }
+        } catch {
+            setRemote({ status: 'unreachable', source: 'remote' });
+        }
+    };
+
     useEffect(() => {
+        fetchRemoteHealth();
         fetchEngineStatus();
         fetchBots();
         checkOrchestrator();
     }, []);
+
+    // Auto-poll remote engine health every 10s
+    useEffect(() => {
+        if (!isRemote) return;
+        const interval = setInterval(fetchRemoteHealth, 10000);
+        return () => clearInterval(interval);
+    }, [isRemote]);
 
     // Auto-poll engine status every 5s when running
     useEffect(() => {
@@ -135,37 +174,48 @@ export default function EngineControl() {
     const activeBots = bots.filter(b => b.isActive);
     const inactiveBots = bots.filter(b => !b.isActive);
 
-    const isRunning = engine.status === 'running';
+    const isRunning = isRemote ? remote.status === 'running' : engine.status === 'running';
+    const engineLabel = isRemote ? 'Production Engine' : 'Local Engine';
+    const remoteRunning = remote.status === 'running';
 
     return (
         <div className="space-y-6">
-            {/* ═══ LOCAL ENGINE CARD ═══════════════════════════════════════════ */}
+            {/* ═══ ENGINE CARD ═══════════════════════════════════════════════ */}
             <div className={`rounded-2xl border-2 p-6 transition-all ${isRunning
-                    ? 'bg-green-500/5 border-green-500/30 shadow-lg shadow-green-500/5'
+                ? 'bg-green-500/5 border-green-500/30 shadow-lg shadow-green-500/5'
+                : remote.status === 'unreachable'
+                    ? 'bg-red-500/5 border-red-500/20'
                     : 'bg-white/5 border-white/10'
                 }`}>
                 <div className="flex items-center justify-between mb-5">
                     <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${isRunning ? 'bg-green-500/15' : 'bg-gray-500/10'
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${isRunning ? 'bg-green-500/15' : remote.status === 'unreachable' ? 'bg-red-500/15' : 'bg-gray-500/10'
                             }`}>
-                            <Cpu className={`w-6 h-6 ${isRunning ? 'text-green-400' : 'text-gray-500'}`} />
+                            <Cpu className={`w-6 h-6 ${isRunning ? 'text-green-400' : remote.status === 'unreachable' ? 'text-red-400' : 'text-gray-500'}`} />
                         </div>
                         <div>
                             <div className="flex items-center gap-3">
-                                <h2 className="text-xl font-bold text-white">Local Engine</h2>
+                                <h2 className="text-xl font-bold text-white">{engineLabel}</h2>
+                                {isRemote && (
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-400 uppercase tracking-wider">Railway</span>
+                                )}
                                 <div className="flex items-center gap-2">
-                                    <div className={`w-2.5 h-2.5 rounded-full ${isRunning ? 'bg-green-400 animate-pulse' : 'bg-gray-500'
+                                    <div className={`w-2.5 h-2.5 rounded-full ${isRunning ? 'bg-green-400 animate-pulse' : remote.status === 'unreachable' ? 'bg-red-400' : 'bg-gray-500'
                                         }`} />
-                                    <span className={`text-sm font-medium ${isRunning ? 'text-green-400' : 'text-gray-400'
+                                    <span className={`text-sm font-medium ${isRunning ? 'text-green-400' : remote.status === 'unreachable' ? 'text-red-400' : 'text-gray-400'
                                         }`}>
-                                        {isRunning ? 'Running' : engine.status === 'unknown' ? 'Checking...' : 'Stopped'}
+                                        {isRunning ? 'Running' : remote.status === 'unreachable' ? 'Unreachable' : engine.status === 'unknown' ? 'Checking...' : 'Stopped'}
                                     </span>
                                 </div>
                             </div>
                             <p className="text-gray-500 text-sm mt-0.5">
-                                {isRunning
-                                    ? `PID ${engine.pid} · Uptime: ${engine.uptime || '—'}`
-                                    : 'main.py — RegimeMaster Bot'
+                                {isRemote && remoteRunning
+                                    ? `Uptime: ${remote.uptime_human || '—'} · Cycle #${remote.cycle_count || 0}`
+                                    : isRemote
+                                        ? remote.error || 'Engine service on Railway'
+                                        : isRunning
+                                            ? `PID ${engine.pid} · Uptime: ${engine.uptime || '—'}`
+                                            : 'main.py — RegimeMaster Bot'
                                 }
                             </p>
                         </div>
@@ -174,42 +224,61 @@ export default function EngineControl() {
                     {/* Action Buttons */}
                     <div className="flex items-center gap-3">
                         <button
-                            onClick={fetchEngineStatus}
+                            onClick={isRemote ? fetchRemoteHealth : fetchEngineStatus}
                             className="p-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 transition"
                             title="Refresh status"
                         >
                             <RefreshCw className="w-4 h-4" />
                         </button>
 
-                        {isRunning ? (
-                            <button
-                                onClick={() => controlEngine('stop')}
-                                disabled={engineActionLoading}
-                                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition font-medium disabled:opacity-50"
-                            >
-                                {engineActionLoading ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                    <PowerOff className="w-4 h-4" />
-                                )}
-                                Stop Engine
-                            </button>
-                        ) : (
-                            <button
-                                onClick={() => controlEngine('start')}
-                                disabled={engineActionLoading || engine.status === 'unknown'}
-                                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition font-medium disabled:opacity-50"
-                            >
-                                {engineActionLoading ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                    <Play className="w-4 h-4" />
-                                )}
-                                Start Engine
-                            </button>
+                        {!isRemote && (
+                            isRunning ? (
+                                <button
+                                    onClick={() => controlEngine('stop')}
+                                    disabled={engineActionLoading}
+                                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition font-medium disabled:opacity-50"
+                                >
+                                    {engineActionLoading ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <PowerOff className="w-4 h-4" />
+                                    )}
+                                    Stop Engine
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={() => controlEngine('start')}
+                                    disabled={engineActionLoading || engine.status === 'unknown'}
+                                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition font-medium disabled:opacity-50"
+                                >
+                                    {engineActionLoading ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <Play className="w-4 h-4" />
+                                    )}
+                                    Start Engine
+                                </button>
+                            )
                         )}
                     </div>
                 </div>
+
+                {/* Remote Engine Stats */}
+                {isRemote && remoteRunning && (
+                    <div className="grid grid-cols-4 gap-3 mt-4">
+                        {[
+                            { label: 'Coins Scanned', value: String(remote.coins_scanned || 0), color: 'text-cyan-400' },
+                            { label: 'Deployed', value: String(remote.deployed_count || 0), color: 'text-green-400' },
+                            { label: 'Loop Interval', value: `${remote.loop_interval || 30}s`, color: 'text-gray-300' },
+                            { label: 'HMM States', value: String(remote.hmm_states || 3), color: 'text-purple-400' },
+                        ].map(s => (
+                            <div key={s.label} className="bg-white/5 rounded-xl p-3 text-center">
+                                <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">{s.label}</div>
+                                <div className={`text-lg font-bold ${s.color}`}>{s.value}</div>
+                            </div>
+                        ))}
+                    </div>
+                )}
 
                 {/* Log Console */}
                 {engine.logs.length > 0 && (
