@@ -2,13 +2,12 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { clearUserTrades } from '@/lib/sync-engine-trades';
-import * as fs from 'fs';
-import * as path from 'path';
+import { PrismaClient } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
 
-const ENGINE_API_URL = process.env.ENGINE_API_URL;
-const DATA_DIR = path.resolve(process.cwd(), '..', '..', 'data');
+const ENGINE_API_URL = process.env.ENGINE_API_URL || process.env.PYTHON_ENGINE_URL;
+const prisma = new PrismaClient();
 
 export async function POST() {
     try {
@@ -30,44 +29,34 @@ export async function POST() {
             });
         }
 
-        // Admin: clear global engine tradebook.json + engine API
+        // Admin: clear ALL trades from database + reset engine in-memory state
         let deletedCount = 0;
 
-        const tbPath = path.join(DATA_DIR, 'tradebook.json');
-        if (fs.existsSync(tbPath)) {
-            try {
-                const tbData = JSON.parse(fs.readFileSync(tbPath, 'utf-8'));
-                deletedCount = (tbData.trades || []).length;
-                const emptyBook = {
-                    trades: [],
-                    summary: {
-                        total_trades: 0,
-                        active_trades: 0,
-                        closed_trades: 0,
-                        total_pnl: 0,
-                        win_rate: 0,
-                        best_trade: 0,
-                        worst_trade: 0,
-                    },
-                };
-                fs.writeFileSync(tbPath, JSON.stringify(emptyBook, null, 2));
-            } catch (err) {
-                console.error('[reset-trades] Error clearing tradebook.json:', err);
-            }
+        // 1. Delete all trades from Prisma/Postgres
+        try {
+            const result = await prisma.trade.deleteMany({});
+            deletedCount = result.count;
+            console.log(`[reset-trades] Deleted ${deletedCount} trades from database`);
+        } catch (err) {
+            console.error('[reset-trades] Error deleting trades from database:', err);
         }
 
+        // 2. Reset engine in-memory trades (so auto-refresh doesn't repopulate)
         if (ENGINE_API_URL) {
             try {
                 await fetch(`${ENGINE_API_URL}/api/reset-trades`, {
                     method: 'POST',
                     signal: AbortSignal.timeout(5000),
                 });
-            } catch { /* best effort */ }
+                console.log('[reset-trades] Engine in-memory trades reset');
+            } catch (err) {
+                console.error('[reset-trades] Engine reset failed (best effort):', err);
+            }
         }
 
         return NextResponse.json({
             success: true,
-            message: `Cleared ${deletedCount} trades`,
+            message: `Cleared ${deletedCount} trades from database`,
             deletedCount,
         });
     } catch (error) {
