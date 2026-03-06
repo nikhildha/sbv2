@@ -1,12 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
-import { getUserTrades } from '@/lib/sync-engine-trades';
+import { prisma } from '@/lib/prisma';
+import { syncEngineTrades, getUserTrades } from '@/lib/sync-engine-trades';
 
 export const dynamic = 'force-dynamic';
 
+// ─── Engine API URL (Railway internal) or local fallback ────────────────
+const ENGINE_API_URL = process.env.ENGINE_API_URL;
+
+async function fetchEngineTrades(): Promise<any[]> {
+    if (!ENGINE_API_URL) return [];
+    try {
+        const res = await fetch(`${ENGINE_API_URL}/api/all`, {
+            cache: 'no-store',
+            signal: AbortSignal.timeout(8000),
+        });
+        if (res.ok) {
+            const data = await res.json();
+            return data?.tradebook?.trades || [];
+        }
+    } catch (err) {
+        console.error('[trades] Engine API fetch failed:', err);
+    }
+    return [];
+}
+
 /**
- * Tradebook API — reads from Prisma (per-user isolated)
+ * Tradebook API — syncs from engine then reads from Prisma (per-user isolated)
  * GET /api/trades?status=active&coin=BTC&page=1&limit=50
  */
 export async function GET(request: NextRequest) {
@@ -22,6 +43,23 @@ export async function GET(request: NextRequest) {
         const coinFilter = searchParams.get('coin');
         const page = parseInt(searchParams.get('page') || '1');
         const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100);
+
+        // Sync engine trades into Prisma for this user's bot before reading
+        const userBot = await prisma.bot.findFirst({
+            where: { userId },
+            orderBy: { updatedAt: 'desc' },
+        });
+
+        if (userBot) {
+            try {
+                const engineTrades = await fetchEngineTrades();
+                if (engineTrades.length > 0) {
+                    await syncEngineTrades(engineTrades, userBot.id, userBot.startedAt || userBot.createdAt);
+                }
+            } catch (err) {
+                console.error('[trades] Sync failed:', err);
+            }
+        }
 
         // Read from Prisma — already user-isolated
         let trades = await getUserTrades(userId, statusFilter);

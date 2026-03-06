@@ -106,8 +106,8 @@ export async function GET() {
                 trades = [];
             }
 
-            // Fallback for admin: if Prisma has no trades but engine does, use engine trades directly
-            if (isAdmin && trades.length === 0 && engineTradesRaw.length > 0) {
+            // Fallback: if Prisma has no trades but engine does, use raw engine trades
+            if (trades.length === 0 && engineTradesRaw.length > 0) {
                 trades = engineTradesRaw;
             }
         }
