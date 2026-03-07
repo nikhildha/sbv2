@@ -50,6 +50,7 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [feedHealth, setFeedHealth] = useState<any>(null);
   const [pnlScope, setPnlScope] = useState<'session' | 'all'>('session');
+  const [walletBalance, setWalletBalance] = useState<{ binance: number | null; coindcx: number | null }>({ binance: null, coindcx: null });
 
   const fetchBotState = useCallback(async () => {
     try {
@@ -72,6 +73,19 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
     fetchBotState();
     const interval = setInterval(fetchBotState, 15000); // refresh every 15s
 
+    // Fetch wallet balances once on mount, then every 60s
+    const fetchWalletBalance = async () => {
+      try {
+        const res = await fetch('/api/wallet-balance', { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          setWalletBalance({ binance: data.binance, coindcx: data.coindcx });
+        }
+      } catch { /* silent */ }
+    };
+    fetchWalletBalance();
+    const walletInterval = setInterval(fetchWalletBalance, 60000);
+
     // Fetch feed health for admin
     if ((user as any)?.role === 'admin') {
       const fetchHealth = async () => {
@@ -92,10 +106,10 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
       };
       fetchHealth();
       const healthInterval = setInterval(fetchHealth, 60000);
-      return () => { clearInterval(interval); clearInterval(healthInterval); };
+      return () => { clearInterval(interval); clearInterval(walletInterval); clearInterval(healthInterval); };
     }
 
-    return () => clearInterval(interval);
+    return () => { clearInterval(interval); clearInterval(walletInterval); };
   }, [fetchBotState]);
 
   const handleBotToggle = async (botId: string, currentStatus: boolean) => {
@@ -245,7 +259,7 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
               gap: '20px',
             }}>
               <RegimeCard regime={regime} confidence={confidence} symbol={symbol} macroRegime={macroRegime} trend15m={trend15m} coinStates={multi?.coin_states} />
-              <PnlCard trades={trades} />
+              <PnlCard trades={trades} binanceBalance={walletBalance.binance} coinDcxBalance={walletBalance.coindcx} />
             </div>
           </motion.div>
 

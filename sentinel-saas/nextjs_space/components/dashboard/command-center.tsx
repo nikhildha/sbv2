@@ -176,42 +176,27 @@ export function PnlCard({ trades, coinDcxBalance, binanceBalance }: PnlCardProps
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const chartRef = useRef<any>(null);
     const MAX_CAPITAL = 2500;
-    const CAPITAL_PER_TRADE = 100;
 
-    // Categorize trades
+    // Compute total PnL across all trades
     const allTrades = trades || [];
-
-    const paperTrades = allTrades.filter((t: any) => (t.mode || 'paper').toUpperCase() === 'PAPER');
-    const liveTrades = allTrades.filter((t: any) => (t.mode || '').toUpperCase() === 'LIVE');
-
-    const calcPnl = (list: any[]) => {
-        let realized = 0, unrealized = 0, activeCount = 0;
-        list.forEach((t: any) => {
-            const status = (t.status || '').toUpperCase();
-            if (status === 'CLOSED') {
-                realized += (t.pnl || t.realized_pnl || t.total_pnl || 0);
-            } else if (status === 'ACTIVE') {
-                // Compute unrealized PnL from prices (avoids stale engine values)
-                const entry = t.entry_price || t.entryPrice || 0;
-                const current = t.current_price || t.currentPrice || entry;
-                const lev = t.leverage || 1;
-                const cap = t.capital || t.position_size || 100;
-                const pos = (t.side || t.position || '').toUpperCase();
-                const isLong = pos === 'BUY' || pos === 'LONG';
-                if (entry > 0) {
-                    const diff = isLong ? (current - entry) : (entry - current);
-                    unrealized += Math.round(diff / entry * lev * cap * 10000) / 10000;
-                }
-                activeCount++;
+    let totalPnl = 0;
+    allTrades.forEach((t: any) => {
+        const status = (t.status || '').toUpperCase();
+        if (status === 'CLOSED') {
+            totalPnl += (t.pnl || t.realized_pnl || t.total_pnl || 0);
+        } else if (status === 'ACTIVE') {
+            const entry = t.entry_price || t.entryPrice || 0;
+            const current = t.current_price || t.currentPrice || entry;
+            const lev = t.leverage || 1;
+            const cap = t.capital || t.position_size || 100;
+            const pos = (t.side || t.position || '').toUpperCase();
+            const isLong = pos === 'BUY' || pos === 'LONG';
+            if (entry > 0) {
+                const diff = isLong ? (current - entry) : (entry - current);
+                totalPnl += Math.round(diff / entry * lev * cap * 10000) / 10000;
             }
-        });
-        return { realized, unrealized, total: realized + unrealized, activeCount, count: list.length };
-    };
-
-    const paperPnl = calcPnl(paperTrades);
-    const livePnl = calcPnl(liveTrades);
-    const totalPnl = paperPnl.total + livePnl.total;
-    const totalActiveCount = paperPnl.activeCount + livePnl.activeCount;
+        }
+    });
     const totalRoi = MAX_CAPITAL > 0 ? (totalPnl / MAX_CAPITAL * 100) : 0;
     const sign = totalPnl >= 0 ? '+' : '';
     const mainColor = totalPnl >= 0 ? '#22C55E' : '#EF4444';
@@ -326,112 +311,65 @@ export function PnlCard({ trades, coinDcxBalance, binanceBalance }: PnlCardProps
         return () => { if (chartRef.current) chartRef.current.destroy(); };
     }, [allTrades]);
 
-    const PnlRow = ({ label, pnl, color: labelColor, count }: { label: string; pnl: { total: number; realized: number; unrealized: number; activeCount: number; count: number }; color: string; count: number }) => {
-        const capital = pnl.activeCount * CAPITAL_PER_TRADE;
-        const roi = capital > 0 ? (pnl.total / capital * 100) : (pnl.total !== 0 ? 100 : 0);
-        const pColor = pnl.total >= 0 ? '#22C55E' : '#EF4444';
-        const s = pnl.total >= 0 ? '+' : '';
-        return (
-            <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '8px 12px', borderRadius: '10px',
-                background: `${labelColor}0A`, border: `1px solid ${labelColor}18`,
-            }}>
-                <div>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: labelColor, textTransform: 'uppercase' as const, letterSpacing: '0.5px' }}>
-                        {label}
-                    </span>
-                    <span style={{ fontSize: '10px', color: '#6B7280', marginLeft: '6px' }}>
-                        {count} trades · {pnl.activeCount} active
-                    </span>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: '16px', fontWeight: 700, color: pColor, fontFamily: 'monospace' }}>
-                        {s}${pnl.total.toFixed(2)}
-                    </span>
-                    <span style={{ fontSize: '11px', color: pColor, marginLeft: '8px', fontWeight: 600 }}>
-                        ({s}{roi.toFixed(1)}%)
-                    </span>
-                </div>
-            </div>
-        );
-    };
-
     return (
         <div style={{
             background: 'rgba(17, 24, 39, 0.8)',
             backdropFilter: 'blur(12px)',
             border: '1px solid rgba(255,255,255,0.06)',
             borderRadius: '16px',
-            padding: '20px 24px',
+            padding: '16px 20px',
         }}>
-            {/* Header: PNL headline */}
-            <div style={{ marginBottom: '12px', textAlign: 'center' }}>
+            {/* Header */}
+            <div style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{
                     fontSize: '11px', fontWeight: 600, textTransform: 'uppercase' as const,
-                    letterSpacing: '1.5px', color: '#9CA3AF', marginBottom: '4px',
-                }}>P&L Timeline</div>
-                <div style={{ fontSize: '38px', fontWeight: 700, color: mainColor }}>
+                    letterSpacing: '1.5px', color: '#9CA3AF',
+                }}>Wallet Balance</div>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: mainColor }}>
                     {sign}${totalPnl.toFixed(2)}
-                </div>
-                <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '2px' }}>
-                    {sign}{totalRoi.toFixed(2)}% ROI on ${MAX_CAPITAL}
+                    <span style={{ fontSize: '10px', color: '#9CA3AF', fontWeight: 400, marginLeft: '6px' }}>
+                        {sign}{totalRoi.toFixed(2)}% ROI
+                    </span>
                 </div>
             </div>
 
-            {/* Chart Canvas */}
-            <div style={{ height: '160px', marginBottom: '12px' }}>
+            {/* Chart Canvas — reduced height */}
+            <div style={{ height: '90px', marginBottom: '10px' }}>
                 <canvas ref={canvasRef} />
             </div>
 
-            {/* Paper / Live breakdown */}
-            <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '8px' }}>
-                {paperTrades.length > 0 && (
-                    <PnlRow label="🟢 Paper" pnl={paperPnl} color="#22C55E" count={paperTrades.length} />
-                )}
-                {liveTrades.length > 0 && (
-                    <PnlRow label="🔴 Live" pnl={livePnl} color="#EF4444" count={liveTrades.length} />
-                )}
-                {paperTrades.length === 0 && liveTrades.length === 0 && (
-                    <div style={{ fontSize: '12px', color: '#6B7280', textAlign: 'center', padding: '8px' }}>
-                        No trades yet
-                    </div>
-                )}
-            </div>
-
-            {/* Wallet Balances */}
-            {(coinDcxBalance != null || binanceBalance != null) && (
-                <div style={{ marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '10px' }}>
-                    <div style={{
-                        fontSize: '9px', fontWeight: 600, textTransform: 'uppercase' as const,
-                        letterSpacing: '1px', color: '#6B7280', marginBottom: '6px',
-                    }}>Wallet Balances</div>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                        {binanceBalance != null && (
-                            <div style={{
-                                flex: 1, padding: '8px 10px', borderRadius: '10px',
-                                background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)',
-                            }}>
-                                <div style={{ fontSize: '9px', fontWeight: 600, color: '#F59E0B', marginBottom: '2px' }}>🔶 Binance</div>
-                                <div style={{ fontSize: '16px', fontWeight: 700, color: '#F0F4F8', fontFamily: 'monospace' }}>
-                                    ${binanceBalance.toFixed(2)}
-                                </div>
-                            </div>
-                        )}
-                        {coinDcxBalance != null && (
-                            <div style={{
-                                flex: 1, padding: '8px 10px', borderRadius: '10px',
-                                background: 'rgba(14,165,233,0.06)', border: '1px solid rgba(14,165,233,0.15)',
-                            }}>
-                                <div style={{ fontSize: '9px', fontWeight: 600, color: '#0EA5E9', marginBottom: '2px' }}>🇮🇳 CoinDCX</div>
-                                <div style={{ fontSize: '16px', fontWeight: 700, color: '#F0F4F8', fontFamily: 'monospace' }}>
-                                    ${coinDcxBalance.toFixed(2)}
-                                </div>
-                            </div>
-                        )}
-                    </div>
+            {/* Always show both exchanges */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+                {/* Binance */}
+                <div style={{
+                    flex: 1, padding: '8px 10px', borderRadius: '10px',
+                    background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)',
+                }}>
+                    <div style={{ fontSize: '9px', fontWeight: 600, color: '#F59E0B', marginBottom: '3px' }}>🔶 Binance</div>
+                    {binanceBalance != null ? (
+                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#F0F4F8', fontFamily: 'monospace' }}>
+                            ${binanceBalance.toFixed(2)}
+                        </div>
+                    ) : (
+                        <div style={{ fontSize: '11px', color: '#6B7280', fontStyle: 'italic' }}>Not Connected</div>
+                    )}
                 </div>
-            )}
+
+                {/* CoinDCX */}
+                <div style={{
+                    flex: 1, padding: '8px 10px', borderRadius: '10px',
+                    background: 'rgba(14,165,233,0.06)', border: '1px solid rgba(14,165,233,0.15)',
+                }}>
+                    <div style={{ fontSize: '9px', fontWeight: 600, color: '#0EA5E9', marginBottom: '3px' }}>🇮🇳 CoinDCX</div>
+                    {coinDcxBalance != null ? (
+                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#F0F4F8', fontFamily: 'monospace' }}>
+                            ${coinDcxBalance.toFixed(2)}
+                        </div>
+                    ) : (
+                        <div style={{ fontSize: '11px', color: '#6B7280', fontStyle: 'italic' }}>Not Connected</div>
+                    )}
+                </div>
+            </div>
         </div>
     );
 }
