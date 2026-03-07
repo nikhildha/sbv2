@@ -36,6 +36,27 @@ _engine_bot = None
 logger = logging.getLogger("EngineAPI")
 
 
+def _restore_mode_on_startup():
+    """On startup: restore live mode from engine_mode.json if Railway PAPER_TRADE is still true.
+    This persists the runtime mode switch across engine restarts when env var isn't updated."""
+    try:
+        mode_file = os.path.join(config.DATA_DIR, "engine_mode.json")
+        if os.path.exists(mode_file):
+            with open(mode_file, "r") as f:
+                saved = json.load(f)
+            if saved.get("mode") == "live":
+                config.PAPER_TRADE = False
+                config.EXCHANGE_LIVE = saved.get("exchange", "coindcx")
+                logger.info(
+                    "Startup: mode restored from engine_mode.json → live (exchange=%s)",
+                    config.EXCHANGE_LIVE,
+                )
+    except Exception as e:
+        logger.warning("Startup: could not restore mode from engine_mode.json: %s", e)
+
+_restore_mode_on_startup()
+
+
 # ─── Helper: read JSON file safely ───────────────────────────────────
 def _read_json(filename, default=None):
     path = os.path.join(config.DATA_DIR, filename)
@@ -104,6 +125,10 @@ def api_health():
         "loop_interval": config.LOOP_INTERVAL_SECONDS,
         "top_coins_limit": config.TOP_COINS_LIMIT,
         "hmm_states": config.HMM_N_STATES,
+        # Trading mode — critical for debugging live vs paper
+        "paper_trade": config.PAPER_TRADE,
+        "exchange_live": config.EXCHANGE_LIVE or "",
+        "mode": "paper" if config.PAPER_TRADE else f"live:{config.EXCHANGE_LIVE}",
     })
 
 
