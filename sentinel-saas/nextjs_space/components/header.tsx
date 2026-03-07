@@ -30,7 +30,7 @@ export function Header() {
         <div className="flex items-center justify-between h-16">
           <Link href={session ? '/dashboard' : '/'} className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
             <Shield className="w-8 h-8 text-[var(--color-primary)]" />
-            <span className="text-2xl font-bold text-gradient">Sentinel</span>
+            <span className="text-2xl font-bold text-gradient">Synaptic AI</span>
           </Link>
 
           {/* Desktop Navigation */}

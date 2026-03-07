@@ -117,7 +117,7 @@ export function BotsClient({ bots: initialBots }: BotsClientProps) {
     setLoading(true);
     try {
       const selectedModel = BOT_MODELS.find(m => m.id === deployModel);
-      const botName = `Sentinel Marshal — ${selectedModel?.name || 'Standard'}`;
+      const botName = `Synaptic Marshal — ${selectedModel?.name || 'Standard'}`;
       const res = await fetch('/api/bots/create', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -231,7 +231,7 @@ export function BotsClient({ bots: initialBots }: BotsClientProps) {
 
 
 
-          {/* ── Sentinel Marshal Card (shows when no bots yet) ── */}
+          {/* ── Synaptic Marshal Card (shows when no bots yet) ── */}
           {bots.length === 0 && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
               style={{
@@ -249,7 +249,7 @@ export function BotsClient({ bots: initialBots }: BotsClientProps) {
                 <Shield size={28} color="#22C55E" />
               </div>
               <h3 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '6px', color: '#E5E7EB' }}>
-                Sentinel Marshal
+                Synaptic Marshal
               </h3>
               <p style={{ fontSize: '12px', color: '#6B7280', marginBottom: '6px' }}>
                 HMM-Powered Crypto Trading Engine
@@ -272,7 +272,7 @@ export function BotsClient({ bots: initialBots }: BotsClientProps) {
                     color: '#fff', fontSize: '14px', fontWeight: 700, cursor: 'pointer',
                     transition: 'all 0.2s',
                   }}>
-                  <Rocket size={16} /> Deploy Sentinel Marshal
+                  <Rocket size={16} /> Deploy Synaptic Marshal
                 </button>
               </div>
             </motion.div>
@@ -575,7 +575,7 @@ export function BotsClient({ bots: initialBots }: BotsClientProps) {
                     <Rocket size={22} color="#22C55E" />
                   </div>
                   <div>
-                    <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#E5E7EB' }}>Deploy Sentinel Marshal</h2>
+                    <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#E5E7EB' }}>Deploy Synaptic Marshal</h2>
                     <p style={{ fontSize: '12px', color: '#6B7280' }}>Configure and launch your trading bot</p>
                   </div>
                 </div>
