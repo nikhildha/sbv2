@@ -24,7 +24,7 @@ export async function POST() {
             const deletedCount = await clearUserTrades(userId);
             return NextResponse.json({
                 success: true,
-                message: `Cleared ${deletedCount} trades`,
+                message: `Cleared ${deletedCount} closed trades`,
                 deletedCount,
             });
         }

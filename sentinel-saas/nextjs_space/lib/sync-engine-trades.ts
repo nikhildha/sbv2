@@ -61,15 +61,22 @@ export async function syncEngineTrades(
             }
 
             // Resolve botId: prefer engine-stamped bot_id (set via ENGINE_BOT_ID env var).
-            // Verify it belongs to the same user before trusting it — prevents cross-user contamination.
+            // If bot_id is set, it MUST belong to this user — otherwise skip the trade entirely.
+            // This prevents cross-user trade leakage when multiple users share one engine.
             let resolvedBotId = botId;
-            if (t.bot_id && userId) {
+            if (t.bot_id) {
+                if (!userId) continue;  // cannot verify ownership — skip
                 const engineBot = await prisma.bot.findFirst({
                     where: { id: String(t.bot_id), userId },
                     select: { id: true },
                 });
-                if (engineBot) resolvedBotId = engineBot.id;
+                if (engineBot) {
+                    resolvedBotId = engineBot.id;
+                } else {
+                    continue;  // bot_id belongs to a different user — skip
+                }
             }
+            // If t.bot_id is null/empty → fall through with default botId (single-user mode)
 
             // Upsert: create if not exists, update PNL/status if exists
             await prisma.trade.upsert({
@@ -116,7 +123,9 @@ export async function syncEngineTrades(
                     sessionId: activeSession?.id ?? null,
                 },
                 update: {
-                    status,
+                    // Only overwrite status when engine says 'closed'.
+                    // If engine says 'active', leave DB status alone — preserves MANUAL_CLOSE / BOT_STOPPED.
+                    ...(status === 'closed' ? { status: 'closed' } : {}),
                     currentPrice: t.current_price || t.currentPrice || null,
                     exitPrice: t.exit_price || t.exitPrice || null,
                     activePnl: t.unrealized_pnl || t.active_pnl || 0,
@@ -210,9 +219,12 @@ export async function getUserTrades(userId: string, statusFilter?: string, botId
  * Delete all trades for a specific user (for "clear trades" button).
  */
 export async function clearUserTrades(userId: string): Promise<number> {
+    // Only delete CLOSED/CANCELLED trades — active trades must be exited first.
+    // Active trades deleted here would just come back on the next engine sync.
     const result = await prisma.trade.deleteMany({
         where: {
             bot: { userId },
+            status: { in: ['closed', 'cancelled', 'CLOSED', 'CANCELLED'] },
         },
     });
     return result.count;
