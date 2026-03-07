@@ -110,11 +110,11 @@ export function IntelligenceClient() {
     const liveFunding = liveMarket?.funding || {};
 
     // Merge live Binance data into coin states
-    const coins = Object.values(coinStates).map((c: any) => {
-        const sym = c.symbol || '';
-        const live = liveFunding[sym] || {};
+    const coins = Object.entries(coinStates).map(([symbol, c]: [string, any]) => {
+        const live = liveFunding[symbol] || {};
         return {
             ...c,
+            symbol, // inject key as symbol
             // Merge live funding rate if engine data missing/zero
             features: {
                 ...c.features,

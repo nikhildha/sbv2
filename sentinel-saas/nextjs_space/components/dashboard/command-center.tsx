@@ -450,7 +450,7 @@ export function SignalSummaryTable({ coinStates, multi }: SignalSummaryProps) {
     useEffect(() => { if (coinStates) setLiveCoinStates(coinStates); }, [coinStates]);
     useEffect(() => { if (multi) setLiveMulti(multi); }, [multi]);
 
-    const coins = liveCoinStates ? Object.values(liveCoinStates) : [];
+    const coins = liveCoinStates ? Object.entries(liveCoinStates).map(([sym, c]: [string, any]) => ({ ...c, symbol: sym })) : [];
     const allSymbols = coins.map((c: any) => c.symbol || '').filter(Boolean).sort();
     const lastCycle = liveMulti?.last_analysis_time || null;
     const intervalSec = liveMulti?.analysis_interval_seconds || 0;
