@@ -17,6 +17,14 @@ export async function syncEngineTrades(
 ): Promise<number> {
     if (!engineTrades || engineTrades.length === 0) return 0;
 
+    // Purge stale trades: delete any DB records for this bot that predate the bot's start time.
+    // This cleans up trades that were synced before the next-cycle-only filter was enforced.
+    if (botStartedAt) {
+        await prisma.trade.deleteMany({
+            where: { botId, entryTime: { lt: botStartedAt } },
+        });
+    }
+
     // Look up active session once per sync call (not per trade)
     const activeSession = await getActiveBotSession(botId);
 
