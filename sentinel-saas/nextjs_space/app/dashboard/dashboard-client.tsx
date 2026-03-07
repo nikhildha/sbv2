@@ -164,13 +164,30 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
   const liveActiveTrades = liveTrades.filter((t: any) => (t.status || '').toUpperCase() === 'ACTIVE');
   const liveClosedTrades = liveTrades.filter((t: any) => (t.status || '').toUpperCase() === 'CLOSED');
   const liveTotalPnl = liveClosedTrades.reduce((sum: number, t: any) => sum + (t.realized_pnl || t.pnl || t.total_pnl || 0), 0);
-  const liveActivePnl = liveActiveTrades.reduce((sum: number, t: any) => sum + (t.unrealized_pnl || t.active_pnl || 0), 0);
+
+  // Compute active PNL from prices (avoids stale engine values)
+  const computePnlFromPrices = (t: any) => {
+    const entry = t.entry_price || t.entryPrice || 0;
+    const current = t.current_price || t.currentPrice || entry;
+    const lev = t.leverage || 1;
+    const cap = t.capital || t.position_size || 100;
+    const pos = (t.side || t.position || '').toUpperCase();
+    const isLong = pos === 'BUY' || pos === 'LONG';
+    if (entry <= 0) return 0;
+    return Math.round((isLong ? current - entry : entry - current) / entry * lev * cap * 10000) / 10000;
+  };
+
+  const liveActivePnl = liveActiveTrades.reduce((sum: number, t: any) => sum + computePnlFromPrices(t), 0);
 
   // Paper vs Live PNL split
   const paperActiveTrades = liveActiveTrades.filter((t: any) => (t.mode || 'paper').toUpperCase() === 'PAPER');
   const liveModeTrades = liveActiveTrades.filter((t: any) => (t.mode || '').toUpperCase() === 'LIVE');
-  const paperActivePnl = paperActiveTrades.reduce((sum: number, t: any) => sum + (t.unrealized_pnl || t.active_pnl || 0), 0);
-  const liveActiveModePnl = liveModeTrades.reduce((sum: number, t: any) => sum + (t.unrealized_pnl || t.active_pnl || 0), 0);
+  const paperActivePnl = paperActiveTrades.reduce((sum: number, t: any) => sum + computePnlFromPrices(t), 0);
+  const liveActiveModePnl = liveModeTrades.reduce((sum: number, t: any) => sum + computePnlFromPrices(t), 0);
+  const paperCapital = paperActiveTrades.length * 100;
+  const liveCapital = liveModeTrades.length * 100;
+  const paperPnlPct = paperCapital > 0 ? (paperActivePnl / paperCapital * 100) : 0;
+  const livePnlPct = liveCapital > 0 ? (liveActiveModePnl / liveCapital * 100) : 0;
 
   const CAPITAL_PER_TRADE = 100;
   const MAX_CAPITAL = 2500;
@@ -182,7 +199,9 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
     activeTrades: liveActiveTrades.length || stats?.activeTrades || 0,
     totalPnl: liveTotalPnl + liveActivePnl,
     paperActivePnl,
+    paperPnlPct,
     liveActivePnl: liveActiveModePnl,
+    livePnlPct,
     usedCapital,
   };
 
@@ -317,14 +336,14 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
               animated
             />
             <StatsCard
-              title="Paper Active PNL"
-              value={formatCurrency(liveStats.paperActivePnl)}
+              title="Paper Trading PnL"
+              value={`${formatCurrency(liveStats.paperActivePnl)} (${liveStats.paperPnlPct >= 0 ? '+' : ''}${liveStats.paperPnlPct.toFixed(1)}%)`}
               icon={DollarSign}
               trend={liveStats.paperActivePnl >= 0 ? 'up' : 'down'}
             />
             <StatsCard
-              title="Live Active PNL"
-              value={formatCurrency(liveStats.liveActivePnl)}
+              title="Live Trading PnL"
+              value={`${formatCurrency(liveStats.liveActivePnl)} (${liveStats.livePnlPct >= 0 ? '+' : ''}${liveStats.livePnlPct.toFixed(1)}%)`}
               icon={TrendingUp}
               trend={liveStats.liveActivePnl >= 0 ? 'up' : 'down'}
             />
@@ -420,7 +439,7 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
                   <table style={{ width: '100%', minWidth: '1200px', borderCollapse: 'collapse', fontSize: '12px' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                        {['Bot', 'Coin', 'Side', 'Entry', 'SL Price', 'Target', 'SL Type', 'Target Type', 'Status', 'PNL', 'Entry Time'].map(h => (
+                        {['Bot', 'Coin', 'Side', 'Entry', 'SL Price', 'Target', 'Status', 'PNL $', 'PNL %'].map(h => (
                           <th key={h} style={{
                             textAlign: 'left', padding: '12px 14px',
                             fontSize: '10px', fontWeight: 600, textTransform: 'uppercase',
@@ -445,22 +464,12 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
                           const entry = trade.entry_price || trade.entryPrice || 0;
                           const sl = trade.stop_loss || trade.stopLoss || 0;
                           const tp = trade.take_profit || trade.takeProfit || 0;
-                          const slType = trade.sl_type || trade.slType || 'Default';
-                          const tpType = trade.tp_type || trade.targetType || 'T1';
                           const status = (trade.status || '').toUpperCase();
-                          const pnl = trade.unrealized_pnl || trade.active_pnl || trade.pnl || 0;
                           const isLong = side === 'BUY' || side === 'LONG';
-                          const entryTime = trade.entry_time || trade.entryTime || trade.timestamp || '';
-                          const fmtTime = (() => {
-                            try {
-                              // Trim Python microsecond precision (.123456 → .123) for cross-browser compat
-                              const sanitized = String(entryTime).replace(/(\.\d{3})\d+/, '$1');
-                              const d = new Date(sanitized);
-                              if (isNaN(d.getTime())) return '—';
-                              return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' }) + ' ' +
-                                d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
-                            } catch { return '—'; }
-                          })();
+                          // Compute PNL from prices (avoids stale engine values)
+                          const pnl = status === 'ACTIVE' ? computePnlFromPrices(trade) : (trade.realized_pnl || trade.pnl || 0);
+                          const cap = trade.capital || trade.position_size || 100;
+                          const pnlPct = cap > 0 ? (pnl / cap * 100) : 0;
                           return (
                             <tr key={trade.trade_id || i} style={{
                               borderBottom: '1px solid rgba(255,255,255,0.04)',
@@ -494,23 +503,6 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
                               </td>
                               <td style={{ padding: '10px 14px' }}>
                                 <span style={{
-                                  padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 600,
-                                  background: slType.includes('Trail') ? 'rgba(245,158,11,0.15)' : 'rgba(107,114,128,0.15)',
-                                  color: slType.includes('Trail') ? '#F59E0B' : '#9CA3AF',
-                                }}>
-                                  {slType}
-                                </span>
-                              </td>
-                              <td style={{ padding: '10px 14px' }}>
-                                <span style={{
-                                  padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 600,
-                                  background: 'rgba(6,182,212,0.12)', color: '#06B6D4',
-                                }}>
-                                  {tpType}
-                                </span>
-                              </td>
-                              <td style={{ padding: '10px 14px' }}>
-                                <span style={{
                                   padding: '3px 10px', borderRadius: '10px', fontSize: '10px', fontWeight: 700,
                                   background: status === 'ACTIVE' ? 'rgba(34,197,94,0.15)' : 'rgba(107,114,128,0.15)',
                                   color: status === 'ACTIVE' ? '#22C55E' : '#9CA3AF',
@@ -525,8 +517,11 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
                               }}>
                                 {pnl >= 0 ? '+' : ''}${Number(pnl).toFixed(2)}
                               </td>
-                              <td style={{ padding: '10px 14px', fontSize: '11px', color: '#9CA3AF' }}>
-                                {fmtTime}
+                              <td style={{
+                                padding: '10px 14px', fontWeight: 700, fontFamily: 'monospace',
+                                color: pnlPct >= 0 ? '#22C55E' : '#EF4444',
+                              }}>
+                                {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%
                               </td>
                             </tr>
                           );

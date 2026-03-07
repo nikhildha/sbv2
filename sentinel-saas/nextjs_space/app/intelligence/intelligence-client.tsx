@@ -182,6 +182,11 @@ export function IntelligenceClient() {
                         />
                     </motion.div>
 
+                    {/* ═══ Regime Distribution (Coin Categories) ═══ */}
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.07 }} className="mb-8">
+                        <RegimeDistribution coins={coins} />
+                    </motion.div>
+
                     {/* ═══ Section 1: Sentiment Intelligence ═══ */}
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mb-8">
                         <SectionHeader icon={<Newspaper className="w-5 h-5" style={{ color: '#0891B2' }} />} title="Sentiment Intelligence" sub="VADER NLP · Fear & Greed Index · CryptoPanic · Multi-Source Analysis" />
@@ -223,6 +228,63 @@ export function IntelligenceClient() {
                 </div>
             </main>
         </div>
+    );
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/*  REGIME DISTRIBUTION (moved from Dashboard RegimeCard)            */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+function RegimeDistribution({ coins }: { coins: any[] }) {
+    const regimeCoins: Record<string, string[]> = { bullish: [], bearish: [], sideways: [], crash: [] };
+    coins.forEach((c: any) => {
+        const r = (c.regime || '').toUpperCase();
+        const name = (c.symbol || '').replace('USDT', '');
+        if (!name) return;
+        if (r.includes('BULL')) regimeCoins.bullish.push(name);
+        else if (r.includes('CRASH') || r.includes('PANIC')) regimeCoins.crash.push(name);
+        else if (r.includes('BEAR')) regimeCoins.bearish.push(name);
+        else if (r.includes('CHOP') || r.includes('SIDE')) regimeCoins.sideways.push(name);
+    });
+
+    const categories = [
+        { label: 'Bullish', coins: regimeCoins.bullish, color: '#22C55E', emoji: '🟢' },
+        { label: 'Bearish', coins: regimeCoins.bearish, color: '#EF4444', emoji: '🔴' },
+        { label: 'Sideways', coins: regimeCoins.sideways, color: '#F59E0B', emoji: '🟡' },
+        { label: 'Crash', coins: regimeCoins.crash, color: '#DC2626', emoji: '💀' },
+    ].filter(c => c.coins.length > 0);
+
+    if (categories.length === 0) return null;
+
+    return (
+        <Card>
+            <CardTitle sub="Coins grouped by current HMM regime classification">Regime Distribution</CardTitle>
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(categories.length, 4)}, 1fr)`, gap: '12px' }}>
+                {categories.map(cat => (
+                    <div key={cat.label} style={{
+                        padding: '14px', borderRadius: '12px',
+                        background: `${cat.color}0D`,
+                        border: `1px solid ${cat.color}22`,
+                    }}>
+                        <div style={{
+                            fontSize: '11px', fontWeight: 700, color: cat.color,
+                            textTransform: 'uppercase' as const, letterSpacing: '0.8px', marginBottom: '8px',
+                            display: 'flex', alignItems: 'center', gap: '6px',
+                        }}>
+                            <span style={{ fontSize: '14px' }}>{cat.emoji}</span> {cat.label}
+                            <span style={{
+                                fontSize: '10px', fontWeight: 600, padding: '1px 6px',
+                                borderRadius: '8px', background: `${cat.color}22`, color: cat.color,
+                            }}>{cat.coins.length}</span>
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#D1D5DB', lineHeight: '1.7', fontWeight: 500 }}>
+                            {cat.coins.join(', ')}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </Card>
     );
 }
 

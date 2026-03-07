@@ -137,25 +137,7 @@ export function RegimeCard({ regime, confidence, symbol, macroRegime, trend15m, 
             </div>
 
 
-            {/* Coin categories by regime */}
-            {categories.length > 0 && (
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(categories.length, 4)}, 1fr)`, gap: '8px' }}>
-                    {categories.map(cat => (
-                        <div key={cat.label} style={{
-                            padding: '8px', borderRadius: '10px',
-                            background: `${cat.color}0D`,
-                            border: `1px solid ${cat.color}22`,
-                        }}>
-                            <div style={{ fontSize: '9px', fontWeight: 700, color: cat.color, textTransform: 'uppercase' as const, letterSpacing: '0.5px', marginBottom: '4px' }}>
-                                {cat.emoji} {cat.label}
-                            </div>
-                            <div style={{ fontSize: '10px', color: '#D1D5DB', lineHeight: '1.5' }}>
-                                {cat.coins.join(', ')}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
+
 
             {/* Background glow */}
             <div style={{
@@ -333,10 +315,7 @@ export function PnlCard({ trades, coinDcxBalance, binanceBalance }: PnlCardProps
                 </div>
             </div>
 
-            {/* Chart Canvas — reduced height */}
-            <div style={{ height: '90px', marginBottom: '10px' }}>
-                <canvas ref={canvasRef} />
-            </div>
+            {/* Wallet Balances */}
 
             {/* Always show both exchanges */}
             <div style={{ display: 'flex', gap: '8px' }}>
