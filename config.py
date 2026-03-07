@@ -173,7 +173,7 @@ RSI_OVERBOUGHT = 65
 SIDEWAYS_POSITION_REDUCTION = 0.30  # 30% smaller positions in chop
 
 # ─── Bot Loop ────────────────────────────────────────────────────────────────────
-LOOP_INTERVAL_SECONDS = 30        # 30-second heartbeat (checks commands, updates state)
+LOOP_INTERVAL_SECONDS = 10        # 10-second heartbeat (faster trailing SL sync for live trading)
 ANALYSIS_INTERVAL_SECONDS = 300   # 5-minute full analysis cycle (HMM scan, trades)
 ERROR_RETRY_SECONDS = 60          # Retry after error
 
