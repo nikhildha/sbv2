@@ -179,15 +179,28 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
 
   const liveActivePnl = liveActiveTrades.reduce((sum: number, t: any) => sum + computePnlFromPrices(t), 0);
 
-  // Paper vs Live PNL split
+  // Paper vs Live split — BOTH active (unrealized) + closed (realized) trades
   const paperActiveTrades = liveActiveTrades.filter((t: any) => (t.mode || 'paper').toUpperCase() === 'PAPER');
+  const paperClosedTrades = liveClosedTrades.filter((t: any) => (t.mode || 'paper').toUpperCase() === 'PAPER');
   const liveModeTrades = liveActiveTrades.filter((t: any) => (t.mode || '').toUpperCase() === 'LIVE');
-  const paperActivePnl = paperActiveTrades.reduce((sum: number, t: any) => sum + computePnlFromPrices(t), 0);
-  const liveActiveModePnl = liveModeTrades.reduce((sum: number, t: any) => sum + computePnlFromPrices(t), 0);
-  const paperCapital = paperActiveTrades.length * 100;
-  const liveCapital = liveModeTrades.length * 100;
-  const paperPnlPct = paperCapital > 0 ? (paperActivePnl / paperCapital * 100) : 0;
-  const livePnlPct = liveCapital > 0 ? (liveActiveModePnl / liveCapital * 100) : 0;
+  const liveClosedModeTrades = liveClosedTrades.filter((t: any) => (t.mode || '').toUpperCase() === 'LIVE');
+
+  // Unrealized PnL from active trades (via live prices)
+  const paperUnrealizedPnl = paperActiveTrades.reduce((sum: number, t: any) => sum + computePnlFromPrices(t), 0);
+  const liveUnrealizedPnl = liveModeTrades.reduce((sum: number, t: any) => sum + computePnlFromPrices(t), 0);
+
+  // Realized PnL from closed trades
+  const paperRealizedPnl = paperClosedTrades.reduce((sum: number, t: any) => sum + (t.realized_pnl || t.pnl || t.total_pnl || 0), 0);
+  const liveRealizedPnl = liveClosedModeTrades.reduce((sum: number, t: any) => sum + (t.realized_pnl || t.pnl || t.total_pnl || 0), 0);
+
+  // Total = realized + unrealized
+  const paperTotalPnl = paperRealizedPnl + paperUnrealizedPnl;
+  const liveTotalModePnl = liveRealizedPnl + liveUnrealizedPnl;
+
+  const paperCapital = (paperActiveTrades.length + paperClosedTrades.length) * 100 || 1;
+  const liveCapital = (liveModeTrades.length + liveClosedModeTrades.length) * 100 || 1;
+  const paperPnlPct = paperCapital > 0 ? (paperTotalPnl / paperCapital * 100) : 0;
+  const livePnlPct = liveCapital > 0 ? (liveTotalModePnl / liveCapital * 100) : 0;
 
   const CAPITAL_PER_TRADE = 100;
   const MAX_CAPITAL = 2500;
@@ -198,9 +211,9 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
     activeBots: stats?.activeBots ?? (bots?.filter((b: any) => b?.isActive)?.length ?? 0),
     activeTrades: liveActiveTrades.length || stats?.activeTrades || 0,
     totalPnl: liveTotalPnl + liveActivePnl,
-    paperActivePnl,
+    paperTotalPnl,
     paperPnlPct,
-    liveActivePnl: liveActiveModePnl,
+    liveTotalPnl: liveTotalModePnl,
     livePnlPct,
     usedCapital,
   };
@@ -335,14 +348,14 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
             />
             <StatsCard
               title="Total Paper PnL"
-              value={formatCurrency(liveStats.paperActivePnl)}
-              trend={liveStats.paperActivePnl >= 0 ? 'up' : 'down'}
+              value={formatCurrency(liveStats.paperTotalPnl)}
+              trend={liveStats.paperTotalPnl >= 0 ? 'up' : 'down'}
               trendValue={`${liveStats.paperPnlPct >= 0 ? '+' : ''}${liveStats.paperPnlPct.toFixed(1)}%`}
             />
             <StatsCard
               title="Total Live PnL"
-              value={formatCurrency(liveStats.liveActivePnl)}
-              trend={liveStats.liveActivePnl >= 0 ? 'up' : 'down'}
+              value={formatCurrency(liveStats.liveTotalPnl)}
+              trend={liveStats.liveTotalPnl >= 0 ? 'up' : 'down'}
               trendValue={`${liveStats.livePnlPct >= 0 ? '+' : ''}${liveStats.livePnlPct.toFixed(1)}%`}
             />
           </motion.div>

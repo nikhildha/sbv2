@@ -709,34 +709,21 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
             const allTrades = trades ?? [];
             if (allTrades.length < 1) return null;
 
-            // ── Build data points: one per trade sorted by time ──
-            // Closed trades contribute realized PnL at exit time
-            // Active trades contribute unrealized PnL at current time
+            // Use the same values as the stat cards above
+            const totalUnrealized = stats.unrealizedPnl;
+            const cumRealized = stats.realizedPnl;
+
+            // Build cumulative realized PnL over time for chart line
             const closed = allTrades
               .filter(t => (t.status || '').toLowerCase() !== 'active' && t.exitTime)
               .sort((a, b) => new Date(a.exitTime!).getTime() - new Date(b.exitTime!).getTime());
 
             const active = allTrades.filter(t => (t.status || '').toLowerCase() === 'active');
 
-            // Compute unrealized PnL for active trades using live prices
-            let totalUnrealized = 0;
-            active.forEach(t => {
-              const sym = (t.symbol || t.coin + 'USDT').toUpperCase();
-              const liveP = livePrices[sym] || t.currentPrice || t.entryPrice;
-              const entry = t.entryPrice || 0;
-              const lev = t.leverage || 1;
-              const cap = t.capital || 100;
-              if (entry > 0) {
-                const dir = (t.position || '').toLowerCase() === 'short' ? -1 : 1;
-                totalUnrealized += dir * ((liveP - entry) / entry) * lev * cap;
-              }
-            });
-
-            // Build cumulative realized PnL over time
-            let cumRealized = 0;
+            let cumR = 0;
             const realizedPoints = closed.map(t => {
-              cumRealized += t.totalPnl || 0;
-              return { time: new Date(t.exitTime!).getTime(), realized: cumRealized, total: cumRealized };
+              cumR += t.totalPnl || 0;
+              return { time: new Date(t.exitTime!).getTime(), realized: cumR, total: cumR };
             });
 
             // Add current moment with unrealized on top
@@ -748,9 +735,8 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
 
             if (allPoints.length < 1) return null;
 
-            const totalPnl = allPoints[allPoints.length - 1].total;
+            const totalPnl = stats.combinedPnl;
             const pnlColor = totalPnl >= 0 ? '#22C55E' : '#EF4444';
-            const pnlGlow = totalPnl >= 0 ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.4)';
 
             // Y-axis range for PnL
             const allValues = allPoints.map(p => p.total);
@@ -801,8 +787,6 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
             const dateLabels = [...new Set(labelIndices)].map(i => allPoints[i]);
 
             // Stats
-            const wins = closed.filter(t => (t.totalPnl || 0) > 0).length;
-            const winRate = closed.length > 0 ? (wins / closed.length * 100) : 0;
 
             return (
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="mt-8">
@@ -850,11 +834,11 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
                     flexWrap: 'wrap' as const,
                   }}>
                     {[
-                      { label: 'Realized', value: fmt$(cumRealized), color: cumRealized >= 0 ? '#22C55E' : '#EF4444' },
-                      { label: 'Unrealized', value: fmt$(totalUnrealized), color: totalUnrealized >= 0 ? '#22C55E' : '#EF4444' },
-                      { label: 'Active', value: `${active.length}`, color: '#06B6D4' },
-                      { label: 'Closed', value: `${closed.length}`, color: '#8B5CF6' },
-                      { label: 'Win Rate', value: `${winRate.toFixed(0)}%`, color: winRate >= 50 ? '#22C55E' : '#EF4444' },
+                      { label: 'Realized', value: fmt$(stats.realizedPnl), color: stats.realizedPnl >= 0 ? '#22C55E' : '#EF4444' },
+                      { label: 'Unrealized', value: fmt$(stats.unrealizedPnl), color: stats.unrealizedPnl >= 0 ? '#22C55E' : '#EF4444' },
+                      { label: 'Active', value: `${stats.active}`, color: '#06B6D4' },
+                      { label: 'Closed', value: `${stats.closed}`, color: '#8B5CF6' },
+                      { label: 'Win Rate', value: `${stats.winRate.toFixed(0)}%`, color: stats.winRate >= 50 ? '#22C55E' : '#EF4444' },
                       ...(btcInRange.length > 0 ? [{ label: 'BTC', value: `$${btcInRange[btcInRange.length - 1].price.toLocaleString()}`, color: '#F59E0B' }] : []),
                     ].map((chip, i) => (
                       <div key={i} style={{
