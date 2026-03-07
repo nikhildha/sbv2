@@ -56,7 +56,8 @@ function mapTrade(t: any) {
     exitReason: t.exit_reason || t.exitReason || null,
     entryTime: t.entry_time || t.entry_timestamp || t.entryTime || t.timestamp || new Date().toISOString(),
     exitTime: t.exit_time || t.exit_timestamp || t.exitTime || null,
-    botName: 'Synaptic Marshal',
+    botName: t.bot_name || t.botName || 'Unknown Bot',
+    botId: t.bot_id || t.botId || null,
     targetType: t.target_type || t.targetType || null,
     sessionId: t.sessionId ?? null,
   };
