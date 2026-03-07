@@ -307,7 +307,7 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
           >
             <div style={{
               display: 'grid',
-              gridTemplateColumns: '1.3fr 0.7fr 1.3fr',
+              gridTemplateColumns: '1.4fr 0.5fr 1.4fr',
               gap: '20px',
             }}>
               <RegimeCard regime={regime} confidence={confidence} symbol={symbol} macroRegime={macroRegime} trend15m={trend15m} coinStates={multi?.coin_states} />
@@ -325,7 +325,7 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
                     background: 'transparent',
                     borderRadius: '20px', padding: '4px 20px',
                     display: 'flex', flexDirection: 'column' as const, alignItems: 'center',
-                    justifyContent: 'center', minHeight: '180px',
+                    justifyContent: 'center', minHeight: '150px',
                     position: 'relative' as const,
                   }}>
                     {/* Title on top */}
@@ -338,7 +338,7 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
                       </div>
                     )}
                     {/* SVG Wireframe Brain */}
-                    <svg viewBox="0 0 200 180" style={{ width: '280px', height: '200px' }}>
+                    <svg viewBox="0 0 200 180" style={{ width: '240px', height: '160px' }}>
                       <defs>
                         <filter id="brainGlow2">
                           <feGaussianBlur stdDeviation="3" result="blur" />

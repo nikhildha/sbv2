@@ -25,6 +25,10 @@ export async function syncEngineTrades(
         });
     }
 
+    // Look up the userId for this bot once — used to verify engine-supplied bot_id ownership
+    const botRecord = await prisma.bot.findUnique({ where: { id: botId }, select: { userId: true } });
+    const userId = botRecord?.userId;
+
     // Look up active session once per sync call (not per trade)
     const activeSession = await getActiveBotSession(botId);
 
@@ -56,15 +60,25 @@ export async function syncEngineTrades(
                 if (!isNaN(d.getTime())) exitTime = d;
             }
 
+            // Resolve botId: prefer engine-stamped bot_id (set via ENGINE_BOT_ID env var).
+            // Verify it belongs to the same user before trusting it — prevents cross-user contamination.
+            let resolvedBotId = botId;
+            if (t.bot_id && userId) {
+                const engineBot = await prisma.bot.findFirst({
+                    where: { id: String(t.bot_id), userId },
+                    select: { id: true },
+                });
+                if (engineBot) resolvedBotId = engineBot.id;
+            }
+
             // Upsert: create if not exists, update PNL/status if exists
             await prisma.trade.upsert({
                 where: {
-                    // Use exchangeOrderId field to store engine trade_id as unique lookup
-                    id: `engine_${engineTradeId}_${botId}`,
+                    id: `engine_${engineTradeId}_${resolvedBotId}`,
                 },
                 create: {
-                    id: `engine_${engineTradeId}_${botId}`,
-                    botId,
+                    id: `engine_${engineTradeId}_${resolvedBotId}`,
+                    botId: resolvedBotId,
                     coin: t.symbol || t.coin || '',
                     position: side === 'buy' || side === 'long' ? 'long' : 'short',
                     regime: t.regime || '',
@@ -136,10 +150,11 @@ export async function syncEngineTrades(
 /**
  * Fetch user's trades from Prisma, scoped to their bots.
  */
-export async function getUserTrades(userId: string, statusFilter?: string) {
+export async function getUserTrades(userId: string, statusFilter?: string, botId?: string) {
     const trades = await prisma.trade.findMany({
         where: {
             bot: { userId },
+            ...(botId ? { botId } : {}),
             ...(statusFilter ? { status: statusFilter.toLowerCase() } : {}),
         },
         orderBy: { entryTime: 'desc' },
@@ -180,7 +195,8 @@ export async function getUserTrades(userId: string, statusFilter?: string) {
         entry_time: t.entryTime.toISOString(),
         exit_time: t.exitTime ? t.exitTime.toISOString() : null,
         exchange: t.bot?.exchange || 'binance_testnet',
-        bot_name: t.bot?.name || 'SM-Standard',
+        bot_name: t.bot?.name || 'Unknown Bot',
+        bot_id: t.botId,
         // Backward compat fields
         realized_pnl: t.status === 'closed' ? t.totalPnl : 0,
         active_pnl: t.activePnl,

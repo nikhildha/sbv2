@@ -210,6 +210,7 @@ def open_trade(symbol, side, leverage, quantity, entry_price, atr,
         "last_funding_check": now_iso,
         "profile_id":       profile_id,
         "bot_name":         bot_name,
+        "bot_id":           config.ENGINE_BOT_ID,   # DB Bot.id — stamped for sync layer
     }
 
     book["trades"].append(trade)

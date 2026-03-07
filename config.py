@@ -13,6 +13,7 @@ BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET", "")
 TESTNET = os.getenv("TESTNET", "true").lower() == "true"
 PAPER_TRADE = True
 ENGINE_USER_ID = "cmmbvbo2l0000j1xo3rqvkfhz"  # Default user for engine trades (admin)
+ENGINE_BOT_ID  = os.getenv("ENGINE_BOT_ID", "")  # DB Bot.id — set in Railway per deployment
 PAPER_MAX_CAPITAL = 2500       # Total portfolio: 25 slots × $100/trade
 
 # ─── CoinDCX API (used for LIVE trading) ────────────────────────────────────────

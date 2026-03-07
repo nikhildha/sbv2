@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
         const { searchParams } = new URL(request.url);
         const statusFilter = searchParams.get('status') || undefined;
         const coinFilter = searchParams.get('coin');
+        const botIdFilter = searchParams.get('botId') || undefined;
         const page = parseInt(searchParams.get('page') || '1');
         const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100);
 
@@ -62,8 +63,8 @@ export async function GET(request: NextRequest) {
             }
         }
 
-        // Read from Prisma — already user-isolated
-        let trades = await getUserTrades(userId, statusFilter);
+        // Read from Prisma — already user-isolated, optionally filtered by botId
+        let trades = await getUserTrades(userId, statusFilter, botIdFilter);
 
         // Apply coin filter
         if (coinFilter) {
@@ -107,7 +108,8 @@ export async function GET(request: NextRequest) {
                 exitPercent: t.exit_percent || null,
                 entryTime: t.entry_time || t.entryTime || t.timestamp || new Date().toISOString(),
                 exitTime: t.exit_time || t.exitTime || null,
-                botName: t.bot_name || 'SM-Standard',
+                botName: t.bot_name || 'Unknown Bot',
+                botId: t.bot_id || null,
                 exchange: t.exchange || 'binance_testnet',
                 mode: t.mode || 'paper',
             })),
