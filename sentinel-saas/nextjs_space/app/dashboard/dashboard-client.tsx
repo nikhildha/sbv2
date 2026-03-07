@@ -268,42 +268,7 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
                   AI Trading Command Center — Monitor your bots and market signals
                 </p>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                {/* Engine Status Indicator */}
-                {(() => {
-                  const engineTs = botState?.multi?.timestamp || botState?.state?.timestamp;
-                  const cycle = botState?.multi?.cycle || 0;
-                  const coinsScanned = botState?.multi?.coins_scanned || 0;
-                  const isEngineRunning = engineTs && (Date.now() - new Date(engineTs).getTime()) < 600000; // 10 min
-                  return (
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: '10px',
-                      padding: '8px 16px', borderRadius: '12px',
-                      background: isEngineRunning ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
-                      border: `1px solid ${isEngineRunning ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
-                    }}>
-                      <div style={{
-                        width: '8px', height: '8px', borderRadius: '50%',
-                        background: isEngineRunning ? '#22C55E' : '#EF4444',
-                        boxShadow: isEngineRunning ? '0 0 8px rgba(34,197,94,0.6)' : 'none',
-                        animation: isEngineRunning ? 'pulse 2s ease-in-out infinite' : 'none',
-                      }} />
-                      <div>
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: isEngineRunning ? '#22C55E' : '#EF4444' }}>
-                          <Zap size={11} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
-                          {isEngineRunning ? 'Engine ON' : 'Engine OFF'}
-                        </div>
-                        {isEngineRunning && (
-                          <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '1px' }}>
-                            Cycle #{cycle} · {coinsScanned} coins scanned
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
 
-              </div>
             </div>
           </motion.div>
 
@@ -316,10 +281,132 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
           >
             <div style={{
               display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
+              gridTemplateColumns: '1fr 1fr 1fr',
               gap: '20px',
             }}>
               <RegimeCard regime={regime} confidence={confidence} symbol={symbol} macroRegime={macroRegime} trend15m={trend15m} coinStates={multi?.coin_states} />
+
+              {/* ═══ Neural Core — Engine Status Card ═══ */}
+              {(() => {
+                const engineTs = botState?.multi?.timestamp || botState?.state?.timestamp;
+                const cycle = botState?.multi?.cycle || 0;
+                const coinsScanned = botState?.multi?.coins_scanned || 0;
+                const deployed = botState?.multi?.deployed_count || 0;
+                const eligible = botState?.multi?.eligible_count || 0;
+                const isOn = engineTs && (Date.now() - new Date(engineTs).getTime()) < 600000;
+                const statusColor = isOn ? '#22C55E' : '#EF4444';
+                const glowColor = isOn ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)';
+
+                return (
+                  <div style={{
+                    background: 'rgba(17,24,39,0.85)',
+                    backdropFilter: 'blur(16px)',
+                    border: `1px solid ${isOn ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)'}`,
+                    borderRadius: '20px',
+                    padding: '20px',
+                    position: 'relative' as const,
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column' as const,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minHeight: '180px',
+                  }}>
+                    {/* Background neural glow */}
+                    <div style={{
+                      position: 'absolute' as const,
+                      top: '50%', left: '50%',
+                      width: '120px', height: '120px',
+                      borderRadius: '50%',
+                      background: `radial-gradient(circle, ${glowColor} 0%, transparent 70%)`,
+                      transform: 'translate(-50%, -50%)',
+                      animation: isOn ? 'pulse 3s ease-in-out infinite' : 'none',
+                    }} />
+
+                    {/* Animated concentric rings */}
+                    {isOn && [60, 45, 30].map((size, i) => (
+                      <div key={i} style={{
+                        position: 'absolute' as const,
+                        top: '50%', left: '50%',
+                        width: `${size}px`, height: `${size}px`,
+                        borderRadius: '50%',
+                        border: `1px solid ${statusColor}`,
+                        opacity: 0.15 + i * 0.1,
+                        transform: 'translate(-50%, -50%)',
+                        animation: `pulse ${2 + i * 0.5}s ease-in-out infinite`,
+                      }} />
+                    ))}
+
+                    {/* Core brain dot */}
+                    <div style={{
+                      width: '14px', height: '14px', borderRadius: '50%',
+                      background: statusColor,
+                      boxShadow: `0 0 20px ${glowColor}, 0 0 40px ${glowColor}`,
+                      animation: isOn ? 'pulse 1.5s ease-in-out infinite' : 'none',
+                      position: 'relative' as const,
+                      zIndex: 2,
+                      marginBottom: '10px',
+                    }} />
+
+                    {/* Title */}
+                    <div style={{
+                      fontSize: '10px', fontWeight: 800, letterSpacing: '3px',
+                      textTransform: 'uppercase' as const,
+                      color: statusColor,
+                      position: 'relative' as const, zIndex: 2,
+                      marginBottom: '4px',
+                    }}>
+                      🧠 Neural Core
+                    </div>
+                    <div style={{
+                      fontSize: '18px', fontWeight: 800,
+                      color: statusColor,
+                      position: 'relative' as const, zIndex: 2,
+                      marginBottom: '8px',
+                    }}>
+                      {isOn ? 'ACTIVE' : 'OFFLINE'}
+                    </div>
+
+                    {/* Stats row */}
+                    {isOn && (
+                      <div style={{
+                        display: 'flex', gap: '12px', position: 'relative' as const, zIndex: 2,
+                      }}>
+                        {[
+                          { label: 'Cycle', value: `#${cycle}` },
+                          { label: 'Scanned', value: coinsScanned },
+                          { label: 'Deployed', value: deployed },
+                        ].map((s, i) => (
+                          <div key={i} style={{
+                            textAlign: 'center' as const,
+                            padding: '4px 10px',
+                            borderRadius: '8px',
+                            background: 'rgba(34,197,94,0.08)',
+                            border: '1px solid rgba(34,197,94,0.12)',
+                          }}>
+                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#E5E7EB', fontFamily: 'monospace' }}>{s.value}</div>
+                            <div style={{ fontSize: '8px', fontWeight: 600, color: '#6B7280', textTransform: 'uppercase' as const, letterSpacing: '0.5px' }}>{s.label}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Neural sparkle dots */}
+                    {isOn && [0, 1, 2, 3, 4, 5].map(i => (
+                      <div key={`dot-${i}`} style={{
+                        position: 'absolute' as const,
+                        width: '2px', height: '2px', borderRadius: '50%',
+                        background: statusColor,
+                        opacity: 0.4,
+                        top: `${20 + Math.sin(i * 1.1) * 35}%`,
+                        left: `${15 + i * 13}%`,
+                        animation: `pulse ${1.5 + i * 0.3}s ease-in-out infinite`,
+                      }} />
+                    ))}
+                  </div>
+                );
+              })()}
+
               <PnlCard trades={trades} binanceBalance={walletBalance.binance} coinDcxBalance={walletBalance.coindcx} />
             </div>
           </motion.div>
