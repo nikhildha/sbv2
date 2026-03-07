@@ -13,8 +13,6 @@ import { format } from 'date-fns';
 
 /* ═══ Default Settings Config ═══ */
 const DEFAULT_CONFIG = {
-  binanceKey: '', binanceSecret: '',
-  coindcxKey: '', coindcxSecret: '',
   topCoinsToScan: 15, maxConcurrentPositions: 10,
   capitalPerTrade: 100, totalCapital: 2500,
   slMultiplier: 0.8, tpMultiplier: 1.0,
@@ -126,6 +124,138 @@ function Row3({ children }: { children: React.ReactNode }) {
   return <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>{children}</div>;
 }
 
+/* ═══ ExchangeBlock — per-exchange Test + Save ═══ */
+type TestResult = { ok: boolean; balance?: number; email?: string; error?: string } | null;
+
+function ExchangeBlock({ exchange, label, accentColor, placeholder }: {
+  exchange: 'binance' | 'coindcx';
+  label: string;
+  accentColor: string;
+  placeholder: { key: string; secret: string };
+}) {
+  const [apiKey, setApiKey] = useState('');
+  const [apiSecret, setApiSecret] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [testResult, setTestResult] = useState<TestResult>(null);
+  const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [savedBalance, setSavedBalance] = useState<number | null | undefined>(undefined);
+  const [savedConnected, setSavedConnected] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/wallet-balance', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d) { setSavedBalance(null); return; }
+        const bal = exchange === 'binance' ? d.binance : d.coindcx;
+        const connected = exchange === 'binance' ? d.binanceConnected : d.coindcxConnected;
+        setSavedBalance(bal);
+        setSavedConnected(connected);
+      })
+      .catch(() => setSavedBalance(null));
+  }, [exchange]);
+
+  const handleTest = async () => {
+    if (!apiKey || !apiSecret) { setTestResult({ ok: false, error: 'Enter API key and secret first' }); return; }
+    setTesting(true); setTestResult(null);
+    try {
+      const res = await fetch('/api/exchange/validate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exchange, apiKey, apiSecret }),
+      });
+      const data = await res.json();
+      if (data.valid) {
+        setTestResult({ ok: true, balance: data.balance ?? data.availableBalance, email: data.email });
+      } else {
+        setTestResult({ ok: false, error: data.error || 'Connection failed' });
+      }
+    } catch { setTestResult({ ok: false, error: 'Network error' }); }
+    finally { setTesting(false); }
+  };
+
+  const handleSave = async () => {
+    if (!apiKey || !apiSecret) { setSaveMsg({ ok: false, text: 'Enter API key and secret first' }); return; }
+    setSaving(true); setSaveMsg(null);
+    try {
+      const res = await fetch('/api/settings/api-keys', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exchange, apiKey, apiSecret }),
+      });
+      if (res.ok) {
+        setSaveMsg({ ok: true, text: 'Saved! Balance updating…' });
+        setTimeout(() => setSaveMsg(null), 5000);
+        setSavedBalance(undefined); setSavedConnected(false);
+        fetch('/api/wallet-balance', { cache: 'no-store' })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => {
+            if (!d) { setSavedBalance(null); return; }
+            setSavedBalance(exchange === 'binance' ? d.binance : d.coindcx);
+            setSavedConnected(exchange === 'binance' ? d.binanceConnected : d.coindcxConnected);
+          })
+          .catch(() => setSavedBalance(null));
+      } else {
+        const d = await res.json();
+        setSaveMsg({ ok: false, text: d.error || 'Failed to save' });
+      }
+    } catch { setSaveMsg({ ok: false, text: 'Network error' }); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ padding: '16px', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', border: `1px solid ${accentColor}22`, marginBottom: '14px' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontSize: '13px', fontWeight: 700, color: accentColor }}>{label}</span>
+          {savedBalance === undefined && <span style={{ fontSize: '10px', color: '#6B7280' }}>checking…</span>}
+          {savedBalance === null && savedConnected && (
+            <span style={{ fontSize: '10px', fontWeight: 600, color: '#F59E0B', background: 'rgba(245,158,11,0.1)', padding: '2px 8px', borderRadius: '6px' }}>🔑 Keys saved · balance unavailable</span>
+          )}
+          {savedBalance != null && (
+            <span style={{ fontSize: '11px', fontWeight: 700, color: '#22C55E', background: 'rgba(34,197,94,0.1)', padding: '2px 8px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <CheckCircle size={10} /> Connected · ${savedBalance.toFixed(2)} USDT
+            </span>
+          )}
+          {savedBalance === null && !savedConnected && (
+            <span style={{ fontSize: '10px', color: '#6B7280', fontStyle: 'italic' }}>Not connected</span>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {testResult?.ok && (
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#22C55E', background: 'rgba(34,197,94,0.12)', padding: '3px 8px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <CheckCircle size={11} /> {testResult.balance != null ? `$${testResult.balance.toFixed(2)} USDT` : testResult.email || 'Connected'}
+            </span>
+          )}
+          {testResult && !testResult.ok && (
+            <span style={{ fontSize: '12px', color: '#EF4444', background: 'rgba(239,68,68,0.1)', padding: '3px 8px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <AlertCircle size={11} /> {testResult.error}
+            </span>
+          )}
+        </div>
+      </div>
+      {/* Inputs */}
+      <Row2>
+        <Field label="API Key">
+          <input type="text" value={apiKey} onChange={e => { setApiKey(e.target.value); setTestResult(null); }} style={inputStyle} placeholder={placeholder.key} />
+        </Field>
+        <Field label="API Secret">
+          <input type="password" value={apiSecret} onChange={e => { setApiSecret(e.target.value); setTestResult(null); }} style={inputStyle} placeholder={placeholder.secret} />
+        </Field>
+      </Row2>
+      {/* Buttons */}
+      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '4px' }}>
+        <button onClick={handleTest} disabled={testing} style={{ padding: '7px 16px', borderRadius: '10px', border: `1px solid ${accentColor}44`, background: 'rgba(255,255,255,0.04)', color: accentColor, fontSize: '12px', fontWeight: 700, cursor: testing ? 'wait' : 'pointer', opacity: testing ? 0.6 : 1 }}>
+          {testing ? 'Testing...' : '⚡ Test Connection'}
+        </button>
+        <button onClick={handleSave} disabled={saving} style={{ padding: '7px 16px', borderRadius: '10px', border: 'none', background: `linear-gradient(135deg, ${accentColor}cc, ${accentColor})`, color: '#fff', fontSize: '12px', fontWeight: 700, cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Save size={11} /> {saving ? 'Saving...' : 'Save API Keys'}
+        </button>
+        {saveMsg && <span style={{ fontSize: '12px', fontWeight: 600, color: saveMsg.ok ? '#22C55E' : '#EF4444' }}>{saveMsg.ok ? '✓ ' : '✗ '}{saveMsg.text}</span>}
+      </div>
+    </div>
+  );
+}
+
 /* ═══ TABS ═══ */
 const TABS = [
   { id: 'profile', label: 'Profile', icon: <User size={14} /> },
@@ -158,18 +288,7 @@ export function AccountClient({ user, subscription }: AccountClientProps) {
     setSaving(true);
     setMessage({ type: '', text: '' });
     try {
-      if (config.binanceKey && config.binanceSecret) {
-        await fetch('/api/settings/api-keys', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ exchange: 'binance', apiKey: config.binanceKey, apiSecret: config.binanceSecret }),
-        });
-      }
-      if (config.coindcxKey && config.coindcxSecret) {
-        await fetch('/api/settings/api-keys', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ exchange: 'coindcx', apiKey: config.coindcxKey, apiSecret: config.coindcxSecret }),
-        });
-      }
+      // Bot config — exchange API keys saved per-exchange via their own Save buttons
       setMessage({ type: 'success', text: 'Settings saved successfully!' });
       setTimeout(() => setMessage({ type: '', text: '' }), 4000);
     } catch {
@@ -338,20 +457,21 @@ export function AccountClient({ user, subscription }: AccountClientProps) {
 
               {/* Exchange Connection */}
               <Section icon={<Key size={16} color="#0EA5E9" />} title="Exchange Connection"
-                sub="Binance & CoinDCX API keys · Encrypted AES-256-GCM">
-                <div style={{ marginBottom: '16px' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#D1D5DB', marginBottom: '10px' }}>Binance</div>
-                  <Row2>
-                    <Field label="API Key"><input type="text" value={config.binanceKey} onChange={e => update({ binanceKey: e.target.value })} style={inputStyle} placeholder="Enter Binance API key" /></Field>
-                    <Field label="API Secret"><input type="password" value={config.binanceSecret} onChange={e => update({ binanceSecret: e.target.value })} style={inputStyle} placeholder="Enter Binance API secret" /></Field>
-                  </Row2>
-                </div>
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#D1D5DB', marginBottom: '10px' }}>CoinDCX</div>
-                  <Row2>
-                    <Field label="API Key"><input type="text" value={config.coindcxKey} onChange={e => update({ coindcxKey: e.target.value })} style={inputStyle} placeholder="Enter CoinDCX API key" /></Field>
-                    <Field label="API Secret"><input type="password" value={config.coindcxSecret} onChange={e => update({ coindcxSecret: e.target.value })} style={inputStyle} placeholder="Enter CoinDCX API secret" /></Field>
-                  </Row2>
+                sub="Binance & CoinDCX API keys · Encrypted AES-256-GCM · Test before saving">
+                <ExchangeBlock
+                  exchange="binance"
+                  label="🔶 Binance Futures"
+                  accentColor="#F59E0B"
+                  placeholder={{ key: 'Enter Binance API key', secret: 'Enter Binance API secret' }}
+                />
+                <ExchangeBlock
+                  exchange="coindcx"
+                  label="🇮🇳 CoinDCX"
+                  accentColor="#0EA5E9"
+                  placeholder={{ key: 'Enter CoinDCX API key', secret: 'Enter CoinDCX API secret' }}
+                />
+                <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '4px' }}>
+                  🔒 Keys are encrypted with AES-256-GCM before storage. Balances appear on your dashboard after saving.
                 </div>
               </Section>
 
