@@ -302,17 +302,11 @@ export function PnlCard({ trades, coinDcxBalance, binanceBalance }: PnlCardProps
             padding: '16px 20px',
         }}>
             {/* Header */}
-            <div style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ marginBottom: '10px' }}>
                 <div style={{
                     fontSize: '11px', fontWeight: 600, textTransform: 'uppercase' as const,
                     letterSpacing: '1.5px', color: '#9CA3AF',
                 }}>Wallet Balance</div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: mainColor }}>
-                    {sign}${totalPnl.toFixed(2)}
-                    <span style={{ fontSize: '10px', color: '#9CA3AF', fontWeight: 400, marginLeft: '6px' }}>
-                        {sign}{totalRoi.toFixed(2)}% ROI
-                    </span>
-                </div>
             </div>
 
             {/* Wallet Balances */}

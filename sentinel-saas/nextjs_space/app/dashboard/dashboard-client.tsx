@@ -326,26 +326,24 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
             <StatsCard
               title="Active Bots"
               value={liveStats.activeBots}
-              icon={Bot}
               animated
             />
             <StatsCard
               title="Active Trades"
               value={`${liveStats.activeTrades} · $${liveStats.usedCapital} of $${MAX_CAPITAL}`}
-              icon={Activity}
               animated
             />
             <StatsCard
-              title="Paper Trading PnL"
-              value={`${formatCurrency(liveStats.paperActivePnl)} (${liveStats.paperPnlPct >= 0 ? '+' : ''}${liveStats.paperPnlPct.toFixed(1)}%)`}
-              icon={DollarSign}
+              title="Total Paper PnL"
+              value={formatCurrency(liveStats.paperActivePnl)}
               trend={liveStats.paperActivePnl >= 0 ? 'up' : 'down'}
+              trendValue={`${liveStats.paperPnlPct >= 0 ? '+' : ''}${liveStats.paperPnlPct.toFixed(1)}%`}
             />
             <StatsCard
-              title="Live Trading PnL"
-              value={`${formatCurrency(liveStats.liveActivePnl)} (${liveStats.livePnlPct >= 0 ? '+' : ''}${liveStats.livePnlPct.toFixed(1)}%)`}
-              icon={TrendingUp}
+              title="Total Live PnL"
+              value={formatCurrency(liveStats.liveActivePnl)}
               trend={liveStats.liveActivePnl >= 0 ? 'up' : 'down'}
+              trendValue={`${liveStats.livePnlPct >= 0 ? '+' : ''}${liveStats.livePnlPct.toFixed(1)}%`}
             />
           </motion.div>
 
