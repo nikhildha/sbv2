@@ -323,11 +323,20 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
                 return (
                   <div style={{
                     background: 'transparent',
-                    borderRadius: '20px', padding: '12px 20px',
+                    borderRadius: '20px', padding: '4px 20px',
                     display: 'flex', flexDirection: 'column' as const, alignItems: 'center',
                     justifyContent: 'center', minHeight: '180px',
                     position: 'relative' as const,
                   }}>
+                    {/* Title on top */}
+                    <div style={{ fontSize: '10px', fontWeight: 800, letterSpacing: '3px', textTransform: 'uppercase' as const, color: bc, marginBottom: '2px' }}>
+                      Synaptic Core Brain
+                    </div>
+                    {isOn && (
+                      <div style={{ fontSize: '10px', color: '#6B7280', marginBottom: '2px', fontFamily: 'monospace' }}>
+                        Cycle #{cycle} Completed
+                      </div>
+                    )}
                     {/* SVG Wireframe Brain */}
                     <svg viewBox="0 0 200 180" style={{ width: '280px', height: '200px' }}>
                       <defs>
@@ -406,15 +415,6 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
                         </line>
                       ))}
                     </svg>
-
-                    <div style={{ fontSize: '10px', fontWeight: 800, letterSpacing: '3px', textTransform: 'uppercase' as const, color: bc }}>
-                      Synaptic Core Brain
-                    </div>
-                    {isOn && (
-                      <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '4px', fontFamily: 'monospace' }}>
-                        Cycle #{cycle} · {coinsScanned} scanned
-                      </div>
-                    )}
                   </div>
                 );
               })()}
