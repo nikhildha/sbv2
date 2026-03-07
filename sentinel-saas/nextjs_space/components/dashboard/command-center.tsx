@@ -458,11 +458,11 @@ export function SignalSummaryTable({ coinStates, multi }: SignalSummaryProps) {
     const formatIST = (iso: string | null) => {
         if (!iso) return '—';
         try {
-            // Engine stores local IST but appends Z — strip Z to avoid double-conversion
-            const clean = iso.replace(/Z$/, '');
-            const d = new Date(clean);
-            return d.toLocaleTimeString('en-IN', {
-                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
+            // Normalize: if no timezone suffix, assume UTC (Railway engine runs UTC)
+            const normalized = /Z$|[+-]\d{2}:\d{2}$/.test(iso) ? iso : iso + 'Z';
+            return new Date(normalized).toLocaleTimeString('en-IN', {
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                hour12: true, timeZone: 'Asia/Kolkata',
             }) + ' IST';
         } catch { return '—'; }
     };
@@ -543,7 +543,10 @@ export function SignalSummaryTable({ coinStates, multi }: SignalSummaryProps) {
                 const nextCycleLabel = (() => {
                     if (!engineTs || !intervalSec) return '—';
                     try {
-                        const lastMs = new Date(String(engineTs)).getTime();
+                        const ts = String(engineTs);
+                        // Normalize to UTC if no timezone suffix
+                        const normalized = /Z$|[+-]\d{2}:\d{2}$/.test(ts) ? ts : ts + 'Z';
+                        const lastMs = new Date(normalized).getTime();
                         const nextMs = lastMs + (intervalSec * 1000);
                         const now = Date.now();
                         if (nextMs <= now) return 'Running…';

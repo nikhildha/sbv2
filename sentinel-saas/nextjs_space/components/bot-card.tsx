@@ -12,7 +12,7 @@ interface BotCardProps {
     status: string;
     isActive: boolean;
     startedAt?: Date | null;
-    config?: { mode?: string } | null;
+    config?: { mode?: string; maxTrades?: number; capitalPerTrade?: number } | null;
     _count?: {
       trades: number;
     };
@@ -40,9 +40,11 @@ export function BotCard({ bot, onToggle, onDelete, liveTradeCount, trades = [], 
   const totalPnl = trades.reduce((sum: number, t: any) => sum + (parseFloat(t.pnl) || parseFloat(t.totalPnl) || parseFloat(t.realized_pnl) || parseFloat(t.total_pnl) || 0), 0);
 
   const botMode = bot?.config?.mode || 'paper';
-  const CAPITAL_PER_TRADE = 100;
-  const totalCapitalDeployed = totalTrades * CAPITAL_PER_TRADE;
-  const roiPct = totalCapitalDeployed > 0 ? (totalPnl / totalCapitalDeployed * 100) : 0;
+  const capitalPerTrade = bot?.config?.capitalPerTrade || 100;
+  const maxTrades = bot?.config?.maxTrades || 25;
+  const maxCapital = maxTrades * capitalPerTrade;
+  const capitalDeployed = activeTrades.length * capitalPerTrade;
+  const roiPct = maxCapital > 0 ? (totalPnl / maxCapital * 100) : 0;
 
   const pnlColor = (v: number) => v >= 0 ? '#22C55E' : '#EF4444';
   const sign = (v: number) => v >= 0 ? '+' : '';
@@ -115,12 +117,15 @@ export function BotCard({ bot, onToggle, onDelete, liveTradeCount, trades = [], 
           </div>
         </div>
 
-        {/* Right: ROI + Toggle + Delete + Expand */}
+        {/* Right: Capital + ROI + Toggle + Delete + Expand */}
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <span className="text-sm font-bold" style={{ color: pnlColor(roiPct) }}>
+            <div className="text-sm font-bold" style={{ color: '#06B6D4', fontFamily: 'monospace' }}>
+              ${capitalDeployed}<span style={{ color: '#4B5563', fontWeight: 400 }}>/${maxCapital}</span>
+            </div>
+            <div className="text-[10px]" style={{ color: pnlColor(roiPct) }}>
               {sign(roiPct)}{roiPct.toFixed(1)}% ROI
-            </span>
+            </div>
           </div>
           <button
             onClick={(e) => { e.stopPropagation(); onToggle(bot?.id ?? '', isRunning); }}

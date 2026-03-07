@@ -220,12 +220,17 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
   const paperTotalPnl = paperRealizedPnl + paperUnrealizedPnl;
   const liveTotalModePnl = liveRealizedPnl + liveUnrealizedPnl;
 
-  const CAPITAL_PER_TRADE = 100;
-  const MAX_CAPITAL = 2500;
-  const MAX_SLOTS = 25;
+  // Derive MAX_CAPITAL and CAPITAL_PER_TRADE from bot configs (not hardcoded)
+  const activeBotConfig = bots.find((b: any) => b?.isActive)?.config;
+  const CAPITAL_PER_TRADE: number = activeBotConfig?.capitalPerTrade || (bots[0]?.config?.capitalPerTrade) || 100;
+  const MAX_CAPITAL: number = bots.reduce((sum: number, b: any) => {
+    const maxT: number = b?.config?.maxTrades ?? 0;
+    const capT: number = b?.config?.capitalPerTrade ?? 0;
+    return sum + maxT * capT;
+  }, 0) || (bots.length > 0 ? 0 : 0);
 
-  const paperCapital = MAX_SLOTS * CAPITAL_PER_TRADE; // 25 × $100 = $2500 total paper capital
-  const liveCapital = MAX_SLOTS * CAPITAL_PER_TRADE;  // 25 × $100 = $2500 total live capital
+  const paperCapital = MAX_CAPITAL;
+  const liveCapital = MAX_CAPITAL;
   const paperPnlPct = paperCapital > 0 ? (paperTotalPnl / paperCapital * 100) : 0;
   const livePnlPct = liveCapital > 0 ? (liveTotalModePnl / liveCapital * 100) : 0;
 
@@ -458,7 +463,7 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
             />
             <StatsCard
               title="Active Trades"
-              value={`${liveStats.activeTrades} · $${liveStats.usedCapital} of $${MAX_CAPITAL}`}
+              value={`${liveStats.activeTrades} · $${liveStats.usedCapital}${MAX_CAPITAL > 0 ? ` of $${MAX_CAPITAL}` : ''}`}
               animated
             />
             {/* Capital Deployed — wider card with paper/live emphasized */}
@@ -469,7 +474,9 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
                 <h3 className="text-sm text-[var(--color-text-secondary)]">Capital Deployed</h3>
-                <span style={{ fontSize: '11px', color: '#6B7280', fontFamily: 'monospace' }}>${liveStats.totalCapitalDeployed} / ${MAX_CAPITAL}</span>
+                <span style={{ fontSize: '11px', color: '#6B7280', fontFamily: 'monospace' }}>
+                  ${liveStats.totalCapitalDeployed}{MAX_CAPITAL > 0 ? ` / $${MAX_CAPITAL}` : ''}
+                </span>
               </div>
               {/* Paper / Live split — used/max format */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -477,12 +484,14 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
                   <span style={{ fontSize: '12px' }}>🟢</span>
                   <span style={{ fontSize: '12px', color: '#9CA3AF' }}>Paper</span>
                   <span style={{ fontSize: '16px', fontWeight: 700, color: '#22C55E', fontFamily: 'monospace' }}>
-                    ${liveStats.paperCapitalDeployed}<span style={{ color: '#6B7280', fontWeight: 400, fontSize: '12px' }}>/${MAX_CAPITAL}</span>
+                    ${liveStats.paperCapitalDeployed}
+                    {MAX_CAPITAL > 0 && <span style={{ color: '#6B7280', fontWeight: 400, fontSize: '12px' }}>/${MAX_CAPITAL}</span>}
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ fontSize: '16px', fontWeight: 700, color: '#EF4444', fontFamily: 'monospace' }}>
-                    ${liveStats.liveCapitalDeployed}<span style={{ color: '#6B7280', fontWeight: 400, fontSize: '12px' }}>/${MAX_CAPITAL}</span>
+                    ${liveStats.liveCapitalDeployed}
+                    {MAX_CAPITAL > 0 && <span style={{ color: '#6B7280', fontWeight: 400, fontSize: '12px' }}>/${MAX_CAPITAL}</span>}
                   </span>
                   <span style={{ fontSize: '12px', color: '#9CA3AF' }}>Live</span>
                   <span style={{ fontSize: '12px' }}>🔴</span>
@@ -511,7 +520,7 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
             className="mb-12"
           >
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-cyan-400">Synaptic AI Bots Deployment · <span style={{ fontSize: '14px', color: '#9CA3AF' }}>${liveStats.totalCapitalDeployed} deployed</span></h2>
+              <h2 className="text-xl font-bold text-cyan-400">Synaptic AI Bots Deployment · <span style={{ fontSize: '14px', color: '#9CA3AF' }}>${liveStats.totalCapitalDeployed}<span style={{ color: '#4B5563' }}>/{MAX_CAPITAL > 0 ? `$${MAX_CAPITAL}` : '—'}</span> active</span></h2>
               <Link
                 href="/bots"
                 className="px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary-dark)] transition-colors"
