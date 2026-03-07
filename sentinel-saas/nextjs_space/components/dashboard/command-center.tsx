@@ -541,17 +541,29 @@ export function SignalSummaryTable({ coinStates, multi }: SignalSummaryProps) {
                 const engineTs = liveMulti?.last_analysis_time || liveMulti?.timestamp || null;
                 const isEngineOn = engineTs && (Date.now() - new Date(String(engineTs)).getTime()) < 600000;
                 const nextCycleLabel = (() => {
-                    if (!engineTs || !intervalSec) return '—';
+                    // Prefer engine's pre-computed next_analysis_time (already in IST, no suffix)
+                    const nextRaw = liveMulti?.next_analysis_time;
                     try {
+                        if (nextRaw) {
+                            // Engine stores IST without timezone marker — append +05:30 to parse correctly
+                            const nextMs = new Date(String(nextRaw) + '+05:30').getTime();
+                            if (nextMs <= Date.now()) return 'Running…';
+                            const secsLeft = Math.floor((nextMs - Date.now()) / 1000);
+                            const m = Math.floor(secsLeft / 60);
+                            const s = secsLeft % 60;
+                            const timeStr = new Date(nextMs).toLocaleTimeString('en-IN', {
+                                hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata',
+                            });
+                            return m > 0 ? `${m}m ${s}s · ${timeStr} IST` : `${s}s · ${timeStr} IST`;
+                        }
+                        // Fallback: compute from last_analysis_time + interval (last_analysis_time is UTC+Z)
+                        if (!engineTs || !intervalSec) return '—';
                         const ts = String(engineTs);
-                        // Normalize to UTC if no timezone suffix
                         const normalized = /Z$|[+-]\d{2}:\d{2}$/.test(ts) ? ts : ts + 'Z';
-                        const lastMs = new Date(normalized).getTime();
-                        const nextMs = lastMs + (intervalSec * 1000);
-                        const now = Date.now();
-                        if (nextMs <= now) return 'Running…';
+                        const nextMs = new Date(normalized).getTime() + (intervalSec * 1000);
+                        if (nextMs <= Date.now()) return 'Running…';
                         return new Date(nextMs).toLocaleTimeString('en-IN', {
-                            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'Asia/Kolkata',
+                            hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata',
                         }) + ' IST';
                     } catch { return '—'; }
                 })();
