@@ -355,20 +355,6 @@ export function PnlCard({ trades, coinDcxBalance, binanceBalance }: PnlCardProps
                     )}
                 </div>
             </div>
-
-            {/* Total combined balance bar */}
-            {hasAnyBalance && (
-                <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '6px 10px', borderRadius: '8px',
-                    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)',
-                }}>
-                    <span style={{ fontSize: '10px', color: '#6B7280' }}>Total Portfolio</span>
-                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#F0F4F8', fontFamily: 'monospace' }}>
-                        ${totalBalance.toFixed(2)} USDT
-                    </span>
-                </div>
-            )}
         </div>
     );
 }

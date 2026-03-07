@@ -439,7 +439,7 @@ class RegimeMasterBot:
                     capital=fill_capital,
                     user_id=getattr(config, 'ENGINE_USER_ID', None),
                     profile_id=profile_id,
-                    bot_name=profile["label"],
+                    bot_name=config.ENGINE_BOT_NAME or profile["label"],
                 )
 
                 self._active_positions[pos_key] = {
@@ -1056,6 +1056,7 @@ class RegimeMasterBot:
                 capital=capital,
                 mode="LIVE",
                 user_id=getattr(config, 'ENGINE_USER_ID', None),
+                bot_name=config.ENGINE_BOT_NAME or "SM-Standard",
             )
 
             self._active_positions[sym] = {

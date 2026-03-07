@@ -17,6 +17,7 @@ interface Trade {
   exitPercent?: number | null; exitReason?: string | null;
   entryTime: string; exitTime?: string | null;
   botName?: string;
+  botId?: string | null;
   sessionId?: string | null;
 }
 
@@ -80,7 +81,8 @@ function mapTrade(t: any): Trade {
     exitReason: t.exit_reason || t.exitReason || null,
     entryTime: t.entry_time || t.entry_timestamp || t.entryTime || t.timestamp || new Date().toISOString(),
     exitTime: t.exit_time || t.exit_timestamp || t.exitTime || null,
-    botName: 'SM-Standard',
+    botName: t.bot_name || t.botName || 'Unknown Bot',
+    botId: t.bot_id || t.botId || null,
   };
 }
 
@@ -312,7 +314,7 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
   const exportCSV = () => {
     const headers = ['Bot', 'Type', 'Coin', 'Side', 'Leverage', 'Capital', 'Entry Price', 'Exit Price', 'SL', 'TP', 'SL Type', 'Target Type', 'P&L $', 'P&L %', 'Status', 'Entry Time', 'Exit Time'];
     const rows = filtered.map(t => [
-      'SM-Standard', t.mode || 'paper', t.coin, t.position, t.leverage, t.capital,
+      t.botName || 'Unknown Bot', t.mode || 'paper', t.coin, t.position, t.leverage, t.capital,
       t.entryPrice, t.exitPrice || t.currentPrice || '', t.stopLoss, t.takeProfit,
       t.slType, t.targetType,
       t.status === 'active' ? t.activePnl : t.totalPnl,
@@ -560,7 +562,7 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
                         return (
                           <tr key={t.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                             <td style={{ padding: '10px', color: '#0891B2', fontWeight: 600, fontSize: '12px' }}>
-                              SM-Standard
+                              {t.botName || 'Unknown Bot'}
                               {t.sessionId && (
                                 <div style={{ fontSize: '9px', color: '#6B7280', marginTop: '2px' }}>
                                   {(() => {
