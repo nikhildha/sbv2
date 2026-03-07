@@ -336,19 +336,8 @@ def api_validate_exchange():
         return jsonify({"valid": False, "exchange": exchange, "error": str(e)}), 200
 
 
-@app.route("/api/logs", methods=["GET"])
-def api_logs():
-    """Return the last N lines of bot.log."""
-    n = request.args.get("lines", 100, type=int)
-    log_path = os.path.join(config.DATA_DIR, "bot.log")
-    try:
-        if os.path.exists(log_path):
-            with open(log_path, "r") as f:
-                lines = f.readlines()
-            return jsonify({"logs": "".join(lines[-n:])})
-    except Exception as e:
-        return jsonify({"logs": f"Error reading logs: {e}"})
-    return jsonify({"logs": ""})
+
+
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────
