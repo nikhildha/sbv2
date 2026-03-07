@@ -172,6 +172,59 @@ def api_reset_trades():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/set-mode", methods=["POST"])
+def api_set_mode():
+    """Switch engine between paper and live trading mode at runtime."""
+    data = request.get_json() or {}
+    mode = data.get("mode", "paper")          # "paper" | "live"
+    exchange = data.get("exchange", "coindcx")
+
+    mode_config = {
+        "mode": mode,
+        "exchange": exchange,
+        "set_at": datetime.utcnow().isoformat(),
+    }
+    try:
+        path = os.path.join(config.DATA_DIR, "engine_mode.json")
+        with open(path, "w") as f:
+            json.dump(mode_config, f)
+
+        # Update runtime config (affects next _tick() immediately)
+        config.PAPER_TRADE = (mode != "live")
+        config.EXCHANGE_LIVE = exchange if mode == "live" else ""
+
+        logger.info("Mode switched to %s (exchange=%s)", mode, exchange)
+        return jsonify({"success": True, "mode": mode, "exchange": exchange})
+    except Exception as e:
+        logger.error("set-mode error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/validate-exchange", methods=["GET"])
+def api_validate_exchange():
+    """Test exchange API key connectivity and return current balance."""
+    exchange = request.args.get("exchange", "coindcx")
+    try:
+        if exchange == "coindcx":
+            import coindcx_client as cdx
+            balance = cdx.get_usdt_balance()
+            return jsonify({
+                "valid": True,
+                "exchange": "coindcx",
+                "balance": balance,
+                "currency": "USDT",
+            })
+        elif exchange == "binance":
+            # Basic connectivity check — just verify keys are set
+            if not config.BINANCE_API_KEY:
+                return jsonify({"valid": False, "exchange": "binance", "error": "BINANCE_API_KEY not set"})
+            return jsonify({"valid": True, "exchange": "binance", "balance": None})
+        return jsonify({"valid": False, "exchange": exchange, "error": "Unknown exchange"}), 400
+    except Exception as e:
+        logger.error("validate-exchange error (%s): %s", exchange, e)
+        return jsonify({"valid": False, "exchange": exchange, "error": str(e)}), 200
+
+
 @app.route("/api/logs", methods=["GET"])
 def api_logs():
     """Return the last N lines of bot.log."""

@@ -175,6 +175,9 @@ export function BotsClient({ bots: initialBots }: BotsClientProps) {
 
   // Live active trade count from bot-state
   const [liveTradeCount, setLiveTradeCount] = useState(0);
+  const [allSessions, setAllSessions] = useState<any[]>([]);
+  const [perfSummary, setPerfSummary] = useState<any>({ allTimePnl: 0, allTimeRoi: 0, totalSessions: 0, bestSessionPnl: 0 });
+
   const fetchLiveCount = useCallback(async () => {
     try {
       const res = await fetch('/api/bot-state', { cache: 'no-store' });
@@ -185,6 +188,20 @@ export function BotsClient({ bots: initialBots }: BotsClientProps) {
       }
     } catch { /* silent */ }
   }, []);
+
+  // Fetch performance sessions
+  useEffect(() => {
+    fetch('/api/performance', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d) {
+          setAllSessions(d.sessions || []);
+          setPerfSummary(d.summary || perfSummary);
+        }
+      })
+      .catch(() => { });
+  }, []);
+
   useEffect(() => {
     fetchLiveCount();
     const timer = setInterval(fetchLiveCount, 15000);
@@ -324,15 +341,19 @@ export function BotsClient({ bots: initialBots }: BotsClientProps) {
           {/* ── Deployed Bots List ── */}
           {bots && bots.length > 0 && (
             <div className="flex flex-col gap-4 mb-12">
-              {bots.map((bot) => (
-                <BotCard
-                  key={bot?.id}
-                  bot={bot}
-                  onToggle={handleBotToggle}
-                  onDelete={handleDeleteBot}
-                  liveTradeCount={liveTradeCount}
-                />
-              ))}
+              {bots.map((bot) => {
+                const botSessions = allSessions.filter((s: any) => s.botId === bot?.id);
+                return (
+                  <BotCard
+                    key={bot?.id}
+                    bot={bot}
+                    onToggle={handleBotToggle}
+                    onDelete={handleDeleteBot}
+                    liveTradeCount={liveTradeCount}
+                    sessions={botSessions}
+                  />
+                );
+              })}
             </div>
           )}
 

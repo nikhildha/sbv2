@@ -457,19 +457,25 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
               animate={{ opacity: 1, y: 0 }}
               className="card-gradient rounded-xl p-5 glow-hover hover-lift lg:col-span-2"
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
                 <h3 className="text-sm text-[var(--color-text-secondary)]">Capital Deployed</h3>
                 <span style={{ fontSize: '11px', color: '#6B7280', fontFamily: 'monospace' }}>${liveStats.totalCapitalDeployed} / ${MAX_CAPITAL}</span>
               </div>
-              {/* Paper / Live split — big text */}
+              {/* Paper / Live split — used/max format */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontSize: '18px', fontWeight: 700, color: '#22C55E' }}>${liveStats.paperCapitalDeployed}</div>
-                  <div style={{ fontSize: '10px', color: '#6B7280' }}>🟢 Paper</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '12px' }}>🟢</span>
+                  <span style={{ fontSize: '12px', color: '#9CA3AF' }}>Paper</span>
+                  <span style={{ fontSize: '16px', fontWeight: 700, color: '#22C55E', fontFamily: 'monospace' }}>
+                    ${liveStats.paperCapitalDeployed}<span style={{ color: '#6B7280', fontWeight: 400, fontSize: '12px' }}>/${MAX_CAPITAL}</span>
+                  </span>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '18px', fontWeight: 700, color: '#EF4444' }}>${liveStats.liveCapitalDeployed}</div>
-                  <div style={{ fontSize: '10px', color: '#6B7280' }}>🔴 Live</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '16px', fontWeight: 700, color: '#EF4444', fontFamily: 'monospace' }}>
+                    ${liveStats.liveCapitalDeployed}<span style={{ color: '#6B7280', fontWeight: 400, fontSize: '12px' }}>/${MAX_CAPITAL}</span>
+                  </span>
+                  <span style={{ fontSize: '12px', color: '#9CA3AF' }}>Live</span>
+                  <span style={{ fontSize: '12px' }}>🔴</span>
                 </div>
               </div>
             </motion.div>
