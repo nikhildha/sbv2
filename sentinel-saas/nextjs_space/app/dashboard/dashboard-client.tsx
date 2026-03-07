@@ -113,32 +113,26 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
     return () => { clearInterval(interval); clearInterval(walletInterval); };
   }, [fetchBotState]);
 
-  // Live price polling from Binance every 5s (same as tradebook)
+  // Live price polling from CoinDCX every 3s (proxied — covers all futures pairs)
   useEffect(() => {
-    const allTrades = botState?.tradebook?.trades || [];
-    async function fetchLivePrices() {
-      const activeSymbols = [...new Set(
-        allTrades
-          .filter((t: any) => (t.status || '').toUpperCase() === 'ACTIVE')
-          .map((t: any) => (t.symbol || (t.coin || '') + 'USDT').toUpperCase())
-          .filter(Boolean)
-      )];
-      if (activeSymbols.length === 0) return;
+    async function fetchCdxPrices() {
       try {
-        const symbols = JSON.stringify(activeSymbols);
-        const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbols=${encodeURIComponent(symbols)}`);
-        if (res.ok) {
-          const data: { symbol: string; price: string }[] = await res.json();
-          const map: Record<string, number> = {};
-          data.forEach(d => { map[d.symbol] = parseFloat(d.price); });
-          setLivePrices(map);
-        }
+        const res = await fetch('/api/coindcx/prices', { cache: 'no-store' });
+        if (!res.ok) return;
+        const prices = await res.json(); // { "B-BTC_USDT": { ls: 70678.1 }, ... }
+        const map: Record<string, number> = {};
+        Object.entries(prices).forEach(([pair, info]: [string, any]) => {
+          // "B-BTC_USDT" → "BTCUSDT"
+          const sym = pair.replace(/^B-/, '').replace('_', '');
+          if (info?.ls) map[sym] = parseFloat(info.ls);
+        });
+        if (Object.keys(map).length > 0) setLivePrices(map);
       } catch { /* silent */ }
     }
-    fetchLivePrices();
-    const timer = setInterval(fetchLivePrices, 5000);
+    fetchCdxPrices();
+    const timer = setInterval(fetchCdxPrices, 3000);
     return () => clearInterval(timer);
-  }, [botState]);
+  }, []);
 
   const handleBotToggle = async (botId: string, currentStatus: boolean) => {
     try {
@@ -242,6 +236,11 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
   const liveCapitalDeployed = liveModeTrades.length * CAPITAL_PER_TRADE;
   const totalCapitalDeployed = paperCapitalDeployed + liveCapitalDeployed;
 
+  // Detect trading mode — live if any active bot is live or live-mode trades exist
+  const activeBotMode: 'live' | 'paper' =
+    (bots.find((b: any) => b?.isActive)?.config?.mode === 'live' || liveModeTrades.length > 0)
+      ? 'live' : 'paper';
+
   const liveStats = {
     activeBots: stats?.activeBots ?? (bots?.filter((b: any) => b?.isActive)?.length ?? 0),
     activeTrades: liveActiveTrades.length || stats?.activeTrades || 0,
@@ -277,8 +276,19 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
                   AI Trading Command Center — Monitor your bots and market signals
                 </p>
               </div>
-              {/* PnL Scope Toggle — top right */}
+              {/* PnL Scope Toggle + Mode Badge — top right */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                {/* LIVE / PAPER badge */}
+                {liveStats.activeBots > 0 && (
+                  <span style={{
+                    padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px',
+                    background: activeBotMode === 'live' ? 'rgba(239,68,68,0.15)' : 'rgba(6,182,212,0.1)',
+                    color: activeBotMode === 'live' ? '#EF4444' : '#06B6D4',
+                    border: `1px solid ${activeBotMode === 'live' ? 'rgba(239,68,68,0.3)' : 'rgba(6,182,212,0.2)'}`,
+                  }}>
+                    {activeBotMode === 'live' ? '⬤ LIVE' : 'PAPER'}
+                  </span>
+                )}
                 <span style={{ fontSize: '11px', color: '#6B7280', fontWeight: 500 }}>PnL Scope:</span>
                 <div style={{
                   display: 'inline-flex', borderRadius: '8px', overflow: 'hidden',
