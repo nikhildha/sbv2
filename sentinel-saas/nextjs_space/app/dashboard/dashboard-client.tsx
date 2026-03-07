@@ -51,6 +51,7 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
   const [feedHealth, setFeedHealth] = useState<any>(null);
   const [pnlScope, setPnlScope] = useState<'session' | 'all'>('session');
   const [walletBalance, setWalletBalance] = useState<{ binance: number | null; coindcx: number | null }>({ binance: null, coindcx: null });
+  const [livePrices, setLivePrices] = useState<Record<string, number>>({});
 
   const fetchBotState = useCallback(async () => {
     try {
@@ -112,6 +113,33 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
     return () => { clearInterval(interval); clearInterval(walletInterval); };
   }, [fetchBotState]);
 
+  // Live price polling from Binance every 5s (same as tradebook)
+  useEffect(() => {
+    const allTrades = botState?.tradebook?.trades || [];
+    async function fetchLivePrices() {
+      const activeSymbols = [...new Set(
+        allTrades
+          .filter((t: any) => (t.status || '').toUpperCase() === 'ACTIVE')
+          .map((t: any) => (t.symbol || (t.coin || '') + 'USDT').toUpperCase())
+          .filter(Boolean)
+      )];
+      if (activeSymbols.length === 0) return;
+      try {
+        const symbols = JSON.stringify(activeSymbols);
+        const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbols=${encodeURIComponent(symbols)}`);
+        if (res.ok) {
+          const data: { symbol: string; price: string }[] = await res.json();
+          const map: Record<string, number> = {};
+          data.forEach(d => { map[d.symbol] = parseFloat(d.price); });
+          setLivePrices(map);
+        }
+      } catch { /* silent */ }
+    }
+    fetchLivePrices();
+    const timer = setInterval(fetchLivePrices, 5000);
+    return () => clearInterval(timer);
+  }, [botState]);
+
   const handleBotToggle = async (botId: string, currentStatus: boolean) => {
     try {
       const response = await fetch('/api/bots/toggle', {
@@ -165,10 +193,11 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
   const liveClosedTrades = liveTrades.filter((t: any) => (t.status || '').toUpperCase() === 'CLOSED');
   const liveTotalPnl = liveClosedTrades.reduce((sum: number, t: any) => sum + (t.realized_pnl || t.pnl || t.total_pnl || 0), 0);
 
-  // Compute active PNL from prices (avoids stale engine values)
+  // Compute active PNL from live Binance prices (same formula as tradebook)
   const computePnlFromPrices = (t: any) => {
     const entry = t.entry_price || t.entryPrice || 0;
-    const current = t.current_price || t.currentPrice || entry;
+    const sym = (t.symbol || (t.coin || '') + 'USDT').toUpperCase();
+    const current = livePrices[sym] || t.current_price || t.currentPrice || entry;
     const lev = t.leverage || 1;
     const cap = t.capital || t.position_size || 100;
     const pos = (t.side || t.position || '').toUpperCase();
