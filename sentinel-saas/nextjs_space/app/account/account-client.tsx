@@ -5,7 +5,7 @@ import { Header } from '@/components/header';
 import {
   User, Crown, Calendar, Check, Key, Shield, Sliders,
   Bell, TrendingUp, Coins, Save, CheckCircle, AlertCircle,
-  ChevronDown, ChevronUp, Settings
+  ChevronDown, ChevronUp, Settings, Unplug
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
@@ -141,6 +141,7 @@ function ExchangeBlock({ exchange, label, accentColor, placeholder }: {
   const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [savedBalance, setSavedBalance] = useState<number | null | undefined>(undefined);
   const [savedConnected, setSavedConnected] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   useEffect(() => {
     fetch('/api/wallet-balance', { cache: 'no-store' })
@@ -243,13 +244,53 @@ function ExchangeBlock({ exchange, label, accentColor, placeholder }: {
         </Field>
       </Row2>
       {/* Buttons */}
-      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '4px' }}>
+      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '4px', flexWrap: 'wrap' }}>
         <button onClick={handleTest} disabled={testing} style={{ padding: '7px 16px', borderRadius: '10px', border: `1px solid ${accentColor}44`, background: 'rgba(255,255,255,0.04)', color: accentColor, fontSize: '12px', fontWeight: 700, cursor: testing ? 'wait' : 'pointer', opacity: testing ? 0.6 : 1 }}>
           {testing ? 'Testing...' : '⚡ Test Connection'}
         </button>
         <button onClick={handleSave} disabled={saving} style={{ padding: '7px 16px', borderRadius: '10px', border: 'none', background: `linear-gradient(135deg, ${accentColor}cc, ${accentColor})`, color: '#fff', fontSize: '12px', fontWeight: 700, cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '6px' }}>
           <Save size={11} /> {saving ? 'Saving...' : 'Save API Keys'}
         </button>
+        {savedConnected && (
+          <button
+            onClick={async () => {
+              if (!confirm(`Disconnect ${label}? This will delete your stored API keys.`)) return;
+              setDisconnecting(true);
+              try {
+                const res = await fetch('/api/settings/api-keys', {
+                  method: 'DELETE',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ exchange }),
+                });
+                if (res.ok) {
+                  setSavedBalance(null);
+                  setSavedConnected(false);
+                  setApiKey('');
+                  setApiSecret('');
+                  setTestResult(null);
+                  setSaveMsg({ ok: true, text: 'Disconnected!' });
+                  setTimeout(() => setSaveMsg(null), 3000);
+                } else {
+                  const d = await res.json();
+                  setSaveMsg({ ok: false, text: d.error || 'Disconnect failed' });
+                }
+              } catch { setSaveMsg({ ok: false, text: 'Network error' }); }
+              finally { setDisconnecting(false); }
+            }}
+            disabled={disconnecting}
+            style={{
+              padding: '7px 16px', borderRadius: '10px',
+              border: '1px solid rgba(239,68,68,0.4)',
+              background: 'rgba(239,68,68,0.08)',
+              color: '#EF4444', fontSize: '12px', fontWeight: 700,
+              cursor: disconnecting ? 'wait' : 'pointer',
+              opacity: disconnecting ? 0.6 : 1,
+              display: 'flex', alignItems: 'center', gap: '6px',
+            }}
+          >
+            <Unplug size={11} /> {disconnecting ? 'Disconnecting...' : 'Disconnect'}
+          </button>
+        )}
         {saveMsg && <span style={{ fontSize: '12px', fontWeight: 600, color: saveMsg.ok ? '#22C55E' : '#EF4444' }}>{saveMsg.ok ? '✓ ' : '✗ '}{saveMsg.text}</span>}
       </div>
     </div>

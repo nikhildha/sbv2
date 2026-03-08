@@ -56,3 +56,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+
+export async function DELETE(request: Request) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { exchange } = await request.json();
+
+    if (!exchange || !['binance', 'coindcx'].includes(exchange)) {
+      return NextResponse.json({ error: 'Invalid exchange' }, { status: 400 });
+    }
+
+    await prisma.exchangeApiKey.deleteMany({
+      where: {
+        userId: session.user.id,
+        exchange,
+      },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error('API key disconnect error:', error);
+    return NextResponse.json({ error: 'Failed to disconnect exchange' }, { status: 500 });
+  }
+}
