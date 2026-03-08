@@ -488,7 +488,6 @@ export function BotsClient({ bots: initialBots }: BotsClientProps) {
                           border: `2px solid ${deployModel === model.id ? model.color : 'rgba(255,255,255,0.06)'}`,
                           transition: 'all 0.2s', textAlign: 'center' as const,
                         }}>
-                        <div style={{ fontSize: '22px', marginBottom: '4px' }}>{model.badge}</div>
                         <div style={{ fontSize: '13px', fontWeight: 700, color: deployModel === model.id ? model.color : '#9CA3AF' }}>{model.name}</div>
                         <div style={{ fontSize: '9px', color: '#6B7280', marginTop: '2px', lineHeight: '1.3' }}>{model.description}</div>
                       </div>
@@ -514,7 +513,6 @@ export function BotsClient({ bots: initialBots }: BotsClientProps) {
                           border: `2px solid ${deployExchange === ex.id ? '#0EA5E9' : 'rgba(255,255,255,0.06)'}`,
                           transition: 'all 0.2s', textAlign: 'center' as const,
                         }}>
-                        <div style={{ fontSize: '20px', marginBottom: '4px' }}>{ex.icon}</div>
                         <div style={{ fontSize: '12px', fontWeight: 700, color: deployExchange === ex.id ? '#0EA5E9' : '#9CA3AF' }}>{ex.name}</div>
                         <div style={{ fontSize: '9px', color: '#6B7280', marginTop: '2px' }}>{ex.desc}</div>
                       </div>
@@ -543,7 +541,6 @@ export function BotsClient({ bots: initialBots }: BotsClientProps) {
                           border: `2px solid ${deployMode === mode.id ? mode.color : 'rgba(255,255,255,0.06)'}`,
                           transition: 'all 0.2s', textAlign: 'center' as const,
                         }}>
-                        <div style={{ fontSize: '20px', marginBottom: '4px' }}>{mode.icon}</div>
                         <div style={{ fontSize: '12px', fontWeight: 700, color: deployMode === mode.id ? mode.color : '#9CA3AF' }}>{mode.name}</div>
                         <div style={{ fontSize: '9px', color: '#6B7280', marginTop: '2px' }}>{mode.desc}</div>
                       </div>
