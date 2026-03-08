@@ -233,8 +233,8 @@ export default function AdminDashboard() {
                                                 {user.subscription?.tier || 'none'}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-gray-300">{user._count.bots}</td>
-                                        <td className="px-6 py-4 text-gray-300">{user._count.trades}</td>
+                                        <td className="px-6 py-4 text-gray-300">{user._count?.bots ?? 0}</td>
+                                        <td className="px-6 py-4 text-gray-300">{user._count?.trades ?? 0}</td>
                                         <td className="px-6 py-4 text-gray-400 text-sm">
                                             {new Date(user.createdAt).toLocaleDateString()}
                                         </td>
