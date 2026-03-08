@@ -442,9 +442,20 @@ def get_usdt_balance():
     """Get USDT futures wallet balance."""
     try:
         wallets = get_wallet_details()
-        for w in wallets:
-            if w.get("currency_short_name") == config.COINDCX_MARGIN_CURRENCY:
-                return float(w.get("balance", 0))
+        logger.info("💳 CoinDCX wallets response: %d items, types: %s",
+                     len(wallets) if isinstance(wallets, list) else 0,
+                     [w.get("currency_short_name", "?") for w in (wallets if isinstance(wallets, list) else [])])
+        for w in (wallets if isinstance(wallets, list) else []):
+            currency = w.get("currency_short_name", "")
+            if currency == config.COINDCX_MARGIN_CURRENCY:
+                bal = float(w.get("balance") or w.get("available_balance") or w.get("wallet_balance") or 0)
+                logger.info("💰 CoinDCX %s balance: $%.4f (raw: %s)", currency, bal,
+                            {k: v for k, v in w.items() if "balance" in k.lower() or "margin" in k.lower()})
+                return bal
+        # If we didn't find the margin currency, log all available currencies
+        logger.warning("⚠️ CoinDCX: No wallet found for currency '%s'. Raw response: %s",
+                       config.COINDCX_MARGIN_CURRENCY,
+                       str(wallets)[:500] if wallets else "empty")
     except Exception as e:
         logger.error("Failed to get CoinDCX balance: %s", e)
     return 0.0
