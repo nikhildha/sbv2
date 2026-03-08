@@ -299,8 +299,11 @@ def close_trade(trade_id=None, symbol=None, exit_price=None, reason="MANUAL"):
         exit_notional = px * qty
         commission = round((entry_notional + exit_notional) * config.TAKER_FEE, 4)
 
-        leveraged_pnl = round(raw_pnl * lev - commission, 4)
-        pnl_pct = round(leveraged_pnl / capital * 100, 2) if capital else 0
+        # PnL FIX: qty is already leveraged (qty = capital * leverage / price)
+        # so raw_pnl already represents the real dollar P&L.
+        # DO NOT multiply by leverage again — that was squaring leverage.
+        net_pnl = round(raw_pnl - commission, 4)
+        pnl_pct = round(net_pnl / capital * 100, 2) if capital else 0
 
         # Duration
         entry_time = datetime.fromisoformat(target["entry_timestamp"])
@@ -312,7 +315,7 @@ def close_trade(trade_id=None, symbol=None, exit_price=None, reason="MANUAL"):
         target["status"] = "CLOSED"
         target["exit_reason"] = reason
         target["commission"] = commission
-        target["realized_pnl"] = leveraged_pnl
+        target["realized_pnl"] = net_pnl
         target["realized_pnl_pct"] = pnl_pct
         target["unrealized_pnl"] = 0
         target["unrealized_pnl_pct"] = 0
@@ -320,7 +323,7 @@ def close_trade(trade_id=None, symbol=None, exit_price=None, reason="MANUAL"):
 
         logger.info("📕 Tradebook CLOSE: %s %s %s @ %.6f → %.6f | P&L: $%.4f (%.2f%%)",
                     target["trade_id"], target["position"], target["symbol"],
-                    entry, px, leveraged_pnl, pnl_pct)
+                    entry, px, net_pnl, pnl_pct)
         closed.append(target)
 
     _compute_summary(book)
@@ -353,8 +356,9 @@ def _book_partial_inline(trade, book, exit_price, qty_frac, reason):
     entry_notional = entry * book_qty
     exit_notional = px * book_qty
     commission = round((entry_notional + exit_notional) * config.TAKER_FEE, 4)
-    leveraged_pnl = round(raw_pnl * lev - commission, 4)
-    pnl_pct = round(leveraged_pnl / book_capital * 100, 2) if book_capital else 0
+    # PnL FIX: qty is already leveraged — DO NOT multiply by lev again
+    net_pnl = round(raw_pnl - commission, 4)
+    pnl_pct = round(net_pnl / book_capital * 100, 2) if book_capital else 0
 
     entry_time = datetime.fromisoformat(trade["entry_timestamp"])
     duration = (datetime.utcnow() - entry_time).total_seconds() / 60
@@ -396,7 +400,7 @@ def _book_partial_inline(trade, book, exit_price, qty_frac, reason):
         "original_capital": trade.get("original_capital", parent_capital),
         "status":           "CLOSED",
         "exit_reason":      reason,
-        "realized_pnl":     leveraged_pnl,
+        "realized_pnl":     net_pnl,
         "realized_pnl_pct": pnl_pct,
         "unrealized_pnl":   0,
         "unrealized_pnl_pct": 0,
@@ -419,7 +423,7 @@ def _book_partial_inline(trade, book, exit_price, qty_frac, reason):
     trade["capital"] = round(parent_capital - book_capital, 4)
 
     logger.info("📊 Partial booking %s: %s %.6f qty @ %.6f | P&L: $%.4f (%.2f%%) | Remaining: %.1f%%",
-                child_id, reason, book_qty, px, leveraged_pnl, pnl_pct,
+                child_id, reason, book_qty, px, net_pnl, pnl_pct,
                 (trade['quantity'] / trade.get('original_qty', parent_qty)) * 100)
 
     # Telegram notification
@@ -452,8 +456,9 @@ def _close_trade_inline(trade, exit_price, reason):
     commission = round((entry_notional + exit_notional) * config.TAKER_FEE, 4)
     funding_cost = trade.get("funding_cost", 0)
 
-    leveraged_pnl = round(raw_pnl * lev - commission - funding_cost, 4)
-    pnl_pct = round(leveraged_pnl / capital * 100, 2) if capital else 0
+    # PnL FIX: qty is already leveraged — DO NOT multiply by lev again
+    net_pnl = round(raw_pnl - commission - funding_cost, 4)
+    pnl_pct = round(net_pnl / capital * 100, 2) if capital else 0
 
     entry_time = datetime.fromisoformat(trade["entry_timestamp"])
     duration = (datetime.utcnow() - entry_time).total_seconds() / 60
@@ -464,7 +469,7 @@ def _close_trade_inline(trade, exit_price, reason):
     trade["status"] = "CLOSED"
     trade["exit_reason"] = reason
     trade["commission"] = commission
-    trade["realized_pnl"] = leveraged_pnl
+    trade["realized_pnl"] = net_pnl
     trade["realized_pnl_pct"] = pnl_pct
     trade["unrealized_pnl"] = 0
     trade["unrealized_pnl_pct"] = 0
@@ -472,7 +477,7 @@ def _close_trade_inline(trade, exit_price, reason):
 
     logger.info("📕 Tradebook CLOSE: %s %s %s @ %.6f → %.6f | P&L: $%.4f (%.2f%%) [%s]",
                 trade["trade_id"], trade["position"], trade["symbol"],
-                entry, px, leveraged_pnl, pnl_pct, reason)
+                entry, px, net_pnl, pnl_pct, reason)
 
     # Telegram notification
     try:
@@ -568,30 +573,30 @@ def update_unrealized(prices=None, funding_rates=None):
         # For LIVE trades: qty from CoinDCX IS the leveraged quantity,
         # so raw_pnl is already the full P&L — do NOT multiply by leverage.
         # Also skip commission estimation — CoinDCX handles actual fees.
-        # For PAPER trades: qty is the base position, multiply by leverage.
-        is_live = trade.get("mode") == "LIVE"
+        # PnL FIX: qty is ALWAYS leveraged (both paper and live)
+        # so raw_pnl already represents the full dollar P&L.
+        is_live = trade.get("mode", "").upper().startswith("LIVE")
         if is_live:
             est_commission = 0
-            leveraged_pnl = round(raw_pnl - funding_cost, 4)
         else:
             entry_notional = entry * qty
             exit_notional = current * qty
             est_commission = (entry_notional + exit_notional) * config.TAKER_FEE
-            leveraged_pnl = round(raw_pnl * lev - est_commission - funding_cost, 4)
-        pnl_pct = round(leveraged_pnl / capital * 100, 2) if capital else 0
+        net_pnl = round(raw_pnl - est_commission - funding_cost, 4)
+        pnl_pct = round(net_pnl / capital * 100, 2) if capital else 0
 
         # Track max favorable / adverse excursion
-        if leveraged_pnl > trade.get("max_favorable", 0):
-            trade["max_favorable"] = leveraged_pnl
-        if leveraged_pnl < trade.get("max_adverse", 0):
-            trade["max_adverse"] = leveraged_pnl
+        if net_pnl > trade.get("max_favorable", 0):
+            trade["max_favorable"] = net_pnl
+        if net_pnl < trade.get("max_adverse", 0):
+            trade["max_adverse"] = net_pnl
 
         # Duration
         entry_time = datetime.fromisoformat(trade["entry_timestamp"])
         duration = (datetime.utcnow() - entry_time).total_seconds() / 60
 
         trade["current_price"] = current
-        trade["unrealized_pnl"] = leveraged_pnl
+        trade["unrealized_pnl"] = net_pnl
         trade["unrealized_pnl_pct"] = pnl_pct
         trade["duration_minutes"] = round(duration, 1)
 
