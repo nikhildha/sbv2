@@ -107,7 +107,7 @@ STRATEGY_PROFILES = {
         "mt_rr_ratio": 3,
     },
 }
-ACTIVE_PROFILES = list(STRATEGY_PROFILES.keys())  # Which profiles to run
+ACTIVE_PROFILES = ["standard"]  # Only run the profile the user deployed
 
 # ─── Risk Management ────────────────────────────────────────────────────────────
 RISK_PER_TRADE = 0.04
