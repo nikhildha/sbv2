@@ -415,202 +415,238 @@ export function BotsClient({ bots: initialBots }: BotsClientProps) {
       <AnimatePresence>
         {showDeployModal && (
           <div
-            className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+            style={{
+              position: 'fixed', inset: 0, zIndex: 50,
+              background: 'rgba(0,0,0,0.6)',
+              overflowY: 'auto', WebkitOverflowScrolling: 'touch',
+              display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+              padding: '24px 12px',
+            }}
             onClick={(e) => { if (e.target === e.currentTarget) setShowDeployModal(false); }}
           >
             <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
               style={{
                 background: 'linear-gradient(135deg, rgba(17,24,39,0.98), rgba(30,41,59,0.95))',
                 backdropFilter: 'blur(20px)',
                 border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: '20px', padding: '32px', maxWidth: '520px', width: '100%',
+                borderRadius: '20px',
+                maxWidth: '520px', width: '100%',
+                margin: '0 auto',
+                display: 'flex', flexDirection: 'column' as const,
               }}
             >
-              {/* Modal Header */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+              {/* ── Modal Header (fixed at top) ── */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '12px',
+                padding: '20px 24px 16px',
+                borderBottom: '1px solid rgba(255,255,255,0.06)',
+                flexShrink: 0,
+              }}>
                 <div style={{
-                  width: '44px', height: '44px', borderRadius: '12px',
+                  width: '40px', height: '40px', borderRadius: '12px', flexShrink: 0,
                   background: 'linear-gradient(135deg, rgba(34,197,94,0.2), rgba(16,185,129,0.1))',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
-                  <Rocket size={22} color="#22C55E" />
+                  <Rocket size={20} color="#22C55E" />
                 </div>
-                <div>
-                  <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#E5E7EB' }}>Deploy Synaptic Marshal</h2>
-                  <p style={{ fontSize: '12px', color: '#6B7280' }}>Configure and launch your trading bot</p>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#E5E7EB', margin: 0 }}>Deploy Synaptic Marshal</h2>
+                  <p style={{ fontSize: '11px', color: '#6B7280', margin: '2px 0 0' }}>Configure and launch your trading bot</p>
                 </div>
-              </div>
-
-              {/* Step 1: Select Model */}
-              <div style={{ marginBottom: '20px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '10px' }}>
-                  1. Select Model
-                </div>
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  {BOT_MODELS.map(model => (
-                    <div key={model.id}
-                      onClick={() => setDeployModel(model.id)}
-                      style={{
-                        flex: 1, padding: '16px', borderRadius: '14px', cursor: 'pointer',
-                        background: deployModel === model.id ? model.color + '12' : 'rgba(255,255,255,0.03)',
-                        border: `2px solid ${deployModel === model.id ? model.color : 'rgba(255,255,255,0.06)'}`,
-                        transition: 'all 0.2s', textAlign: 'center',
-                      }}>
-                      <div style={{ fontSize: '28px', marginBottom: '8px' }}>{model.badge}</div>
-                      <div style={{ fontSize: '14px', fontWeight: 700, color: deployModel === model.id ? model.color : '#9CA3AF' }}>{model.name}</div>
-                      <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '4px' }}>{model.description}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Step 2: Select Exchange */}
-              <div style={{ marginBottom: '20px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '10px' }}>
-                  2. Select Exchange
-                </div>
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  {[
-                    { id: 'binance', name: 'Binance', icon: '🔶', desc: 'Largest crypto exchange' },
-                    { id: 'coindcx', name: 'CoinDCX', icon: '🇮🇳', desc: "India's crypto exchange" },
-                  ].map(ex => (
-                    <div key={ex.id}
-                      onClick={() => setDeployExchange(ex.id)}
-                      style={{
-                        flex: 1, padding: '14px', borderRadius: '12px', cursor: 'pointer',
-                        background: deployExchange === ex.id ? 'rgba(14,165,233,0.1)' : 'rgba(255,255,255,0.03)',
-                        border: `2px solid ${deployExchange === ex.id ? '#0EA5E9' : 'rgba(255,255,255,0.06)'}`,
-                        transition: 'all 0.2s', textAlign: 'center',
-                      }}>
-                      <div style={{ fontSize: '24px', marginBottom: '6px' }}>{ex.icon}</div>
-                      <div style={{ fontSize: '13px', fontWeight: 700, color: deployExchange === ex.id ? '#0EA5E9' : '#9CA3AF' }}>{ex.name}</div>
-                      <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>{ex.desc}</div>
-                    </div>
-                  ))}
-                </div>
-                <p style={{ fontSize: '10px', color: '#4B5563', marginTop: '6px' }}>
-                  ℹ️ Make sure your API key is configured in Settings for the selected exchange
-                </p>
-              </div>
-
-              {/* Step 3: Trading Mode */}
-              <div style={{ marginBottom: '24px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '10px' }}>
-                  3. Trading Mode
-                </div>
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  {[
-                    { id: 'paper', name: 'Paper Trading', icon: '📝', desc: 'Simulated trades, no real money', color: '#0EA5E9' },
-                    { id: 'live', name: 'Live Trading', icon: '💰', desc: 'Real trades with your capital', color: '#EF4444' },
-                  ].map(mode => (
-                    <div key={mode.id}
-                      onClick={() => setDeployMode(mode.id)}
-                      style={{
-                        flex: 1, padding: '14px', borderRadius: '12px', cursor: 'pointer',
-                        background: deployMode === mode.id ? mode.color + '10' : 'rgba(255,255,255,0.03)',
-                        border: `2px solid ${deployMode === mode.id ? mode.color : 'rgba(255,255,255,0.06)'}`,
-                        transition: 'all 0.2s', textAlign: 'center',
-                      }}>
-                      <div style={{ fontSize: '24px', marginBottom: '6px' }}>{mode.icon}</div>
-                      <div style={{ fontSize: '13px', fontWeight: 700, color: deployMode === mode.id ? mode.color : '#9CA3AF' }}>{mode.name}</div>
-                      <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>{mode.desc}</div>
-                    </div>
-                  ))}
-                </div>
-                {deployMode === 'live' && (
-                  <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <div style={{
-                      padding: '8px 12px', borderRadius: '8px',
-                      background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
-                      fontSize: '11px', color: '#F87171',
-                    }}>
-                      ⚠️ Live trading uses real capital. Ensure your risk settings are configured in Settings.
-                    </div>
-                    {/* Verify Exchange Connection */}
-                    <button
-                      onClick={handleVerifyConnection}
-                      disabled={verifying}
-                      style={{
-                        width: '100%', padding: '9px 0', borderRadius: '10px', cursor: verifying ? 'wait' : 'pointer',
-                        border: `1px solid ${verifyStatus === 'ok' ? '#22C55E' : verifyStatus === 'fail' ? '#EF4444' : 'rgba(255,255,255,0.12)'}`,
-                        background: verifyStatus === 'ok' ? 'rgba(34,197,94,0.1)' : verifyStatus === 'fail' ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.04)',
-                        color: verifyStatus === 'ok' ? '#22C55E' : verifyStatus === 'fail' ? '#F87171' : '#9CA3AF',
-                        fontSize: '12px', fontWeight: 700, transition: 'all 0.2s',
-                        opacity: verifying ? 0.7 : 1,
-                      }}
-                    >
-                      {verifying ? 'Checking connection...' :
-                       verifyStatus === 'ok' ? `✓ ${deployExchange === 'coindcx' ? 'CoinDCX' : 'Binance'} Connected${verifyBalance != null ? ` · $${verifyBalance.toFixed(2)} USDT` : ''}` :
-                       verifyStatus === 'fail' ? '✗ Connection failed — check API keys in Railway env vars' :
-                       `Verify ${deployExchange === 'coindcx' ? 'CoinDCX' : 'Binance'} Connection`}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Step 4: Trade Limits */}
-              <div style={{ marginBottom: '24px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '10px' }}>
-                  4. Trade Settings
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', color: '#9CA3AF', marginBottom: '6px', fontWeight: 600 }}>
-                      Max Concurrent Trades
-                    </label>
-                    <input
-                      type="number" min={1} max={100}
-                      value={deployMaxTrades}
-                      onChange={(e) => setDeployMaxTrades(Math.max(1, parseInt(e.target.value) || 1))}
-                      style={{
-                        width: '100%', padding: '10px 12px', borderRadius: '10px',
-                        background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                        color: '#F0F4F8', fontSize: '14px', fontWeight: 600, outline: 'none',
-                      }}
-                    />
-                    <p style={{ fontSize: '10px', color: '#4B5563', marginTop: '4px' }}>
-                      Max positions open at the same time
-                    </p>
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', color: '#9CA3AF', marginBottom: '6px', fontWeight: 600 }}>
-                      Capital Per Trade ($)
-                    </label>
-                    <input
-                      type="number" min={10} max={10000} step={10}
-                      value={deployCapitalPerTrade}
-                      onChange={(e) => setDeployCapitalPerTrade(Math.max(10, parseInt(e.target.value) || 10))}
-                      style={{
-                        width: '100%', padding: '10px 12px', borderRadius: '10px',
-                        background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                        color: '#F0F4F8', fontSize: '14px', fontWeight: 600, outline: 'none',
-                      }}
-                    />
-                    <p style={{ fontSize: '10px', color: '#4B5563', marginTop: '4px' }}>
-                      Amount allocated per trade entry
-                    </p>
-                  </div>
-                </div>
-                <div style={{
-                  marginTop: '10px', padding: '8px 12px', borderRadius: '8px',
-                  background: 'rgba(8,145,178,0.08)', border: '1px solid rgba(8,145,178,0.2)',
-                  fontSize: '11px', color: '#06B6D4',
-                }}>
-                  💡 Max capital exposure: ${deployMaxTrades * deployCapitalPerTrade} ({deployMaxTrades} × ${deployCapitalPerTrade})
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div style={{ display: 'flex', gap: '12px' }}>
                 <button
                   onClick={() => setShowDeployModal(false)}
                   style={{
-                    flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)',
+                    width: '32px', height: '32px', borderRadius: '8px', border: 'none',
+                    background: 'rgba(255,255,255,0.06)', color: '#9CA3AF',
+                    fontSize: '18px', cursor: 'pointer', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                  }}
+                >✕</button>
+              </div>
+
+              {/* ── Scrollable Content ── */}
+              <div style={{
+                overflowY: 'auto', padding: '16px 24px',
+                flex: 1, WebkitOverflowScrolling: 'touch' as any,
+              }}>
+
+                {/* Step 1: Select Model */}
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase' as const, letterSpacing: '1.5px', marginBottom: '8px' }}>
+                    1. Select Model
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+                    {BOT_MODELS.map(model => (
+                      <div key={model.id}
+                        onClick={() => setDeployModel(model.id)}
+                        style={{
+                          padding: '12px', borderRadius: '12px', cursor: 'pointer',
+                          background: deployModel === model.id ? model.color + '12' : 'rgba(255,255,255,0.03)',
+                          border: `2px solid ${deployModel === model.id ? model.color : 'rgba(255,255,255,0.06)'}`,
+                          transition: 'all 0.2s', textAlign: 'center' as const,
+                        }}>
+                        <div style={{ fontSize: '22px', marginBottom: '4px' }}>{model.badge}</div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: deployModel === model.id ? model.color : '#9CA3AF' }}>{model.name}</div>
+                        <div style={{ fontSize: '9px', color: '#6B7280', marginTop: '2px', lineHeight: '1.3' }}>{model.description}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Step 2: Select Exchange */}
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase' as const, letterSpacing: '1.5px', marginBottom: '8px' }}>
+                    2. Select Exchange
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+                    {[
+                      { id: 'binance', name: 'Binance', icon: '🔶', desc: 'Largest crypto exchange' },
+                      { id: 'coindcx', name: 'CoinDCX', icon: '🇮🇳', desc: "India's crypto exchange" },
+                    ].map(ex => (
+                      <div key={ex.id}
+                        onClick={() => setDeployExchange(ex.id)}
+                        style={{
+                          padding: '12px', borderRadius: '10px', cursor: 'pointer',
+                          background: deployExchange === ex.id ? 'rgba(14,165,233,0.1)' : 'rgba(255,255,255,0.03)',
+                          border: `2px solid ${deployExchange === ex.id ? '#0EA5E9' : 'rgba(255,255,255,0.06)'}`,
+                          transition: 'all 0.2s', textAlign: 'center' as const,
+                        }}>
+                        <div style={{ fontSize: '20px', marginBottom: '4px' }}>{ex.icon}</div>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: deployExchange === ex.id ? '#0EA5E9' : '#9CA3AF' }}>{ex.name}</div>
+                        <div style={{ fontSize: '9px', color: '#6B7280', marginTop: '2px' }}>{ex.desc}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <p style={{ fontSize: '9px', color: '#4B5563', marginTop: '6px' }}>
+                    ℹ️ Make sure your API key is configured in Settings for the selected exchange
+                  </p>
+                </div>
+
+                {/* Step 3: Trading Mode */}
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase' as const, letterSpacing: '1.5px', marginBottom: '8px' }}>
+                    3. Trading Mode
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+                    {[
+                      { id: 'paper', name: 'Paper Trading', icon: '📝', desc: 'Simulated trades, no real money', color: '#0EA5E9' },
+                      { id: 'live', name: 'Live Trading', icon: '💰', desc: 'Real trades with your capital', color: '#EF4444' },
+                    ].map(mode => (
+                      <div key={mode.id}
+                        onClick={() => setDeployMode(mode.id)}
+                        style={{
+                          padding: '12px', borderRadius: '10px', cursor: 'pointer',
+                          background: deployMode === mode.id ? mode.color + '10' : 'rgba(255,255,255,0.03)',
+                          border: `2px solid ${deployMode === mode.id ? mode.color : 'rgba(255,255,255,0.06)'}`,
+                          transition: 'all 0.2s', textAlign: 'center' as const,
+                        }}>
+                        <div style={{ fontSize: '20px', marginBottom: '4px' }}>{mode.icon}</div>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: deployMode === mode.id ? mode.color : '#9CA3AF' }}>{mode.name}</div>
+                        <div style={{ fontSize: '9px', color: '#6B7280', marginTop: '2px' }}>{mode.desc}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {deployMode === 'live' && (
+                    <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column' as const, gap: '6px' }}>
+                      <div style={{
+                        padding: '8px 10px', borderRadius: '8px',
+                        background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
+                        fontSize: '10px', color: '#F87171', lineHeight: '1.4',
+                      }}>
+                        ⚠️ Live trading uses real capital. Ensure your risk settings are configured in Settings.
+                      </div>
+                      {/* Verify Exchange Connection */}
+                      <button
+                        onClick={handleVerifyConnection}
+                        disabled={verifying}
+                        style={{
+                          width: '100%', padding: '8px 0', borderRadius: '8px', cursor: verifying ? 'wait' : 'pointer',
+                          border: `1px solid ${verifyStatus === 'ok' ? '#22C55E' : verifyStatus === 'fail' ? '#EF4444' : 'rgba(255,255,255,0.12)'}`,
+                          background: verifyStatus === 'ok' ? 'rgba(34,197,94,0.1)' : verifyStatus === 'fail' ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.04)',
+                          color: verifyStatus === 'ok' ? '#22C55E' : verifyStatus === 'fail' ? '#F87171' : '#9CA3AF',
+                          fontSize: '11px', fontWeight: 700, transition: 'all 0.2s',
+                          opacity: verifying ? 0.7 : 1,
+                        }}
+                      >
+                        {verifying ? 'Checking connection...' :
+                          verifyStatus === 'ok' ? `✓ ${deployExchange === 'coindcx' ? 'CoinDCX' : 'Binance'} Connected${verifyBalance != null ? ` · $${verifyBalance.toFixed(2)} USDT` : ''}` :
+                            verifyStatus === 'fail' ? '✗ Connection failed — check API keys' :
+                              `Verify ${deployExchange === 'coindcx' ? 'CoinDCX' : 'Binance'} Connection`}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Step 4: Trade Settings */}
+                <div style={{ marginBottom: '4px' }}>
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase' as const, letterSpacing: '1.5px', marginBottom: '8px' }}>
+                    4. Trade Settings
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', color: '#9CA3AF', marginBottom: '4px', fontWeight: 600 }}>
+                        Max Concurrent Trades
+                      </label>
+                      <input
+                        type="number" min={1} max={100}
+                        value={deployMaxTrades}
+                        onChange={(e) => setDeployMaxTrades(Math.max(1, parseInt(e.target.value) || 1))}
+                        style={{
+                          width: '100%', padding: '8px 10px', borderRadius: '8px', boxSizing: 'border-box' as const,
+                          background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                          color: '#F0F4F8', fontSize: '14px', fontWeight: 600, outline: 'none',
+                        }}
+                      />
+                      <p style={{ fontSize: '9px', color: '#4B5563', marginTop: '3px' }}>
+                        Max positions open at the same time
+                      </p>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', color: '#9CA3AF', marginBottom: '4px', fontWeight: 600 }}>
+                        Capital Per Trade ($)
+                      </label>
+                      <input
+                        type="number" min={10} max={10000} step={10}
+                        value={deployCapitalPerTrade}
+                        onChange={(e) => setDeployCapitalPerTrade(Math.max(10, parseInt(e.target.value) || 10))}
+                        style={{
+                          width: '100%', padding: '8px 10px', borderRadius: '8px', boxSizing: 'border-box' as const,
+                          background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                          color: '#F0F4F8', fontSize: '14px', fontWeight: 600, outline: 'none',
+                        }}
+                      />
+                      <p style={{ fontSize: '9px', color: '#4B5563', marginTop: '3px' }}>
+                        Amount allocated per trade entry
+                      </p>
+                    </div>
+                  </div>
+                  <div style={{
+                    marginTop: '8px', padding: '6px 10px', borderRadius: '8px',
+                    background: 'rgba(8,145,178,0.08)', border: '1px solid rgba(8,145,178,0.2)',
+                    fontSize: '10px', color: '#06B6D4',
+                  }}>
+                    💡 Max capital exposure: ${deployMaxTrades * deployCapitalPerTrade} ({deployMaxTrades} × ${deployCapitalPerTrade})
+                  </div>
+                </div>
+
+              </div>
+
+              {/* ── Sticky Action Buttons (always visible) ── */}
+              <div style={{
+                display: 'flex', gap: '10px',
+                padding: '16px 24px 20px',
+                borderTop: '1px solid rgba(255,255,255,0.06)',
+                flexShrink: 0,
+              }}>
+                <button
+                  onClick={() => setShowDeployModal(false)}
+                  style={{
+                    flex: 1, padding: '11px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)',
                     background: 'rgba(255,255,255,0.05)', color: '#9CA3AF',
-                    fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s',
+                    fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s',
                   }}>
                   Cancel
                 </button>
@@ -618,13 +654,13 @@ export function BotsClient({ bots: initialBots }: BotsClientProps) {
                   onClick={handleDeployBot}
                   disabled={loading}
                   style={{
-                    flex: 1, padding: '12px', borderRadius: '12px', border: 'none',
+                    flex: 1, padding: '11px', borderRadius: '10px', border: 'none',
                     background: 'linear-gradient(135deg, #22C55E, #16A34A)',
-                    color: '#fff', fontSize: '14px', fontWeight: 700, cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                    color: '#fff', fontSize: '13px', fontWeight: 700, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
                     transition: 'all 0.2s', opacity: loading ? 0.6 : 1,
                   }}>
-                  <Rocket size={16} />
+                  <Rocket size={14} />
                   {loading ? 'Deploying...' : 'Deploy Bot'}
                 </button>
               </div>
