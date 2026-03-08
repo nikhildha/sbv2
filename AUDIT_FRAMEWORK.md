@@ -295,6 +295,26 @@ HMMBOT/
 
 ---
 
+### P13 · PnL Leverage Integrity
+
+**File**: `tradebook.py` (close_trade, _book_partial_inline, _close_trade_inline, update_unrealized)
+**What it checks**:
+- Verify that the PnL formula does **NOT** multiply `raw_pnl × leverage`
+- Since `qty = capital × leverage / entry_price`, qty is already leveraged
+- Correct formula: `net_pnl = (exit_price − entry_price) × qty − commission`
+- WRONG formula: `net_pnl = (exit_price − entry_price) × qty × leverage` ← leverage squared
+- Sample 5 closed trades: recalculate PnL and compare to stored `realized_pnl`
+- Tolerance: `|calculated − stored| < 0.5%`
+- Cross-check: compare engine tradebook `realized_pnl` sum vs CoinDCX actual P&L
+
+**Pass criteria**: 0 instances of `raw_pnl * lev` in tradebook.py; all sampled PnLs within tolerance
+**Severity if failed**: CRITICAL — inflated PnL destroys all reporting, risk calculations, and user trust
+
+> **History**: This bug was found on 2026-03-08. Leverage was being SQUARED in all 4 PnL
+> calculation points. For 15× trades, displayed PnL was 15× too large. Fixed in commit `1d2aa7c`.
+
+---
+
 ## SECTION S — SaaS Next.js (13 Checks)
 
 ### S1 · Database Integrity
@@ -407,18 +427,20 @@ HMMBOT/
 
 ### S8 · PnL Calculation Accuracy
 
-**File**: `app/api/trades/route.ts`, `lib/bot-session.ts`
+**File**: `app/api/trades/route.ts`, `lib/bot-session.ts`, `tradebook.py`
 **What it checks**:
-- Sample 10 closed trades with known `entryPrice`, `exitPrice`, `leverage`, `capital`
-- LONG formula: `pnl = (exit - entry) / entry × leverage × capital`
-- SHORT formula: `pnl = (entry - exit) / entry × leverage × capital`
+- Sample 10 closed trades with known `entryPrice`, `exitPrice`, `leverage`, `capital`, `quantity`
+- Correct formula (qty is leveraged): `pnl = (exit - entry) × quantity - commission`
+- ~~Old WRONG formula~~: ~~`pnl = (exit - entry) / entry × leverage × capital`~~ (this double-counts leverage)
+- Verify: `quantity ≈ capital × leverage / entryPrice` (within 5% for exchange fills)
 - Tolerance: `|calculated - stored| < 0.1%`
 - 0 trades with `capital ≤ 0`
 - 0 trades with `leverage > 35` or `leverage < 1`
 - 0 trades with `totalPnl > capital × leverage` (mathematically impossible without liquidation)
+- Cross-check: sum of engine `realized_pnl` vs CoinDCX reported P&L (if live)
 
-**Pass criteria**: All 10 sampled trades correct within tolerance
-**Severity if failed**: HIGH — P&L reporting inaccurate
+**Pass criteria**: All 10 sampled trades correct within tolerance, no `raw_pnl * lev` in code
+**Severity if failed**: CRITICAL — P&L reporting inaccurate, misleads users and risk engine
 
 ---
 
@@ -658,12 +680,13 @@ HMMBOT/
 │  SEVERITY TIER       │ Checks            │ Alert response     │
 ├──────────────────────┼───────────────────┼────────────────────┤
 │  CRITICAL            │ P1, P2, P4, P6,   │ Telegram + stop    │
-│  (fix immediately)   │ P8, P11, I1, I3,  │ bot if live        │
-│                      │ I9, S2, S9        │                    │
+│  (fix immediately)   │ P8, P11, P13,     │ bot if live        │
+│                      │ I1, I3, I9,       │                    │
+│                      │ S2, S8, S9        │                    │
 ├──────────────────────┼───────────────────┼────────────────────┤
 │  HIGH                │ P3, P5, P7, P10,  │ Telegram alert     │
 │  (fix within 24h)    │ P12, S1, S3, S6,  │                    │
-│                      │ S7, S8, S10, S12, │                    │
+│                      │ S7, S10, S12,     │                    │
 │                      │ S13, I2, I4, I7   │                    │
 ├──────────────────────┼───────────────────┼────────────────────┤
 │  MEDIUM              │ P9, S4, S11, I5,  │ Log only           │
@@ -809,7 +832,7 @@ model AuditReport {
 
 ---
 
-## Quick Reference: All 35 Checks
+## Quick Reference: All 36 Checks
 
 | # | ID | Name | Section | Severity |
 |---|----|------|---------|---------|
@@ -825,30 +848,31 @@ model AuditReport {
 | 10 | P10 | Risk Manager Integrity | Engine | HIGH |
 | 11 | P11 | Process Health | Engine | CRITICAL |
 | 12 | P12 | Log Quality | Engine | HIGH |
-| 13 | S1 | DB Integrity | SaaS | CRITICAL |
-| 14 | S2 | User Data Isolation | SaaS | CRITICAL |
-| 15 | S3 | Bot State Consistency | SaaS | HIGH |
-| 16 | S4 | BotSession Lifecycle | SaaS | MEDIUM |
-| 17 | S5 | Auth Coverage (static) | SaaS | HIGH |
-| 18 | S6 | Engine URL Routing | SaaS | HIGH |
-| 19 | S7 | Trade Sync Layer | SaaS | HIGH |
-| 20 | S8 | PnL Calculation Accuracy | SaaS | HIGH |
-| 21 | S9 | Mode Case Consistency | SaaS | CRITICAL |
-| 22 | S10 | Admin Route Security | SaaS | HIGH |
-| 23 | S11 | API Response Shape | SaaS | MEDIUM |
-| 24 | S12 | Dependency Hygiene (static) | SaaS | HIGH |
-| 25 | S13 | Subscription Enforcement | SaaS | HIGH |
-| 26 | I1 | Live Close Loop | Integration | CRITICAL |
-| 27 | I2 | bot_id Cross-System | Integration | HIGH |
-| 28 | I3 | Mode Cross-System | Integration | CRITICAL |
-| 29 | I4 | Trade Count Consistency | Integration | HIGH |
-| 30 | I5 | Balance Accuracy | Integration | MEDIUM |
-| 31 | I6 | Timestamp Consistency | Integration | MEDIUM |
-| 32 | I7 | Risk & Leverage Bounds | Integration | HIGH |
-| 33 | I8 | Coin Tier Compliance | Integration | MEDIUM |
-| 34 | I9 | SL/TP Validity | Integration | CRITICAL |
-| 35 | I10 | HMM Signal Quality | Integration | MEDIUM |
+| 13 | P13 | **PnL Leverage Integrity** | Engine | **CRITICAL** |
+| 14 | S1 | DB Integrity | SaaS | CRITICAL |
+| 15 | S2 | User Data Isolation | SaaS | CRITICAL |
+| 16 | S3 | Bot State Consistency | SaaS | HIGH |
+| 17 | S4 | BotSession Lifecycle | SaaS | MEDIUM |
+| 18 | S5 | Auth Coverage (static) | SaaS | HIGH |
+| 19 | S6 | Engine URL Routing | SaaS | HIGH |
+| 20 | S7 | Trade Sync Layer | SaaS | HIGH |
+| 21 | S8 | PnL Calculation Accuracy | SaaS | **CRITICAL** |
+| 22 | S9 | Mode Case Consistency | SaaS | CRITICAL |
+| 23 | S10 | Admin Route Security | SaaS | HIGH |
+| 24 | S11 | API Response Shape | SaaS | MEDIUM |
+| 25 | S12 | Dependency Hygiene (static) | SaaS | HIGH |
+| 26 | S13 | Subscription Enforcement | SaaS | HIGH |
+| 27 | I1 | Live Close Loop | Integration | CRITICAL |
+| 28 | I2 | bot_id Cross-System | Integration | HIGH |
+| 29 | I3 | Mode Cross-System | Integration | CRITICAL |
+| 30 | I4 | Trade Count Consistency | Integration | HIGH |
+| 31 | I5 | Balance Accuracy | Integration | MEDIUM |
+| 32 | I6 | Timestamp Consistency | Integration | MEDIUM |
+| 33 | I7 | Risk & Leverage Bounds | Integration | HIGH |
+| 34 | I8 | Coin Tier Compliance | Integration | MEDIUM |
+| 35 | I9 | SL/TP Validity | Integration | CRITICAL |
+| 36 | I10 | HMM Signal Quality | Integration | MEDIUM |
 
 ---
 
-*Last updated: 2026-03-08 · 35 checks · 3 sections · 04:00 UTC daily run*
+*Last updated: 2026-03-08 · 36 checks · 3 sections · 04:00 UTC daily run*
