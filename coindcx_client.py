@@ -619,11 +619,8 @@ def get_order_history(status="filled", side=None, page=1, size=20):
 
 def get_last_exit_price(pair, from_date=None):
     """
-    Get the most recent fill price for a pair — used to determine
-    the actual exit price when an exchange-side close is detected.
-
-    Tries trade history first (most accurate), falls back to
-    current market price.
+    Get the most recent fill price AND total fee for a pair — used to determine
+    the actual exit price and exchange fee when an exchange-side close is detected.
 
     Parameters
     ----------
@@ -632,35 +629,48 @@ def get_last_exit_price(pair, from_date=None):
 
     Returns
     -------
-    float or None — the actual exit price, or None if unavailable
+    dict — {"price": float, "fee": float} or {"price": None, "fee": 0}
     """
     from datetime import datetime, timedelta
+
+    result = {"price": None, "fee": 0.0}
 
     if from_date is None:
         from_date = (datetime.utcnow() - timedelta(days=2)).strftime("%Y-%m-%d")
 
-    trades = get_trade_history(pair, from_date=from_date, limit=5)
+    trades = get_trade_history(pair, from_date=from_date, limit=10)
     if trades:
         # Most recent trade first — get its price
-        # CoinDCX returns trades with 'price' and 'timestamp' fields
         latest = trades[0] if isinstance(trades, list) else None
         if latest:
             price = latest.get("price") or latest.get("fill_price") or latest.get("avg_price")
             if price:
-                exit_px = float(price)
-                logger.info("📊 CoinDCX exit price for %s from trade history: %.6f", pair, exit_px)
-                return exit_px
+                result["price"] = float(price)
+                logger.info("📊 CoinDCX exit price for %s from trade history: %.6f", pair, result["price"])
 
-    # Fallback: current market price
-    try:
-        px = get_current_price(pair)
-        if px:
-            logger.info("📊 CoinDCX exit price for %s from market (fallback): %.6f", pair, px)
-            return px
-    except Exception:
-        pass
+        # Sum fee_amount across all recent fills for this exit
+        total_fee = 0.0
+        for fill in (trades if isinstance(trades, list) else []):
+            fee = fill.get("fee_amount") or fill.get("fee") or fill.get("commission") or 0
+            try:
+                total_fee += abs(float(fee))
+            except (ValueError, TypeError):
+                pass
+        result["fee"] = round(total_fee, 6)
+        if result["fee"] > 0:
+            logger.info("💸 CoinDCX total fee for %s: $%.6f (%d fills)", pair, result["fee"], len(trades))
 
-    return None
+    # Fallback: current market price (no fee info)
+    if result["price"] is None:
+        try:
+            px = get_current_price(pair)
+            if px:
+                result["price"] = px
+                logger.info("📊 CoinDCX exit price for %s from market (fallback): %.6f", pair, px)
+        except Exception:
+            pass
+
+    return result
 
 
 # ─── CLI Test ────────────────────────────────────────────────────────────────────

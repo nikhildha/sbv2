@@ -234,16 +234,17 @@ def open_trade(symbol, side, leverage, quantity, entry_price, atr,
     return trade_id
 
 
-def close_trade(trade_id=None, symbol=None, exit_price=None, reason="MANUAL"):
+def close_trade(trade_id=None, symbol=None, exit_price=None, reason="MANUAL", exchange_fee=None):
     """
     Close a trade by ID, or ALL active trades for a symbol.
 
     Parameters
     ----------
-    trade_id   : str (optional) — close specific trade
-    symbol     : str (optional) — close ALL active trades for this symbol
-    exit_price : float (if None, fetches current price)
-    reason     : str — why the trade was closed
+    trade_id     : str (optional) — close specific trade
+    symbol       : str (optional) — close ALL active trades for this symbol
+    exit_price   : float (if None, fetches current price)
+    reason       : str — why the trade was closed
+    exchange_fee : float (optional) — actual fee from exchange (CoinDCX fee_amount)
 
     Returns
     -------
@@ -294,10 +295,13 @@ def close_trade(trade_id=None, symbol=None, exit_price=None, reason="MANUAL"):
         else:
             raw_pnl = (entry - px) * qty
 
-        # Commission: taker fee on both entry and exit notional
+        # Commission: use actual exchange fee if available, otherwise estimate
         entry_notional = entry * qty
         exit_notional = px * qty
-        commission = round((entry_notional + exit_notional) * config.TAKER_FEE, 4)
+        if exchange_fee is not None and exchange_fee > 0:
+            commission = round(exchange_fee, 4)
+        else:
+            commission = round((entry_notional + exit_notional) * config.TAKER_FEE, 4)
 
         # PnL FIX: qty is already leveraged (qty = capital * leverage / price)
         # so raw_pnl already represents the real dollar P&L.
@@ -315,6 +319,7 @@ def close_trade(trade_id=None, symbol=None, exit_price=None, reason="MANUAL"):
         target["status"] = "CLOSED"
         target["exit_reason"] = reason
         target["commission"] = commission
+        target["exchange_fee"] = round(exchange_fee, 6) if exchange_fee else 0
         target["realized_pnl"] = net_pnl
         target["realized_pnl_pct"] = pnl_pct
         target["unrealized_pnl"] = 0

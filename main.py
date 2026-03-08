@@ -1075,19 +1075,27 @@ class RegimeMasterBot:
             if not (trade.get("mode") or "").upper().startswith("LIVE"):
                 continue
             if sym not in cdx_active:
-                # Fetch actual exit price from CoinDCX trade history (LIVE only)
+                # Fetch actual exit price + fee from CoinDCX trade history (LIVE only)
                 exit_price = None
+                exchange_fee = None
                 try:
                     cdx_pair = trade.get("pair") or cdx.to_coindcx_pair(sym)
-                    exit_price = cdx.get_last_exit_price(cdx_pair)
+                    exit_result = cdx.get_last_exit_price(cdx_pair)
+                    exit_price = exit_result.get("price")
+                    exchange_fee = exit_result.get("fee", 0)
                 except Exception as e:
                     logger.debug("Could not fetch exit price for %s: %s", sym, e)
 
                 logger.info(
-                    "📕 %s closed on CoinDCX (SL/TP or manual). Closing in tradebook%s.",
-                    sym, f" @ ${exit_price:.6f}" if exit_price else " (mark price)"
+                    "📕 %s closed on CoinDCX (SL/TP or manual). Closing in tradebook%s%s.",
+                    sym,
+                    f" @ ${exit_price:.6f}" if exit_price else " (mark price)",
+                    f" fee=${exchange_fee:.4f}" if exchange_fee else "",
                 )
-                tradebook.close_trade(symbol=sym, reason="EXCHANGE_CLOSED", exit_price=exit_price)
+                tradebook.close_trade(
+                    symbol=sym, reason="EXCHANGE_CLOSED",
+                    exit_price=exit_price, exchange_fee=exchange_fee,
+                )
                 if sym in self._active_positions:
                     del self._active_positions[sym]
 

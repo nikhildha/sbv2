@@ -16,6 +16,7 @@ interface Trade {
   activePnl: number; activePnlPercent: number;
   totalPnl: number; totalPnlPercent: number;
   exitPercent?: number | null; exitReason?: string | null;
+  fee: number;
   entryTime: string; exitTime?: string | null;
   botName?: string;
   botId?: string | null;
@@ -82,6 +83,7 @@ function mapTrade(t: any): Trade {
     exitReason: t.exit_reason || t.exitReason || null,
     entryTime: t.entry_time || t.entry_timestamp || t.entryTime || t.timestamp || new Date().toISOString(),
     exitTime: t.exit_time || t.exit_timestamp || t.exitTime || null,
+    fee: t.exchange_fee || t.commission || t.fee || 0,
     botName: t.bot_name || t.botName || 'Unknown Bot',
     botId: t.bot_id || t.botId || null,
   };
@@ -312,13 +314,14 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
   const exportCSV = () => {
     // Export all trades for the selected mode (ignoring status/position/regime filters)
     const exportTrades = modeFiltered;
-    const headers = ['Bot', 'Type', 'Coin', 'Side', 'Leverage', 'Capital', 'Entry Price', 'Exit Price', 'SL', 'TP', 'SL Type', 'Target Type', 'P&L $', 'P&L %', 'Status', 'Entry Time', 'Exit Time'];
+    const headers = ['Bot', 'Type', 'Coin', 'Side', 'Leverage', 'Capital', 'Entry Price', 'Exit Price', 'SL', 'TP', 'SL Type', 'Target Type', 'P&L $', 'P&L %', 'Fee', 'Status', 'Entry Time', 'Exit Time'];
     const rows = exportTrades.map(t => [
       t.botName || 'Unknown Bot', t.mode || 'paper', t.coin, t.position, t.leverage, t.capital,
       t.entryPrice, t.exitPrice || t.currentPrice || '', t.stopLoss, t.takeProfit,
       t.slType, t.targetType,
       t.status === 'active' ? t.activePnl : t.totalPnl,
       t.status === 'active' ? t.activePnlPercent : t.totalPnlPercent,
+      t.fee || '',
       t.status, t.entryTime, t.exitTime || '',
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
@@ -587,7 +590,7 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
                   <table style={{ width: '100%', minWidth: '1300px', borderCollapse: 'collapse', fontSize: '13px' }}>
                     <thead>
                       <tr style={{ borderBottom: '2px solid rgba(255,255,255,0.08)' }}>
-                        {['Bot', 'Type', 'Coin', 'Side', 'Lev', 'Capital', 'Entry', 'LTP', 'Exit', 'SL', 'TP', 'SL Type', 'P&L $', 'P&L %', 'Status', 'Action'].map(h => (
+                        {['Bot', 'Type', 'Coin', 'Side', 'Lev', 'Capital', 'Entry', 'LTP', 'Exit', 'SL', 'TP', 'SL Type', 'P&L $', 'P&L %', 'Fee', 'Status', 'Action'].map(h => (
                           <th key={h} style={{
                             padding: '10px 10px', textAlign: h === 'Bot' || h === 'Coin' ? 'left' : 'center',
                             fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.8px',
@@ -681,6 +684,9 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
                             </td>
                             <td style={{ padding: '10px', textAlign: 'center', fontWeight: 700, color: pnlColor(pnlPct) }}>
                               {fmtPct(pnlPct)}
+                            </td>
+                            <td style={{ padding: '10px', textAlign: 'center', fontFamily: 'monospace', fontSize: '11px', color: t.fee > 0 ? '#F59E0B' : '#4B5563' }}>
+                              {!isActive && t.fee > 0 ? `$${t.fee.toFixed(4)}` : '—'}
                             </td>
                             <td style={{ padding: '10px', textAlign: 'center' }}>
                               <span style={{
