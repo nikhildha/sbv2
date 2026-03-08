@@ -36,20 +36,35 @@ export async function GET() {
             // C2 FIX: single bot query used for BOTH engine routing AND trade sync
             userBot = await prisma.bot.findFirst({
                 where: { userId },
+                include: { config: true },
                 orderBy: [{ isActive: 'desc' }, { updatedAt: 'desc' }],
             });
             if (userBot) {
-                const botMode = (userBot.config as any)?.mode || 'paper';
-                engineMode = botMode.toLowerCase().includes('live') ? 'live' : 'paper';
+                const botMode = userBot.config?.mode || '';
+                if (botMode.toLowerCase().includes('live')) {
+                    engineMode = 'live';
+                } else if (userBot.exchange === 'coindcx') {
+                    // Fallback: CoinDCX bots are always live
+                    engineMode = 'live';
+                } else {
+                    engineMode = 'paper';
+                }
             }
         }
 
-        // Fetch from the correct engine
+        // Fetch from the primary engine based on mode
         const engineData = await fetchEngineData(engineMode);
+        // Also fetch from the other engine to merge tradebooks
+        const altMode: EngineMode = engineMode === 'live' ? 'paper' : 'live';
+        const altEngineData = await fetchEngineData(altMode);
 
-        const multi = engineData?.multi || { coin_states: {}, last_analysis_time: null, deployed_count: 0 };
-        const engineTradebook = engineData?.tradebook || { trades: [], summary: {} };
-        const engineState = engineData?.engine || { status: getEngineUrl(engineMode) ? 'unknown' : 'not_configured' };
+        const multi = engineData?.multi || altEngineData?.multi || { coin_states: {}, last_analysis_time: null, deployed_count: 0 };
+        // Merge tradebooks from both engines
+        const primaryTrades = engineData?.tradebook?.trades || [];
+        const altTrades = altEngineData?.tradebook?.trades || [];
+        const mergedEngineTrades = [...primaryTrades, ...altTrades];
+        const engineTradebook = { trades: mergedEngineTrades, summary: engineData?.tradebook?.summary || {} };
+        const engineState = engineData?.engine || altEngineData?.engine || { status: getEngineUrl(engineMode) ? 'unknown' : 'not_configured' };
 
         // Build the engine state part of the response (shared — not per-user)
         const coinStates = multi.coin_states || {};
