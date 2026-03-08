@@ -107,8 +107,8 @@ export async function syncEngineTrades(
                     position: side === 'buy' || side === 'long' ? 'long' : 'short',
                     regime: t.regime || '',
                     confidence: t.confidence || 0,
-                    // B3 FIX: normalize mode to lowercase to prevent case mismatches
-                    mode: (t.mode || 'paper').toLowerCase(),
+                    // S9 FIX: normalize mode — strip exchange suffix (LIVE-COINDCX → live)
+                    mode: (t.mode || 'paper').toLowerCase().startsWith('live') ? 'live' : 'paper',
                     leverage: t.leverage || 1,
                     capital: t.capital || t.position_size || 100,
                     quantity: t.quantity || 0,

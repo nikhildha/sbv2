@@ -79,11 +79,11 @@ export async function POST(request: Request) {
       }
 
       // ─── LIVE MODE STOP: close CoinDCX positions FIRST ────────────
-      // C4 FIX: case-insensitive mode check for live exit
+      // C4 FIX: case-insensitive mode check for live exit (also handles 'live-coindcx')
       const botMode = (bot.config?.mode ?? 'paper').toLowerCase();
-      const engineUrl = getEngineUrl(botMode === 'live' ? 'live' : 'paper');
+      const engineUrl = getEngineUrl(botMode.startsWith('live') ? 'live' : 'paper');
 
-      if (botMode === 'live' && engineUrl) {
+      if (botMode.startsWith('live') && engineUrl) {
         try {
           const exitRes = await fetch(`${engineUrl}/api/exit-all-live`, {
             method: 'POST',

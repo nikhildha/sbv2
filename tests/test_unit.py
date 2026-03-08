@@ -157,8 +157,12 @@ class TestRiskManagerScoring(unittest.TestCase):
         self.assertEqual(score, -config.CONVICTION_MACRO_FIGHT_PENALTY)
 
     def test_score_btc_macro_crash_penalty(self):
+        # REGIME_CRASH (=3) is a legacy constant unused by the 3-state HMM.
+        # With HMM_N_STATES=3, CRASH is merged into BEAR; no separate crash branch
+        # exists in _score_btc_macro — falls through to the chop/unknown case.
         score = self.RM._score_btc_macro(config.REGIME_CRASH, config.REGIME_BULL, "BUY")
-        self.assertEqual(score, -config.CONVICTION_CRASH_PENALTY)
+        expected = config.CONVICTION_WEIGHT_BTC_MACRO * 0.35
+        self.assertAlmostEqual(score, expected, places=5)
 
     def test_score_btc_macro_none_btc_returns_neutral(self):
         score = self.RM._score_btc_macro(None, config.REGIME_BULL, "BUY")

@@ -419,7 +419,7 @@ class ExecutionEngine:
                 "regime":       regime_name,
                 "confidence":   confidence if confidence else 0,
                 "reason":       reason,
-                "mode":         "LIVE-COINDCX",
+                "mode":         "LIVE",  # P6 FIX: was 'LIVE-COINDCX' — exchange tracked in 'exchange' field
                 "exchange":     "coindcx",
                 "pair":         pair,
                 "position_id":  confirmed.get("position_id"),

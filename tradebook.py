@@ -271,7 +271,7 @@ def close_trade(trade_id=None, symbol=None, exit_price=None, reason="MANUAL"):
         # A3 FIX: For LIVE trades, use CoinDCX price (not Binance)
         px = exit_price
         if px is None:
-            if target.get("mode", "").upper() == "LIVE":
+            if target.get("mode", "").upper().startswith("LIVE"):
                 try:
                     import coindcx_client as cdx
                     cdx_pair = target.get("pair") or cdx.to_coindcx_pair(target["symbol"])
@@ -510,7 +510,7 @@ def update_unrealized(prices=None, funding_rates=None):
             current = prices[symbol]
         else:
             # A4 FIX: For LIVE trades, try CoinDCX price first (not Binance)
-            if trade.get("mode", "").upper() == "LIVE":
+            if trade.get("mode", "").upper().startswith("LIVE"):
                 try:
                     import coindcx_client as cdx
                     cdx_pair = trade.get("pair") or cdx.to_coindcx_pair(symbol)
