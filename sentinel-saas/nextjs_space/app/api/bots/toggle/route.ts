@@ -132,6 +132,24 @@ export async function POST(request: Request) {
     const botMode = bot.config?.mode ?? 'paper';
     const engineUrl = getEngineUrl(botMode === 'live' ? 'live' : 'paper');
     if (engineUrl && isActive) {
+      // ──── CRITICAL: Push bot_id to engine for data isolation ────────────
+      // This ensures ALL trades opened by the engine are stamped with
+      // this user's botId — preventing cross-user data leakage.
+      try {
+        await fetch(`${engineUrl}/api/set-bot-id`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bot_id: botId,
+            user_id: session.user.id,
+          }),
+          signal: AbortSignal.timeout(5000),
+        });
+        console.log(`[toggle] set-bot-id: pushed botId=${botId} to engine`);
+      } catch (e) {
+        console.warn('[toggle] set-bot-id failed (continuing):', e);
+      }
+
       if (botMode === 'live') {
         const exchange = bot.exchange || 'coindcx';
         // Switch engine to live mode

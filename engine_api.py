@@ -334,6 +334,37 @@ def api_validate_exchange():
         return jsonify({"valid": False, "exchange": exchange, "error": str(e)}), 200
 
 
+@app.route("/api/set-bot-id", methods=["POST"])
+def api_set_bot_id():
+    """Set the ENGINE_BOT_ID at runtime — called by dashboard when user starts a bot.
+    This stamps all subsequent trades with the correct bot_id for data isolation."""
+    data = request.get_json() or {}
+    bot_id = data.get("bot_id", "")
+    user_id = data.get("user_id", "")
+
+    if not bot_id:
+        return jsonify({"error": "bot_id is required"}), 400
+
+    old_id = config.ENGINE_BOT_ID
+    config.ENGINE_BOT_ID = bot_id
+
+    # Also update user_id if provided
+    if user_id:
+        config.ENGINE_USER_ID = user_id
+
+    logger.info(
+        "🔑 ENGINE_BOT_ID updated: %s → %s (user: %s)",
+        old_id or "<empty>", bot_id, user_id or "<unchanged>"
+    )
+
+    return jsonify({
+        "success": True,
+        "bot_id": bot_id,
+        "previous_bot_id": old_id,
+        "user_id": user_id or config.ENGINE_USER_ID,
+    })
+
+
 
 
 
