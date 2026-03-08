@@ -440,6 +440,9 @@ class RegimeMasterBot:
                     user_id=getattr(config, 'ENGINE_USER_ID', None),
                     profile_id=profile_id,
                     bot_name=config.ENGINE_BOT_NAME or profile["label"],
+                    exchange=result.get("exchange") if result else None,
+                    pair=result.get("pair") if result else None,
+                    position_id=result.get("position_id") if result else None,
                 )
 
                 self._active_positions[pos_key] = {

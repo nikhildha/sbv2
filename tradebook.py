@@ -95,7 +95,8 @@ def _compute_summary(book):
 
 def open_trade(symbol, side, leverage, quantity, entry_price, atr,
                regime, confidence, reason="", capital=100.0, mode=None, user_id=None,
-               profile_id="standard", bot_name="SM-Standard"):
+               profile_id="standard", bot_name="SM-Standard",
+               exchange=None, pair=None, position_id=None):
     """
     Record a new trade entry in the tradebook.
 
@@ -211,6 +212,10 @@ def open_trade(symbol, side, leverage, quantity, entry_price, atr,
         "profile_id":       profile_id,
         "bot_name":         bot_name,
         "bot_id":           config.ENGINE_BOT_ID,   # DB Bot.id — stamped for sync layer
+        # CoinDCX exchange tracking
+        "exchange":         exchange,
+        "pair":             pair,
+        "position_id":      position_id,
     }
 
     book["trades"].append(trade)
@@ -917,14 +922,17 @@ def sync_live_tpsl():
         trailing_tp = trade.get("trailing_tp", trade["take_profit"])
 
         # Compare with last-pushed values
-        last_sl = trade.get("_cdx_last_sl", trade["stop_loss"])
-        last_tp = trade.get("_cdx_last_tp", trade["take_profit"])
+        last_sl = trade.get("_cdx_last_sl")
+        last_tp = trade.get("_cdx_last_tp")
 
-        sl_changed = abs(trailing_sl - last_sl) > 1e-8
-        tp_changed = abs(trailing_tp - last_tp) > 1e-8
+        # Force initial push if never synced to CoinDCX
+        first_push = (last_sl is None or last_tp is None)
 
-        if not sl_changed and not tp_changed:
-            continue
+        if not first_push:
+            sl_changed = abs(trailing_sl - last_sl) > 1e-8
+            tp_changed = abs(trailing_tp - last_tp) > 1e-8
+            if not sl_changed and not tp_changed:
+                continue
 
         # Find CoinDCX position ID
         pair = cdx.to_coindcx_pair(symbol)
