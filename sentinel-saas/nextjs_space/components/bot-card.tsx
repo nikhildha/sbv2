@@ -213,7 +213,7 @@ export function BotCard({ bot, onToggle, onDelete, liveTradeCount, trades = [], 
                             <td style={{ padding: '6px 4px', fontWeight: 600, color: '#E5E7EB' }}>
                               {(t.symbol || t.coin || '').replace('USDT', '')}
                             </td>
-                            <td style={{ padding: '6px 4px', color: t.side === 'LONG' ? '#22C55E' : '#EF4444' }}>
+                            <td style={{ padding: '6px 4px', color: (t.side === 'LONG' || t.side === 'BUY') ? '#22C55E' : '#EF4444' }}>
                               {t.side || '-'}
                             </td>
                             <td style={{ padding: '6px 4px', textAlign: 'right', fontFamily: 'monospace', color: '#9CA3AF' }}>

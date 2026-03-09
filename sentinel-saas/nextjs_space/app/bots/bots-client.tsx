@@ -87,6 +87,19 @@ function PerformanceSection() {
       </div>
       {/* Session list */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {/* Header row */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: '140px 1fr 80px 80px 90px 90px',
+          gap: '8px', padding: '6px 14px', fontSize: '10px', fontWeight: 600,
+          color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.8px',
+        }}>
+          <span>Status</span>
+          <span>Date · Duration</span>
+          <span style={{ textAlign: 'right' }}>Trades</span>
+          <span style={{ textAlign: 'right' }}>Win Rate</span>
+          <span style={{ textAlign: 'right' }}>PnL</span>
+          <span style={{ textAlign: 'right' }}>ROI</span>
+        </div>
         {sessions.map((s: any) => (
           <div key={s.id} style={{
             background: 'rgba(17,24,39,0.6)', border: '1px solid rgba(255,255,255,0.06)',
@@ -94,7 +107,7 @@ function PerformanceSection() {
           }}>
             <div onClick={() => setExpanded(expanded === s.id ? null : s.id)}
               style={{
-                display: 'grid', gridTemplateColumns: '100px 1fr 70px 70px 70px 80px 80px 28px',
+                display: 'grid', gridTemplateColumns: '140px 1fr 80px 80px 90px 90px',
                 gap: '8px', alignItems: 'center', padding: '10px 14px', cursor: 'pointer',
                 fontSize: '13px',
               }}>
@@ -112,20 +125,12 @@ function PerformanceSection() {
               <span style={{ textAlign: 'right', fontFamily: 'monospace', color: (s.winRate || 0) >= 50 ? '#22C55E' : '#9CA3AF' }}>
                 {s.closedTrades > 0 ? `${(s.winRate || 0).toFixed(0)}%` : '—'}
               </span>
-              <span style={{ textAlign: 'right' }}>
-                <span style={{
-                  fontSize: '10px', padding: '2px 6px', borderRadius: '4px',
-                  background: s.mode === 'live' ? 'rgba(245,158,11,0.15)' : 'rgba(107,114,128,0.15)',
-                  color: s.mode === 'live' ? '#F59E0B' : '#9CA3AF',
-                }}>{s.mode}</span>
-              </span>
               <span style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, color: (s.livePnl || s.totalPnl || 0) >= 0 ? '#22C55E' : '#EF4444' }}>
                 {fmt(s.livePnl || s.totalPnl || 0)}
               </span>
               <span style={{ textAlign: 'right', fontFamily: 'monospace', fontSize: '11px', color: (s.liveRoi || s.roi || 0) >= 0 ? '#22C55E' : '#EF4444' }}>
                 {fmt(s.liveRoi || s.roi || 0)}%
               </span>
-              <span style={{ color: '#6B7280', fontSize: '12px' }}>{expanded === s.id ? '▲' : '▼'}</span>
             </div>
             {expanded === s.id && (
               <div style={{

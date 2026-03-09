@@ -481,30 +481,7 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
             </div>
           </motion.div>
 
-          {/* ═══ Master Mode Filter ═══ */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.03 }} className="mb-4">
-            <div style={{
-              display: 'inline-flex', gap: '0', borderRadius: '10px', overflow: 'hidden',
-              border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(17,24,39,0.7)',
-            }}>
-              {(['all', 'paper', 'live'] as const).map(m => (
-                <button key={m} onClick={() => setModeFilter(m)} style={{
-                  padding: '8px 20px', border: 'none', cursor: 'pointer',
-                  fontSize: '13px', fontWeight: 600,
-                  background: modeFilter === m
-                    ? m === 'paper' ? 'rgba(34,197,94,0.2)' : m === 'live' ? 'rgba(239,68,68,0.2)' : 'rgba(6,182,212,0.15)'
-                    : 'transparent',
-                  color: modeFilter === m
-                    ? m === 'paper' ? '#22C55E' : m === 'live' ? '#EF4444' : '#06B6D4'
-                    : '#6B7280',
-                  borderRight: m !== 'live' ? '1px solid rgba(255,255,255,0.08)' : 'none',
-                  transition: 'all 0.2s',
-                }}>
-                  {m === 'all' ? 'All Modes' : m === 'paper' ? '🟢 Paper' : '🔴 Live'}
-                </button>
-              ))}
-            </div>
-          </motion.div>
+
 
           {/* ═══ Portfolio Summary Stats ═══ */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="mb-6">
@@ -558,13 +535,7 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
                   <option value="short">Short / Sell</option>
                 </select>
 
-                <select value={regimeFilter} onChange={e => setRegimeFilter(e.target.value)} style={{
-                  padding: '6px 10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)',
-                  background: 'rgba(255,255,255,0.04)', color: '#D1D5DB', fontSize: '13px',
-                }}>
-                  <option value="all">All Regimes</option>
-                  {uniqueRegimes.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
+
 
                 <select value={pnlFilter} onChange={e => setPnlFilter(e.target.value as any)} style={{
                   padding: '6px 10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)',
@@ -575,36 +546,18 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
                   <option value="loss">Loss Only</option>
                 </select>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
-                  {/* Paper/Live mode indicator */}
-                  <span style={{
-                    padding: '4px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: 800,
-                    letterSpacing: '0.5px',
-                    background: modeFilter === 'live'
-                      ? 'rgba(239,68,68,0.2)' : modeFilter === 'paper'
-                        ? 'rgba(34,197,94,0.2)' : 'rgba(6,182,212,0.15)',
-                    color: modeFilter === 'live'
-                      ? '#F87171' : modeFilter === 'paper'
-                        ? '#4ADE80' : '#06B6D4',
-                    border: `1px solid ${modeFilter === 'live'
-                      ? 'rgba(239,68,68,0.4)' : modeFilter === 'paper'
-                        ? 'rgba(34,197,94,0.4)' : 'rgba(6,182,212,0.3)'}`,
-                  }}>
-                    {modeFilter === 'live' ? '🔴 LIVE' : modeFilter === 'paper' ? '🟢 PAPER' : '📊 ALL MODES'}
-                  </span>
-                  <div style={{ position: 'relative' }}>
-                    <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#6B7280' }} />
-                    <input value={coinSearch} onChange={e => setCoinSearch(e.target.value)}
-                      placeholder="Search coin..."
-                      style={{
-                        padding: '6px 10px 6px 30px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)',
-                        background: 'rgba(255,255,255,0.04)', color: '#D1D5DB', fontSize: '13px', width: '150px',
-                      }} />
-                    {coinSearch && (
-                      <X size={12} onClick={() => setCoinSearch('')}
-                        style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: '#6B7280' }} />
-                    )}
-                  </div>
+                <div style={{ marginLeft: 'auto', position: 'relative' }}>
+                  <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#6B7280' }} />
+                  <input value={coinSearch} onChange={e => setCoinSearch(e.target.value)}
+                    placeholder="Search coin..."
+                    style={{
+                      padding: '6px 10px 6px 30px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)',
+                      background: 'rgba(255,255,255,0.04)', color: '#D1D5DB', fontSize: '13px', width: '150px',
+                    }} />
+                  {coinSearch && (
+                    <X size={12} onClick={() => setCoinSearch('')}
+                      style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: '#6B7280' }} />
+                  )}
                 </div>
               </div>
             </Card>
@@ -618,7 +571,7 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
                   <table style={{ width: '100%', minWidth: '1300px', borderCollapse: 'collapse', fontSize: '13px' }}>
                     <thead>
                       <tr style={{ borderBottom: '2px solid rgba(255,255,255,0.08)' }}>
-                        {['Bot', 'Coin', 'Position', 'Leverage', 'Capital', 'Entry', 'LTP', 'Stop Loss', 'Target Price', 'SL Type', 'PnL', 'PnL %', 'Fee', 'Status', 'Exit', 'Action'].map(h => (
+                        {['Bot', 'Coin', 'Position', 'Leverage', 'Capital', 'Entry', 'LTP', 'Stop Loss', 'Target Price', 'SL Type', 'PnL', 'PnL %', 'Fee', 'Net PnL', 'Status', 'Exit', 'Action'].map(h => (
                           <th key={h} style={{
                             padding: '10px 10px', textAlign: h === 'Bot' || h === 'Coin' ? 'left' : 'center',
                             fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.8px',
@@ -691,7 +644,7 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
                                 background: (t.slType || '').includes('Trail') ? 'rgba(34,197,94,0.15)' : 'rgba(107,114,128,0.15)',
                                 color: (t.slType || '').includes('Trail') ? '#22C55E' : '#9CA3AF',
                               }}>
-                                {(t.slType || '').includes('Trail') ? '🛡️ ' : ''}{t.slType || 'Default'}
+                                {t.slType || 'Default'}
                               </span>
                             </td>
 
@@ -704,6 +657,9 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
                             <td style={{ padding: '10px', textAlign: 'center', fontFamily: 'monospace', fontSize: '11px', color: t.fee > 0 ? '#F59E0B' : '#4B5563' }}>
                               {!isActive && t.fee > 0 ? `$${t.fee.toFixed(4)}` : '—'}
                             </td>
+                            <td style={{ padding: '10px', textAlign: 'center', fontWeight: 700, fontFamily: 'monospace', fontSize: '12px', color: pnlColor(pnl - (isActive ? 0 : t.fee)) }}>
+                              {fmt$(pnl - (isActive ? 0 : t.fee))}
+                            </td>
                             <td style={{ padding: '10px', textAlign: 'center' }}>
                               <span style={{
                                 padding: '2px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: 700,
@@ -712,6 +668,9 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
                               }}>
                                 {isActive ? '● ACTIVE' : t.exitReason || 'CLOSED'}
                               </span>
+                              <div style={{ fontSize: '9px', color: '#6B7280', marginTop: '2px' }}>
+                                {t.botName || 'Bot'}
+                              </div>
                             </td>
                             <td style={{ padding: '10px', textAlign: 'center', fontFamily: 'monospace', fontSize: '12px', color: '#D1D5DB' }}>
                               {!isActive && t.exitPrice ? fmtPrice(t.exitPrice) : '—'}
