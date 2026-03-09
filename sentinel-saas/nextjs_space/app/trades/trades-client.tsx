@@ -77,8 +77,14 @@ function mapTrade(t: any): Trade {
     entryPrice: t.entry_price || t.entryPrice || 0,
     currentPrice: t.current_price || t.currentPrice || null,
     exitPrice: t.exit_price || t.exitPrice || null,
-    stopLoss: t.trailing_sl || t.trailingSl || t.stop_loss || t.stopLoss || 0,
-    takeProfit: t.trailing_tp || t.trailingTp || t.take_profit || t.takeProfit || 0,
+    stopLoss: (() => {
+      const baseSl = t.stop_loss || t.stopLoss || 0;
+      const trailSl = t.trailing_sl || t.trailingSl;
+      // Only use trailing SL when trailing is actually active and value is valid
+      if ((t.trailing_active || t.trailingActive) && trailSl && trailSl > 0) return trailSl;
+      return baseSl;
+    })(),
+    takeProfit: t.take_profit || t.takeProfit || 0,
     slType,
     targetType,
     status,
