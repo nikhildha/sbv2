@@ -83,7 +83,17 @@ function mapTrade(t: any): Trade {
     exitReason: t.exit_reason || t.exitReason || null,
     entryTime: t.entry_time || t.entry_timestamp || t.entryTime || t.timestamp || new Date().toISOString(),
     exitTime: t.exit_time || t.exit_timestamp || t.exitTime || null,
-    fee: t.exchange_fee || t.commission || t.fee || 0,
+    fee: (() => {
+      // Prefer exchange_fee (live), then commission (engine-calculated), then manual fee
+      const f = [t.exchange_fee, t.commission, t.fee].find(v => v != null && v > 0);
+      if (f) return f;
+      // Fallback for closed trades: estimate as 0.1% round-trip × leveraged capital
+      const st = (t.status || '').toLowerCase();
+      if (st !== 'active' && t.capital && t.leverage) {
+        return Math.round(t.capital * t.leverage * 0.001 * 10000) / 10000;
+      }
+      return 0;
+    })(),
     botName: t.bot_name || t.botName || 'Unknown Bot',
     botId: t.bot_id || t.botId || null,
   };
