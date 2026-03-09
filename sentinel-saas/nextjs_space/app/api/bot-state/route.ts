@@ -97,12 +97,24 @@ export async function GET() {
         const activeTrades = trades.filter((t: any) => (t.status || '').toUpperCase() === 'ACTIVE');
 
         // ─── Timing fields: fallback computation when engine doesn't provide them ──
-        const lastAnalysis = multi.last_analysis_time || multi.timestamp || null;
+        // Engine writes timestamps as datetime.now(IST).replace(tzinfo=None) — IST with no TZ marker.
+        // The dashboard's formatIST() appends 'Z' if no TZ is found, causing double-offset.
+        // Fix: tag bare timestamps with +05:30 so they're correctly interpreted as IST.
+        const normalizeTs = (ts: any): string | null => {
+            if (!ts) return null;
+            const s = String(ts);
+            // Already has Z or ±HH:MM → leave as-is
+            if (/Z$|[+-]\d{2}:\d{2}$/.test(s)) return s;
+            // Bare timestamp from engine → it's IST, tag it
+            return s + '+05:30';
+        };
+
+        const lastAnalysis = normalizeTs(multi.last_analysis_time) || normalizeTs(multi.timestamp) || null;
         const intervalSec = multi.analysis_interval_seconds || 300; // default 5min
-        let nextAnalysis = multi.next_analysis_time || null;
+        let nextAnalysis = normalizeTs(multi.next_analysis_time) || null;
         if (!nextAnalysis && lastAnalysis && intervalSec) {
             try {
-                const lastMs = new Date(String(lastAnalysis)).getTime();
+                const lastMs = new Date(lastAnalysis).getTime();
                 if (!isNaN(lastMs)) {
                     nextAnalysis = new Date(lastMs + intervalSec * 1000).toISOString();
                 }
