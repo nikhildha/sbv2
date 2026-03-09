@@ -364,7 +364,7 @@ export default function EngineControl() {
                                     </div>
                                     <div>
                                         <div className="flex items-center gap-2">
-                                            <p className="text-white font-medium">{bot.name}</p>
+                                            <p className="text-white font-medium">{bot.name || 'Unnamed'}</p>
                                             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${bot.isActive
                                                 ? 'bg-green-500/10 text-green-400 border border-green-500/20'
                                                 : 'bg-gray-500/10 text-gray-400 border border-gray-500/20'
@@ -377,9 +377,9 @@ export default function EngineControl() {
                                             </span>
                                         </div>
                                         <div className="flex items-center gap-4 mt-1">
-                                            <span className="text-gray-400 text-sm">{bot.user.name || bot.user.email}</span>
+                                            <span className="text-gray-400 text-sm">{bot.user?.name || bot.user?.email || 'Unknown user'}</span>
                                             <span className="text-gray-500 text-xs">•</span>
-                                            <span className="text-gray-500 text-xs">{bot._count.trades} trades</span>
+                                            <span className="text-gray-500 text-xs">{bot._count?.trades ?? 0} trades</span>
                                             <span className="text-gray-500 text-xs">•</span>
                                             <span className="text-gray-500 text-xs">Created {new Date(bot.createdAt).toLocaleDateString()}</span>
                                         </div>
