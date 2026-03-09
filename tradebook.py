@@ -605,7 +605,7 @@ def update_unrealized(prices=None, funding_rates=None):
         trade["unrealized_pnl_pct"] = pnl_pct
         trade["duration_minutes"] = round(duration, 1)
 
-        # ── Trailing SL / TP Logic ────────────────────────────────
+        # ── Trailing SL: Stepped Breakeven + Profit Lock (F2) ────
         atr = trade.get("atr_at_entry", 0)
         is_long = trade["position"] == "LONG"
 
@@ -622,96 +622,60 @@ def update_unrealized(prices=None, funding_rates=None):
             trade["trail_sl_count"] = 0
         if "tp_extensions" not in trade:
             trade["tp_extensions"] = 0
+        if "stepped_lock_level" not in trade:
+            trade["stepped_lock_level"] = -1  # No milestone hit yet
 
-        # ── Capital Protection SL ─────────────────────────────────
-        # When leveraged P&L ≥ 10%, move SL to lock in +4% LEVERAGED profit
-        # Formula: lock_price = lock_pct / (100 × leverage)
-        # At 35x: 4%/35 = 0.114% price move = 4% leveraged return
-        if config.CAPITAL_PROTECT_ENABLED and pnl_pct >= config.CAPITAL_PROTECT_TRIGGER_PCT:
-            if not trade.get("capital_protection_active"):
-                lev = trade["leverage"]
-                lock_price_pct = config.CAPITAL_PROTECT_LOCK_PCT / (100 * lev)
-                if is_long:
-                    protect_sl = round(entry * (1 + lock_price_pct), 6)
-                else:
-                    protect_sl = round(entry * (1 - lock_price_pct), 6)
-                # Only tighten, never loosen
-                if is_long and protect_sl > trade["trailing_sl"]:
-                    trade["trailing_sl"] = protect_sl
-                    trade["capital_protection_active"] = True
-                    trade["trailing_active"] = True
-                    trade["trail_sl_count"] = trade.get("trail_sl_count", 0) + 1
-                    logger.info(
-                        "🛡️ Capital protection SL for %s: SL → %.6f (+%.1f%% leveraged profit lock)",
-                        trade["trade_id"], protect_sl, config.CAPITAL_PROTECT_LOCK_PCT,
-                    )
-                elif not is_long and protect_sl < trade["trailing_sl"]:
-                    trade["trailing_sl"] = protect_sl
-                    trade["capital_protection_active"] = True
-                    trade["trailing_active"] = True
-                    trade["trail_sl_count"] = trade.get("trail_sl_count", 0) + 1
-                    logger.info(
-                        "🛡️ Capital protection SL for %s: SL → %.6f (+%.1f%% leveraged profit lock)",
-                        trade["trade_id"], protect_sl, config.CAPITAL_PROTECT_LOCK_PCT,
-                    )
+        # ── F2 Stepped Trailing SL ────────────────────────────────
+        # Iterate through TRAILING_SL_STEPS milestones and progressively
+        # tighten SL based on leveraged P&L %.
+        # Each step: (trigger_pnl_pct, lock_pnl_pct)
+        # lock_pnl_pct = 0 means breakeven (entry price)
+        if config.TRAILING_SL_ENABLED:
+            lev = trade["leverage"]
+            steps = getattr(config, 'TRAILING_SL_STEPS', [])
 
-        # --- Trailing Stop Loss ---
-        if config.TRAILING_SL_ENABLED and atr > 0:
-            # Update peak price (high-water mark for LONG, low-water mark for SHORT)
-            if is_long:
-                if current > trade["peak_price"]:
-                    trade["peak_price"] = current
-            else:
-                if current < trade["peak_price"]:
-                    trade["peak_price"] = current
-
-            # Check activation: price moved enough in our favor
-            activation_dist = atr * config.TRAILING_SL_ACTIVATION_ATR
-            if is_long:
-                favorable_move = current - entry
-            else:
-                favorable_move = entry - current
-
-            if favorable_move >= activation_dist:
-                trade["trailing_active"] = True
-
-            # Trail the SL (only tightens, never loosens)
-            if trade["trailing_active"]:
-                trail_dist = atr * config.TRAILING_SL_DISTANCE_ATR
-                if is_long:
-                    new_sl = round(trade["peak_price"] - trail_dist, 6)
-                    if new_sl > trade["trailing_sl"]:
-                        trade["trailing_sl"] = new_sl
-                        trade["trail_sl_count"] = trade.get("trail_sl_count", 0) + 1
-                else:
-                    new_sl = round(trade["peak_price"] + trail_dist, 6)
-                    if new_sl < trade["trailing_sl"]:
-                        trade["trailing_sl"] = new_sl
-                        trade["trail_sl_count"] = trade.get("trail_sl_count", 0) + 1
-
-        # --- Trailing Take Profit ---
-        if config.TRAILING_TP_ENABLED and atr > 0:
-            max_ext = config.TRAILING_TP_MAX_EXTENSIONS
-            if trade["tp_extensions"] < max_ext:
-                # Distance from entry to current TP
-                if is_long:
-                    tp_dist = trade["trailing_tp"] - entry
-                    progress = (current - entry) / tp_dist if tp_dist > 0 else 0
-                else:
-                    tp_dist = entry - trade["trailing_tp"]
-                    progress = (entry - current) / tp_dist if tp_dist > 0 else 0
-
-                if progress >= config.TRAILING_TP_ACTIVATION_PCT:
-                    ext_amount = atr * config.TRAILING_TP_EXTENSION_ATR
+            for step_idx, (trigger_pnl, lock_pnl) in enumerate(steps):
+                # Only process steps we haven't activated yet
+                if step_idx <= trade["stepped_lock_level"]:
+                    continue
+                if pnl_pct >= trigger_pnl:
+                    # Calculate the lock price from lock_pnl percentage
+                    # lock_pnl is in leveraged %, convert to price move
+                    lock_price_move = (lock_pnl / 100) / lev
                     if is_long:
-                        trade["trailing_tp"] = round(trade["trailing_tp"] + ext_amount, 6)
+                        new_sl = round(entry * (1 + lock_price_move), 6)
                     else:
-                        trade["trailing_tp"] = round(trade["trailing_tp"] - ext_amount, 6)
-                    trade["tp_extensions"] += 1
-                    logger.info(
-                        "📈 Trailing TP extended for %s: new TP=%.6f (ext #%d)",
-                        trade["trade_id"], trade["trailing_tp"], trade["tp_extensions"],
-                    )
+                        new_sl = round(entry * (1 - lock_price_move), 6)
+
+                    # Only tighten, never loosen
+                    sl_improved = (is_long and new_sl > trade["trailing_sl"]) or \
+                                  (not is_long and new_sl < trade["trailing_sl"])
+                    if sl_improved:
+                        old_sl = trade["trailing_sl"]
+                        trade["trailing_sl"] = new_sl
+                        trade["trailing_active"] = True
+                        trade["stepped_lock_level"] = step_idx
+                        trade["trail_sl_count"] = trade.get("trail_sl_count", 0) + 1
+
+                        if lock_pnl == 0:
+                            lock_label = "BREAKEVEN"
+                        else:
+                            lock_label = f"+{lock_pnl:.0f}% profit"
+
+                        logger.info(
+                            "🔒 Stepped SL for %s: P&L %.1f%% ≥ %.0f%% trigger → SL %.6f → %.6f (%s)",
+                            trade["trade_id"], pnl_pct, trigger_pnl, old_sl, new_sl, lock_label,
+                        )
+
+                        # For LIVE trades: modify exchange SL order
+                        is_live = trade.get("mode") == "LIVE"
+                        if is_live:
+                            try:
+                                from execution_engine import ExecutionEngine
+                                ExecutionEngine.modify_sl_live(symbol, new_sl)
+                                logger.info("🔒 Live SL modified on exchange for %s → %.6f", symbol, new_sl)
+                            except Exception as e:
+                                logger.error("❌ Failed to modify live SL for %s: %s", symbol, e)
 
         # ── EXIT CHECKS ──────────────────────────────────────────────
         # For LIVE trades, CoinDCX handles SL/TP/MAX_LOSS via exchange
@@ -813,24 +777,24 @@ def update_unrealized(prices=None, funding_rates=None):
 
             if sl_hit:
                 sl_n = trade.get("trail_sl_count", 0)
-                cp = trade.get("capital_protection_active", False)
+                step_level = trade.get("stepped_lock_level", -1)
                 # Determine SL reason based on target state
                 if trade.get("t2_hit"):
                     reason = "SL_T2"  # SL hit after T2 (at T1 price)
                 elif trade.get("t1_hit"):
                     reason = "SL_T1"  # SL hit after T1 (at breakeven)
-                elif trade["trailing_active"]:
-                    pf_tag = ""
-                    if cp:
-                        if is_long:
-                            sl_pnl_pct = (effective_sl - entry) / entry * 100 * lev
+                elif trade["trailing_active"] and step_level >= 0:
+                    # Stepped lock was active — show which level
+                    steps = getattr(config, 'TRAILING_SL_STEPS', [])
+                    if step_level < len(steps):
+                        _, lock_pnl = steps[step_level]
+                        if lock_pnl == 0:
+                            lock_tag = " (BEV)"
                         else:
-                            sl_pnl_pct = (entry - effective_sl) / entry * 100 * lev
-                        if sl_pnl_pct <= 8:
-                            pf_tag = " (4% PF Lock)"
-                        else:
-                            pf_tag = f" ({sl_pnl_pct:.0f}% Locked)"
-                    reason = f"TRAIL_SL_{sl_n}{pf_tag}"
+                            lock_tag = f" (+{lock_pnl:.0f}% Locked)"
+                    else:
+                        lock_tag = ""
+                    reason = f"STEPPED_SL_{sl_n}{lock_tag}"
                 else:
                     reason = "FIXED_SL"
                 _close_trade_inline(trade, current, reason)

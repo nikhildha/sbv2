@@ -128,14 +128,25 @@ def get_atr_multipliers(leverage=1):
     else:  # 1-4x
         return (ATR_SL_MULTIPLIER, ATR_TP_MULTIPLIER)
 
-# ─── Trailing SL / TP ──────────────────────────────────────────────────────────
+# ─── Trailing SL: Stepped Breakeven + Profit Lock (F2 — Backtest Winner) ──────
+# Milestone-based SL tightening using leveraged P&L %
+# Each step: (trigger_pnl_pct, lock_pnl_pct)
+#   When leveraged P&L >= trigger → move SL to lock that % profit
+#   lock 0% = breakeven (entry price)
 TRAILING_SL_ENABLED = True
-TRAILING_SL_ACTIVATION_ATR = 1.0     # Start trailing after price moves 1×ATR in favor
-TRAILING_SL_DISTANCE_ATR = 1.0       # Trail distance: SL stays 1×ATR behind peak price
-TRAILING_TP_ENABLED = False       # Disabled — replaced by multi-target T1/T2/T3
-TRAILING_TP_ACTIVATION_PCT = 0.75    # (legacy, unused when MT enabled)
-TRAILING_TP_EXTENSION_ATR = 1.5      # (legacy, unused when MT enabled)
-TRAILING_TP_MAX_EXTENSIONS = 3       # (legacy, unused when MT enabled)
+TRAILING_SL_STEPS = [
+    (5.0,   0.0),   # At +5% leveraged P&L  → SL to Breakeven
+    (10.0,  5.0),   # At +10% leveraged P&L → Lock +5% profit
+    (15.0, 10.0),   # At +15% leveraged P&L → Lock +10% profit
+    (20.0, 15.0),   # At +20% leveraged P&L → Lock +15% profit
+]
+# Legacy ATR trailing (kept for reference, superseded by stepped lock)
+TRAILING_SL_ACTIVATION_ATR = 1.0
+TRAILING_SL_DISTANCE_ATR = 1.0
+TRAILING_TP_ENABLED = False
+TRAILING_TP_ACTIVATION_PCT = 0.75
+TRAILING_TP_EXTENSION_ATR = 1.5
+TRAILING_TP_MAX_EXTENSIONS = 3
 
 # ─── Multi-Target Partial Profit Booking (0304_v1) ─────────────────────────────
 MULTI_TARGET_ENABLED = True
@@ -145,10 +156,10 @@ MT_T2_FRAC = 0.666               # T2 at 66.6% of T3 distance
 MT_T1_BOOK_PCT = 0.25            # Book 25% of original qty at T1
 MT_T2_BOOK_PCT = 0.50            # Book 50% of remaining qty at T2
 
-# ─── Capital Protection (Profit Lock) ──────────────────────────────────────────
-CAPITAL_PROTECT_ENABLED = False      # Disabled — Phase 3 proved it hurts multi-target perf
-CAPITAL_PROTECT_TRIGGER_PCT = 10.0   # Activate when leveraged P&L ≥ 10%
-CAPITAL_PROTECT_LOCK_PCT = 4.0       # Move SL to lock in +4% profit above/below entry
+# ─── Capital Protection (legacy — replaced by Stepped Lock above) ─────────────
+CAPITAL_PROTECT_ENABLED = False
+CAPITAL_PROTECT_TRIGGER_PCT = 10.0
+CAPITAL_PROTECT_LOCK_PCT = 4.0
 
 # ─── Volatility Filter ─────────────────────────────────────────────────────────
 VOL_FILTER_ENABLED = True
