@@ -47,44 +47,15 @@ function mapTrade(t: any): Trade {
   const sym = t.symbol || t.coin || '';
   const uniqueId = `${baseId}-${sym}`;
 
-  // Determine SL type from engine stepped_lock_level OR compute from PnL%
+  // Determine SL type from engine fields only
   const trailingActive = t.trailing_active || t.trailingActive || false;
   const stepLevel = t.stepped_lock_level ?? t.steppedLockLevel ?? -1;
-  const SL_STEPS = [
-    { trigger: 5, label: 'Breakeven' },
-    { trigger: 10, label: 'Lock +5%' },
-    { trigger: 15, label: 'Lock +10%' },
-    { trigger: 20, label: 'Lock +15%' },
-    { trigger: 25, label: 'Lock +20%' },
-    { trigger: 30, label: 'Lock +25%' },
-    { trigger: 35, label: 'Lock +30%' },
-    { trigger: 40, label: 'Lock +35%' },
-    { trigger: 45, label: 'Lock +40%' },
-    { trigger: 50, label: 'Lock +45%' },
-  ];
+  const SL_LABELS = ['Breakeven', 'Lock +5%', 'Lock +10%', 'Lock +15%', 'Lock +20%', 'Lock +25%', 'Lock +30%', 'Lock +35%', 'Lock +40%', 'Lock +45%'];
   let slType: string;
   if (trailingActive && stepLevel >= 0) {
-    slType = SL_STEPS[stepLevel]?.label || `Lock L${stepLevel}`;
+    slType = SL_LABELS[stepLevel] || `Lock L${stepLevel}`;
   } else {
-    // Compute expected SL type from PnL% when engine fields aren't set
-    const entry = t.entry_price || t.entryPrice || 0;
-    const current = t.current_price || t.currentPrice || entry;
-    const lev = t.leverage || 1;
-    const cap = t.capital || t.position_size || 0;
-    const pos = (t.side || t.position || '').toLowerCase();
-    const long = pos === 'long' || pos === 'buy';
-    const diff = long ? (current - entry) : (entry - current);
-    const rawPnl = entry > 0 ? (diff / entry * lev * cap) : 0;
-    const rawPct = cap > 0 ? Math.abs(rawPnl / cap * 100) : 0;
-    const levPnlPct = rawPnl >= 0 ? rawPct : 0;  // Only positive PnL triggers stepping
-    let derivedType = 'Fixed SL';
-    for (let i = SL_STEPS.length - 1; i >= 0; i--) {
-      if (levPnlPct >= SL_STEPS[i].trigger) {
-        derivedType = SL_STEPS[i].label;
-        break;
-      }
-    }
-    slType = derivedType;
+    slType = 'Fixed SL';
   }
 
   // Determine current target level from engine data
