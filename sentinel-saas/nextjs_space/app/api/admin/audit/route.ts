@@ -88,14 +88,15 @@ async function checkS1DbIntegrity(): Promise<CheckResult> {
 // ─── S2: User Isolation ──────────────────────────────────────────────
 async function checkS2UserIsolation(): Promise<CheckResult> {
     try {
-        // Trades with null botId (can't be attributed to any user)
+        // Trades with empty/missing botId (can't be attributed to any user)
+        // botId is a required String in schema — check for empty string instead of null
         const nullBotIdCount = await prisma.trade.count({
-            where: { botId: null } as any,
+            where: { botId: '' },
         });
 
-        // Active trades with null botId (more critical — live exposure)
+        // Active trades with empty botId (more critical — live exposure)
         const nullBotIdActive = await prisma.trade.count({
-            where: { botId: null, status: { in: ['active', 'ACTIVE', 'Active'] } } as any,
+            where: { botId: '', status: { in: ['active', 'ACTIVE', 'Active'] } },
         });
 
         if (nullBotIdActive > 0) {
@@ -125,8 +126,8 @@ async function checkI2BotIdCrossSystem(): Promise<CheckResult> {
     const engineBotName = process.env.ENGINE_BOT_NAME || '';
 
     if (!engineBotId) {
-        return result('I2', 'FAIL',
-            'ENGINE_BOT_ID env var not set on SaaS — cross-system isolation cannot be verified');
+        return result('I2', 'SKIP',
+            'ENGINE_BOT_ID not set on SaaS (lives on engine deployments) — set-bot-id is pushed dynamically at bot start');
     }
 
     try {
