@@ -53,9 +53,15 @@ function mapTrade(t: any): Trade {
   // Descriptive SL type names based on actual trailing state
   const SL_TYPE_NAMES: Record<number, string> = {
     0: 'Breakeven',     // +5% trigger → SL at entry
-    1: 'Lock +5%',      // +10% trigger → locks 5% profit
-    2: 'Lock +10%',     // +15% trigger → locks 10% profit
-    3: 'Lock +15%',     // +20% trigger → locks 15% profit (max)
+    1: 'Lock +5%',      // +10% trigger
+    2: 'Lock +10%',     // +15% trigger
+    3: 'Lock +15%',     // +20% trigger
+    4: 'Lock +20%',     // +25% trigger
+    5: 'Lock +25%',     // +30% trigger
+    6: 'Lock +30%',     // +35% trigger
+    7: 'Lock +35%',     // +40% trigger
+    8: 'Lock +40%',     // +45% trigger
+    9: 'Lock +45%',     // +50% trigger (max)
   };
   let slType: string;
   if (trailingActive && stepLevel >= 0) {
@@ -415,11 +421,7 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-3xl font-bold mb-1">Trade Journal</h1>
-                <p className="text-sm text-[var(--color-text-secondary)]">
-                  Complete history · Portfolio analytics · Auto-refreshes every 15s
-                  {lastRefresh && <span style={{ marginLeft: '8px', color: '#06B6D4' }}>Last: {lastRefresh}</span>}
-                  {clearSuccess && <span style={{ marginLeft: '8px', color: '#22C55E', fontWeight: 600 }}>{clearSuccess}</span>}
-                </p>
+                {clearSuccess && <p className="text-sm" style={{ color: '#22C55E', fontWeight: 600 }}>{clearSuccess}</p>}
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button onClick={exportCSV} style={{
@@ -560,6 +562,25 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
                   <option value="loss">Loss Only</option>
                 </select>
 
+                <div style={{ display: 'inline-flex', gap: '0', borderRadius: '8px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  {(['paper', 'live'] as const).map(m => (
+                    <button key={m} onClick={() => setModeFilter(prev => prev === m ? 'all' : m)} style={{
+                      padding: '6px 14px', border: 'none', cursor: 'pointer',
+                      fontSize: '12px', fontWeight: 600,
+                      background: modeFilter === m
+                        ? m === 'paper' ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'
+                        : 'transparent',
+                      color: modeFilter === m
+                        ? m === 'paper' ? '#22C55E' : '#EF4444'
+                        : '#6B7280',
+                      borderRight: m === 'paper' ? '1px solid rgba(255,255,255,0.08)' : 'none',
+                      transition: 'all 0.2s',
+                    }}>
+                      {m === 'paper' ? '🟢 Paper' : '🔴 Live'}
+                    </button>
+                  ))}
+                </div>
+
                 <div style={{ marginLeft: 'auto', position: 'relative' }}>
                   <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#6B7280' }} />
                   <input value={coinSearch} onChange={e => setCoinSearch(e.target.value)}
@@ -585,7 +606,7 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
                   <table style={{ width: '100%', minWidth: '1300px', borderCollapse: 'collapse', fontSize: '13px' }}>
                     <thead>
                       <tr style={{ borderBottom: '2px solid rgba(255,255,255,0.08)' }}>
-                        {['Bot', 'Coin', 'Position', 'Leverage', 'Capital', 'Entry', 'LTP', 'Stop Loss', 'Target Price', 'SL Type', 'PnL', 'PnL %', 'Fee', 'Net PnL', 'Exit', 'Action'].map(h => (
+                        {['Bot', 'Coin', 'Position', 'Leverage', 'Capital', 'Entry', 'LTP', 'Stop Loss', 'Target Price', 'SL Type', 'PnL', 'Fee', 'Net PnL', 'Exit', 'Action'].map(h => (
                           <th key={h} style={{
                             padding: '10px 10px', textAlign: h === 'Bot' || h === 'Coin' ? 'left' : 'center',
                             fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.8px',
@@ -680,10 +701,7 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
                             </td>
 
                             <td style={{ padding: '10px', textAlign: 'center', fontWeight: 700, color: pnlColor(pnl) }}>
-                              {fmt$(pnl)}
-                            </td>
-                            <td style={{ padding: '10px', textAlign: 'center', fontWeight: 700, color: pnlColor(pnlPct) }}>
-                              {fmtPct(pnlPct)}
+                              {fmt$(pnl)} <span style={{ fontSize: '10px', fontWeight: 600, color: pnlColor(pnlPct) }}>({fmtPct(pnlPct)})</span>
                             </td>
                             <td style={{ padding: '10px', textAlign: 'center', fontFamily: 'monospace', fontSize: '11px', color: t.fee > 0 ? '#F59E0B' : '#4B5563' }}>
                               {!isActive && t.fee > 0 ? `$${t.fee.toFixed(4)}` : '—'}

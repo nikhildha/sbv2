@@ -135,10 +135,16 @@ def get_atr_multipliers(leverage=1):
 #   lock 0% = breakeven (entry price)
 TRAILING_SL_ENABLED = True
 TRAILING_SL_STEPS = [
-    (5.0,   0.0),   # At +5% leveraged P&L  → SL to Breakeven
+    (5.0,   0.0),   # At +5%  leveraged P&L → SL to Breakeven
     (10.0,  5.0),   # At +10% leveraged P&L → Lock +5% profit
     (15.0, 10.0),   # At +15% leveraged P&L → Lock +10% profit
     (20.0, 15.0),   # At +20% leveraged P&L → Lock +15% profit
+    (25.0, 20.0),   # At +25% leveraged P&L → Lock +20% profit
+    (30.0, 25.0),   # At +30% leveraged P&L → Lock +25% profit
+    (35.0, 30.0),   # At +35% leveraged P&L → Lock +30% profit
+    (40.0, 35.0),   # At +40% leveraged P&L → Lock +35% profit
+    (45.0, 40.0),   # At +45% leveraged P&L → Lock +40% profit
+    (50.0, 45.0),   # At +50% leveraged P&L → Lock +45% profit
 ]
 # Legacy ATR trailing (kept for reference, superseded by stepped lock)
 TRAILING_SL_ACTIVATION_ATR = 1.0
