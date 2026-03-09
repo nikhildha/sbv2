@@ -131,6 +131,7 @@ class ExecutionEngine:
                 "entry_price": price,
                 "stop_loss":  sl,
                 "take_profit": tp,
+                "capital":    round(quantity * price / leverage, 2) if leverage > 0 and price > 0 else 100.0,
                 "regime":     regime_name,
                 "confidence": f"{confidence:.2f}" if confidence else "N/A",
                 "reason":     reason,
