@@ -33,11 +33,15 @@ export function BotCard({ bot, onToggle, onDelete, liveTradeCount, trades = [], 
   const activeTrades = trades.filter((t: any) => (t.status || '').toLowerCase() === 'active');
   const totalTrades = trades.length;
 
-  // PnL calculations
+  // PnL calculations — engine uses unrealized_pnl (active) and total_pnl (closed)
   const activePnl = isRunning
-    ? activeTrades.reduce((sum: number, t: any) => sum + (parseFloat(t.pnl) || parseFloat(t.activePnl) || 0), 0)
+    ? activeTrades.reduce((sum: number, t: any) => sum + (parseFloat(t.unrealized_pnl) || parseFloat(t.pnl) || 0), 0)
     : 0;
-  const totalPnl = trades.reduce((sum: number, t: any) => sum + (parseFloat(t.pnl) || parseFloat(t.totalPnl) || parseFloat(t.realized_pnl) || parseFloat(t.total_pnl) || 0), 0);
+  const totalPnl = trades.reduce((sum: number, t: any) => {
+    const isActive = (t.status || '').toLowerCase() === 'active';
+    if (isActive) return sum + (parseFloat(t.unrealized_pnl) || parseFloat(t.pnl) || 0);
+    return sum + (parseFloat(t.total_pnl) || parseFloat(t.realized_pnl) || parseFloat(t.totalPnl) || parseFloat(t.pnl) || 0);
+  }, 0);
 
   const botMode = bot?.config?.mode || 'paper';
   const capitalPerTrade = bot?.config?.capitalPerTrade || 100;
@@ -199,8 +203,11 @@ export function BotCard({ bot, onToggle, onDelete, liveTradeCount, trades = [], 
                     </thead>
                     <tbody>
                       {trades.slice(0, 20).map((t: any, idx: number) => {
-                        const pnl = parseFloat(t.pnl) || parseFloat(t.totalPnl) || parseFloat(t.realized_pnl) || parseFloat(t.total_pnl) || 0;
-                        const isActive = (t.status || '').toLowerCase() === 'active';
+                        const isActiveTrade = (t.status || '').toLowerCase() === 'active';
+                        const pnl = isActiveTrade
+                          ? (parseFloat(t.unrealized_pnl) || parseFloat(t.pnl) || 0)
+                          : (parseFloat(t.total_pnl) || parseFloat(t.realized_pnl) || parseFloat(t.pnl) || 0);
+                        const isActive = isActiveTrade;
                         return (
                           <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
                             <td style={{ padding: '6px 4px', fontWeight: 600, color: '#E5E7EB' }}>
