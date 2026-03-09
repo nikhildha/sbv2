@@ -571,7 +571,7 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
                   <table style={{ width: '100%', minWidth: '1300px', borderCollapse: 'collapse', fontSize: '13px' }}>
                     <thead>
                       <tr style={{ borderBottom: '2px solid rgba(255,255,255,0.08)' }}>
-                        {['Bot', 'Coin', 'Position', 'Leverage', 'Capital', 'Entry', 'LTP', 'Stop Loss', 'Target Price', 'SL Type', 'PnL', 'PnL %', 'Fee', 'Net PnL', 'Status', 'Exit', 'Action'].map(h => (
+                        {['Bot', 'Coin', 'Position', 'Leverage', 'Capital', 'Entry', 'LTP', 'Stop Loss', 'Target Price', 'SL Type', 'PnL', 'PnL %', 'Fee', 'Net PnL', 'Exit', 'Action'].map(h => (
                           <th key={h} style={{
                             padding: '10px 10px', textAlign: h === 'Bot' || h === 'Coin' ? 'left' : 'center',
                             fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.8px',
@@ -603,7 +603,16 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
                         return (
                           <tr key={t.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                             <td style={{ padding: '10px', color: '#0891B2', fontWeight: 600, fontSize: '12px' }}>
-                              {t.botName || 'Unknown Bot'}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                {t.botName || 'Unknown Bot'}
+                                <span style={{
+                                  fontSize: '9px', fontWeight: 700, padding: '1px 5px', borderRadius: '4px',
+                                  background: isActive ? 'rgba(34,197,94,0.15)' : 'rgba(107,114,128,0.15)',
+                                  color: isActive ? '#22C55E' : '#9CA3AF',
+                                }}>
+                                  {isActive ? 'ACTIVE' : 'CLOSED'}
+                                </span>
+                              </div>
                               {t.sessionId && (
                                 <div style={{ fontSize: '9px', color: '#6B7280', marginTop: '2px' }}>
                                   {(() => {
@@ -660,18 +669,7 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
                             <td style={{ padding: '10px', textAlign: 'center', fontWeight: 700, fontFamily: 'monospace', fontSize: '12px', color: pnlColor(pnl - (isActive ? 0 : t.fee)) }}>
                               {fmt$(pnl - (isActive ? 0 : t.fee))}
                             </td>
-                            <td style={{ padding: '10px', textAlign: 'center' }}>
-                              <span style={{
-                                padding: '2px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: 700,
-                                color: isActive ? '#22C55E' : '#6B7280',
-                                background: isActive ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)',
-                              }}>
-                                {isActive ? '● ACTIVE' : t.exitReason || 'CLOSED'}
-                              </span>
-                              <div style={{ fontSize: '9px', color: '#6B7280', marginTop: '2px' }}>
-                                {t.botName || 'Bot'}
-                              </div>
-                            </td>
+
                             <td style={{ padding: '10px', textAlign: 'center', fontFamily: 'monospace', fontSize: '12px', color: '#D1D5DB' }}>
                               {!isActive && t.exitPrice ? fmtPrice(t.exitPrice) : '—'}
                             </td>

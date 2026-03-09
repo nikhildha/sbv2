@@ -33,13 +33,33 @@ export function BotCard({ bot, onToggle, onDelete, liveTradeCount, trades = [], 
   const activeTrades = trades.filter((t: any) => (t.status || '').toLowerCase() === 'active');
   const totalTrades = trades.length;
 
-  // PnL calculations — engine uses unrealized_pnl (active) and total_pnl (closed)
+  // PnL calculations — recalculate from entry/current prices for accuracy (engine values can be stale)
   const activePnl = isRunning
-    ? activeTrades.reduce((sum: number, t: any) => sum + (parseFloat(t.unrealized_pnl) || parseFloat(t.pnl) || 0), 0)
+    ? activeTrades.reduce((sum: number, t: any) => {
+      const entry = parseFloat(t.entry_price) || 0;
+      const current = parseFloat(t.current_price) || entry;
+      const lev = parseFloat(t.leverage) || 1;
+      const cap = parseFloat(t.capital) || parseFloat(t.position_size) || 0;
+      if (!entry || entry === 0) return sum;
+      const side = (t.side || t.position || '').toUpperCase();
+      const isLong = side === 'LONG' || side === 'BUY';
+      const diff = isLong ? (current - entry) : (entry - current);
+      return sum + Math.round(diff / entry * lev * cap * 10000) / 10000;
+    }, 0)
     : 0;
   const totalPnl = trades.reduce((sum: number, t: any) => {
     const isActive = (t.status || '').toLowerCase() === 'active';
-    if (isActive) return sum + (parseFloat(t.unrealized_pnl) || parseFloat(t.pnl) || 0);
+    if (isActive) {
+      const entry = parseFloat(t.entry_price) || 0;
+      const current = parseFloat(t.current_price) || entry;
+      const lev = parseFloat(t.leverage) || 1;
+      const cap = parseFloat(t.capital) || parseFloat(t.position_size) || 0;
+      if (!entry || entry === 0) return sum;
+      const side = (t.side || t.position || '').toUpperCase();
+      const isLong = side === 'LONG' || side === 'BUY';
+      const diff = isLong ? (current - entry) : (entry - current);
+      return sum + Math.round(diff / entry * lev * cap * 10000) / 10000;
+    }
     return sum + (parseFloat(t.total_pnl) || parseFloat(t.realized_pnl) || parseFloat(t.totalPnl) || parseFloat(t.pnl) || 0);
   }, 0);
 
