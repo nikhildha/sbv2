@@ -47,27 +47,44 @@ function mapTrade(t: any): Trade {
   const sym = t.symbol || t.coin || '';
   const uniqueId = `${baseId}-${sym}`;
 
-  // Determine SL type from engine stepped_lock_level
+  // Determine SL type from engine stepped_lock_level OR compute from PnL%
   const trailingActive = t.trailing_active || t.trailingActive || false;
   const stepLevel = t.stepped_lock_level ?? t.steppedLockLevel ?? -1;
-  // Descriptive SL type names based on actual trailing state
-  const SL_TYPE_NAMES: Record<number, string> = {
-    0: 'Breakeven',     // +5% trigger → SL at entry
-    1: 'Lock +5%',      // +10% trigger
-    2: 'Lock +10%',     // +15% trigger
-    3: 'Lock +15%',     // +20% trigger
-    4: 'Lock +20%',     // +25% trigger
-    5: 'Lock +25%',     // +30% trigger
-    6: 'Lock +30%',     // +35% trigger
-    7: 'Lock +35%',     // +40% trigger
-    8: 'Lock +40%',     // +45% trigger
-    9: 'Lock +45%',     // +50% trigger (max)
-  };
+  const SL_STEPS = [
+    { trigger: 5, label: 'Breakeven' },
+    { trigger: 10, label: 'Lock +5%' },
+    { trigger: 15, label: 'Lock +10%' },
+    { trigger: 20, label: 'Lock +15%' },
+    { trigger: 25, label: 'Lock +20%' },
+    { trigger: 30, label: 'Lock +25%' },
+    { trigger: 35, label: 'Lock +30%' },
+    { trigger: 40, label: 'Lock +35%' },
+    { trigger: 45, label: 'Lock +40%' },
+    { trigger: 50, label: 'Lock +45%' },
+  ];
   let slType: string;
   if (trailingActive && stepLevel >= 0) {
-    slType = SL_TYPE_NAMES[stepLevel] || `Lock L${stepLevel}`;
+    slType = SL_STEPS[stepLevel]?.label || `Lock L${stepLevel}`;
   } else {
-    slType = 'Fixed SL';
+    // Compute expected SL type from PnL% when engine fields aren't set
+    const entry = t.entry_price || t.entryPrice || 0;
+    const current = t.current_price || t.currentPrice || entry;
+    const lev = t.leverage || 1;
+    const cap = t.capital || t.position_size || 0;
+    const pos = (t.side || t.position || '').toLowerCase();
+    const long = pos === 'long' || pos === 'buy';
+    const diff = long ? (current - entry) : (entry - current);
+    const rawPnl = entry > 0 ? (diff / entry * lev * cap) : 0;
+    const rawPct = cap > 0 ? Math.abs(rawPnl / cap * 100) : 0;
+    const levPnlPct = rawPnl >= 0 ? rawPct : 0;  // Only positive PnL triggers stepping
+    let derivedType = 'Fixed SL';
+    for (let i = SL_STEPS.length - 1; i >= 0; i--) {
+      if (levPnlPct >= SL_STEPS[i].trigger) {
+        derivedType = SL_STEPS[i].label;
+        break;
+      }
+    }
+    slType = derivedType;
   }
 
   // Determine current target level from engine data
@@ -666,7 +683,7 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
                                 color: isLong ? '#22C55E' : '#EF4444',
                                 background: isLong ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
                               }}>
-                                {isLong ? '▲ LONG' : '▼ SHORT'}
+                                {isLong ? 'LONG' : 'SHORT'}
                               </span>
                             </td>
                             <td style={{ padding: '10px', textAlign: 'center', color: '#D1D5DB' }}>{t.leverage}×</td>
