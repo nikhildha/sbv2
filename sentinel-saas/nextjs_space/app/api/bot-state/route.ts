@@ -49,19 +49,12 @@ export async function GET() {
             }
         }
 
-        // Fetch from the primary engine based on mode
+        // Fetch only from the engine that matches the bot's mode — no cross-engine calls
         const engineData = await fetchEngineData(engineMode);
-        // Also fetch from the other engine to merge tradebooks
-        const altMode: EngineMode = engineMode === 'live' ? 'paper' : 'live';
-        const altEngineData = await fetchEngineData(altMode);
 
-        const multi = engineData?.multi || altEngineData?.multi || { coin_states: {}, last_analysis_time: null, deployed_count: 0 };
-        // Merge tradebooks from both engines
-        const primaryTrades = engineData?.tradebook?.trades || [];
-        const altTrades = altEngineData?.tradebook?.trades || [];
-        const mergedEngineTrades = [...primaryTrades, ...altTrades];
-        const engineTradebook = { trades: mergedEngineTrades, summary: engineData?.tradebook?.summary || {} };
-        const engineState = engineData?.engine || altEngineData?.engine || { status: getEngineUrl(engineMode) ? 'unknown' : 'not_configured' };
+        const multi = engineData?.multi || { coin_states: {}, last_analysis_time: null, deployed_count: 0 };
+        const engineTradebook = engineData?.tradebook || { trades: [], summary: {} };
+        const engineState = engineData?.engine || { status: getEngineUrl(engineMode) ? 'unknown' : 'not_configured' };
 
         // Build the engine state part of the response (shared — not per-user)
         const coinStates = multi.coin_states || {};
@@ -159,7 +152,7 @@ export async function GET() {
                 liveUrl: getEngineUrl('live') ? '✓ set' : '✗ empty',
                 paperUrl: getEngineUrl('paper') ? '✓ set' : '✗ empty',
                 engineDataOk: !!engineData,
-                altEngineDataOk: !!altEngineData,
+                altEngineDataOk: false,
                 botMode: userBot?.config?.mode || 'no-bot',
                 botExchange: userBot?.exchange || 'none',
             },
