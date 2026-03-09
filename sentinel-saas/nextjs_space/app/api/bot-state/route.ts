@@ -9,13 +9,16 @@ export const dynamic = 'force-dynamic';
 
 async function fetchEngineData(mode: EngineMode = 'live') {
     const url = getEngineUrl(mode);
+    console.log(`[bot-state] fetchEngineData(${mode}) → url=${url || '<EMPTY>'}`);
     if (!url) return null;
     try {
         const res = await fetch(`${url}/api/all`, {
             cache: 'no-store',
             signal: AbortSignal.timeout(8000),
         });
+        console.log(`[bot-state] Engine ${mode} response: ${res.status} ${res.statusText}`);
         if (res.ok) return await res.json();
+        console.error(`[bot-state] Engine ${mode} non-OK: ${res.status}`);
     } catch (err) {
         console.error(`[bot-state] Engine API (${mode}) fetch failed:`, err);
     }
@@ -128,6 +131,15 @@ export async function GET() {
                 },
             },
             engine: engineState,
+            _debug: {
+                engineMode,
+                liveUrl: getEngineUrl('live') ? '✓ set' : '✗ empty',
+                paperUrl: getEngineUrl('paper') ? '✓ set' : '✗ empty',
+                engineDataOk: !!engineData,
+                altEngineDataOk: !!altEngineData,
+                botMode: userBot?.config?.mode || 'no-bot',
+                botExchange: userBot?.exchange || 'none',
+            },
         });
     } catch (err) {
         return NextResponse.json({
