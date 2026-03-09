@@ -44,14 +44,8 @@ export async function GET() {
             });
             if (userBot) {
                 const botMode = userBot.config?.mode || '';
-                if (botMode.toLowerCase().includes('live')) {
-                    engineMode = 'live';
-                } else if (userBot.exchange === 'coindcx') {
-                    // Fallback: CoinDCX bots are always live
-                    engineMode = 'live';
-                } else {
-                    engineMode = 'paper';
-                }
+                // Mode always takes priority — paper mode = paper engine regardless of exchange
+                engineMode = botMode.toLowerCase().includes('live') ? 'live' : 'paper';
             }
         }
 
