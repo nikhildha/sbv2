@@ -47,15 +47,35 @@ function mapTrade(t: any): Trade {
   const sym = t.symbol || t.coin || '';
   const uniqueId = `${baseId}-${sym}`;
 
-  // Determine SL type from engine fields only
+  // Determine SL type from engine fields, with PnL-based fallback
   const trailingActive = t.trailing_active || t.trailingActive || false;
   const stepLevel = t.stepped_lock_level ?? t.steppedLockLevel ?? -1;
-  const SL_LABELS = ['Breakeven', 'Lock +5%', 'Lock +10%', 'Lock +15%', 'Lock +20%', 'Lock +25%', 'Lock +30%', 'Lock +35%', 'Lock +40%', 'Lock +45%'];
+  const SL_STEPS = [
+    { trigger: 5, label: 'Breakeven' },
+    { trigger: 10, label: 'Lock +5%' },
+    { trigger: 15, label: 'Lock +10%' },
+    { trigger: 20, label: 'Lock +15%' },
+    { trigger: 25, label: 'Lock +20%' },
+    { trigger: 30, label: 'Lock +25%' },
+    { trigger: 35, label: 'Lock +30%' },
+    { trigger: 40, label: 'Lock +35%' },
+    { trigger: 45, label: 'Lock +40%' },
+    { trigger: 50, label: 'Lock +45%' },
+  ];
   let slType: string;
-  if (trailingActive && stepLevel >= 0) {
-    slType = SL_LABELS[stepLevel] || `Lock L${stepLevel}`;
+  if (trailingActive && stepLevel >= 0 && stepLevel < SL_STEPS.length) {
+    slType = SL_STEPS[stepLevel].label;
   } else {
-    slType = 'Fixed SL';
+    // Fallback: derive from PnL% if engine field is missing
+    const pnlPct = Math.abs(t.unrealized_pnl_pct || t.activePnlPercent || 0);
+    let derived = 'Fixed SL';
+    for (let i = SL_STEPS.length - 1; i >= 0; i--) {
+      if (pnlPct >= SL_STEPS[i].trigger) {
+        derived = SL_STEPS[i].label;
+        break;
+      }
+    }
+    slType = derived;
   }
 
   // Determine current target level from engine data
