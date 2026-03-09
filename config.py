@@ -248,10 +248,9 @@ CONVICTION_WEIGHT_ORDERFLOW = 10   # Order book flow
 # Total: 61+7+11+0+11+0+0+10 = 100
 
 # ─── Conviction Score: Leverage Bands ────────────────────────────────────────
-CONVICTION_MIN_TRADE   = 40   # Below this → no trade (leverage = 0)
-CONVICTION_BAND_LOW    = 55   # 40–54  → 10x leverage
-CONVICTION_BAND_MED    = 70   # 55–69  → 15x leverage
-CONVICTION_BAND_HIGH   = 85   # 70–84  → 25x; 85+ → 35x leverage
+CONVICTION_MIN_TRADE   = 60   # Below this → no trade (leverage = 0)
+CONVICTION_BAND_LOW    = 70   # 60–69  → 15x leverage
+CONVICTION_BAND_MED    = 95   # 70–94  → 25x leverage; 95+ → 35x leverage
 
 # ─── Conviction Score: Penalties ─────────────────────────────────────────────
 CONVICTION_CRASH_PENALTY           = 10   # Macro crash regime hard penalty

@@ -445,19 +445,16 @@ class RiskManager:
 
         Bands
         ─────
-        < 40      → 0  (no trade)
-        40–54     → 10x
-        55–69     → 15x
-        70–84     → 25x
-        85–100    → 35x
+        < 60      → 0  (no trade)
+        60–69     → 15x
+        70–94     → 25x
+        95–100    → 35x
         """
         if conviction_score < config.CONVICTION_MIN_TRADE:
             return 0
         elif conviction_score < config.CONVICTION_BAND_LOW:
-            return 10
-        elif conviction_score < config.CONVICTION_BAND_MED:
             return 15
-        elif conviction_score < config.CONVICTION_BAND_HIGH:
+        elif conviction_score < config.CONVICTION_BAND_MED:
             return 25
         else:
             return 35
@@ -481,9 +478,8 @@ class RiskManager:
         if conviction_score < config.CONVICTION_MIN_TRADE:
             return 0
 
-        # confidence_tiers keys are HMM confidence thresholds (0.92, 0.96, 0.99)
-        # but we map conviction_score (0-100) to leverage similarly:
-        # Map conviction ranges to tier leverage values
+        # confidence_tiers keys are HMM confidence thresholds
+        # Map conviction_score (0-100) to leverage via bands
         tiers = profile.get("confidence_tiers", {})
         if not tiers:
             return 0
@@ -491,15 +487,15 @@ class RiskManager:
         # Sort tiers descending by leverage value
         sorted_tiers = sorted(tiers.items(), key=lambda x: x[1], reverse=True)
 
-        # Map conviction bands: >=85 → highest, 70-84 → second, 55-69 → third, 40-54 → lowest
-        bands = [85, 70, 55, 40]
+        # Map conviction bands: >=95 → highest, 70-94 → second, 60-69 → third
+        bands = [95, 70, 60]
         leverage_values = [lev for _, lev in sorted_tiers]
 
         for i, band_min in enumerate(bands):
             if conviction_score >= band_min and i < len(leverage_values):
                 return leverage_values[i]
 
-        # Below all bands but >= 40: use lowest tier
+        # Below all bands but >= 60: use lowest tier
         if leverage_values:
             return leverage_values[-1]
         return 0

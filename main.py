@@ -735,34 +735,9 @@ class RegimeMasterBot:
                 self._coin_states[symbol]["action"] = "MTF_CONFLICT"
                 return None
 
-        # ── CHOP → sideways strategy ──
+        # ── CHOP → skip (no mean-reversion trades) ──
         if regime == config.REGIME_CHOP:
-            signal = evaluate_mean_reversion(df_1h_feat, symbol)
-            if signal:
-                current_atr = df_1h_feat["atr"].iloc[-1] if "atr" in df_1h_feat.columns else 0
-                # Margin-first: use default capital_per_trade (profile not in scope here)
-                margin = config.RISK_PROFILES.get("standard", {}).get("capital_per_trade", 100.0)
-                quantity, final_lev = self.risk.calculate_margin_first_position(
-                    margin, current_price, current_atr, signal["leverage"]
-                )
-                if quantity <= 0:
-                    self._coin_states[symbol]["action"] = "SKIP_RISK"
-                    return None
-                quantity *= (1 - config.SIDEWAYS_POSITION_REDUCTION)
-                quantity = round(quantity, 6)
-                self._coin_states[symbol]["action"] = f"MEAN_REV_{signal['side']}"
-                return {
-                    "symbol": symbol,
-                    "side": signal["side"],
-                    "leverage": final_lev,
-                    "quantity": quantity,
-                    "atr": current_atr,
-                    "regime": regime,
-                    "regime_name": regime_name,
-                    "confidence": conf,
-                    "reason": f"MeanRev {regime_name} | {signal['reason']}",
-                }
-            self._coin_states[symbol]["action"] = "CHOP_NO_SIGNAL"
+            self._coin_states[symbol]["action"] = "CHOP_SKIP"
             return None
 
         # ── TREND (BULL / BEAR) — 8-factor conviction flow ──────────────────────
