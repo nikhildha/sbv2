@@ -102,7 +102,7 @@ def _compute_summary(book):
 def open_trade(symbol, side, leverage, quantity, entry_price, atr,
                regime, confidence, reason="", capital=100.0, mode=None, user_id=None,
                profile_id="standard", bot_name="Synaptic Adaptive",
-               exchange=None, pair=None, position_id=None, bot_id=None):
+               exchange=None, pair=None, position_id=None, bot_id=None, all_bot_ids=None):
     """
     Record a new trade entry in the tradebook.
 
@@ -218,6 +218,7 @@ def open_trade(symbol, side, leverage, quantity, entry_price, atr,
         "profile_id":       profile_id,
         "bot_name":         bot_name,
         "bot_id":           "",  # Removed — engine is broadcaster, no bot_id scoping
+        "all_bot_ids":      all_bot_ids or [],  # Multi-bot: list of all active bot IDs at trade time
         # CoinDCX exchange tracking
         "exchange":         exchange,
         "pair":             pair,
