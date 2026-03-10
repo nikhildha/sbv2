@@ -482,6 +482,139 @@ def check_i10_hmm_signal_quality() -> dict:
                     "max": round(max_conf, 3), "coins_with_confidence": len(confidences)})
 
 
+# ─── P13: Engine Crash History ────────────────────────────────────────
+
+def check_p13_crash_history() -> dict:
+    """P13: Engine crash history — check for recent crash files."""
+    crash_file = os.path.join(config.DATA_DIR, "engine_crash.json")
+    if not os.path.exists(crash_file):
+        return _result("P13", "PASS", "No crash file found — engine has not crashed")
+
+    crash_data = _read_json_safe(crash_file)
+    crashes = crash_data if isinstance(crash_data, list) else [crash_data]
+
+    # Check for recent crashes (last 1 hour)
+    recent_crashes = []
+    for c in crashes:
+        ts = c.get("timestamp") or c.get("ts", "")
+        age = _age_seconds(ts)
+        if age < 3600:  # Last 1 hour
+            recent_crashes.append(c)
+
+    crash_type = crashes[-1].get("crash_type", "unknown") if crashes else "unknown"
+    last_crash_ts = crashes[-1].get("timestamp", "unknown") if crashes else "unknown"
+
+    if len(recent_crashes) >= 3:
+        return _result("P13", "FAIL",
+                       f"{len(recent_crashes)} crashes in the last hour — engine in crash loop",
+                       {"recent_crashes": len(recent_crashes), "last_crash_type": crash_type,
+                        "last_crash_ts": last_crash_ts, "total_crashes": len(crashes)})
+
+    if recent_crashes:
+        return _result("P13", "WARN",
+                       f"{len(recent_crashes)} crash(es) in the last hour (type: {crash_type})",
+                       {"recent_crashes": len(recent_crashes), "last_crash_type": crash_type,
+                        "last_crash_ts": last_crash_ts})
+
+    return _result("P13", "PASS",
+                   f"No recent crashes — last crash: {last_crash_ts} (type: {crash_type})",
+                   {"total_crashes": len(crashes), "last_crash_type": crash_type})
+
+
+# ─── P14: Watchdog & Thread Health ────────────────────────────────────
+
+def check_p14_watchdog_thread() -> dict:
+    """P14: Verify engine thread and watchdog are alive via /api/health."""
+    ok, data, lat = _call_engine("/api/health")
+    if not ok:
+        return _result("P14", "FAIL",
+                       f"Engine API unreachable — watchdog cannot be verified",
+                       {"error": data.get("error"), "latency_ms": lat})
+
+    engine_status = data.get("status", "unknown")
+    crash_count = data.get("crash_count", -1)
+    uptime_min = data.get("uptime_minutes", 0)
+
+    if engine_status in ("stopped", "crashed"):
+        return _result("P14", "FAIL",
+                       f"Engine status='{engine_status}' — thread is not running",
+                       {"status": engine_status, "crash_count": crash_count,
+                        "uptime_minutes": uptime_min})
+
+    if crash_count > 0:
+        severity = "FAIL" if crash_count >= 3 else "WARN"
+        return _result("P14", severity,
+                       f"Engine running but {crash_count} crash(es) recorded this session (uptime: {uptime_min:.0f}min)",
+                       {"status": engine_status, "crash_count": crash_count,
+                        "uptime_minutes": uptime_min})
+
+    return _result("P14", "PASS",
+                   f"Engine healthy — status='{engine_status}', uptime={uptime_min:.0f}min, 0 crashes",
+                   {"status": engine_status, "crash_count": 0, "uptime_minutes": uptime_min})
+
+
+# ─── P15: Brain Cache Pressure ────────────────────────────────────────
+
+def check_p15_brain_cache_pressure() -> dict:
+    """P15: Check HMM brain cache size — OOM risk indicator."""
+    ok, data, lat = _call_engine("/api/all")
+    if not ok:
+        return _result("P15", "SKIP", "Engine unreachable — brain cache check skipped")
+
+    engine_data = data.get("engine", {})
+    # Check multi_bot_state for coin count (proxy for brain cache size)
+    multi = data.get("multi", {})
+    coin_states = multi.get("coin_states", {})
+    brain_count = len(coin_states)
+    BRAIN_CACHE_MAX = 60  # matches main.py _BRAIN_CACHE_MAX
+
+    if brain_count >= BRAIN_CACHE_MAX:
+        return _result("P15", "WARN",
+                       f"Brain cache at capacity: {brain_count}/{BRAIN_CACHE_MAX} — LRU eviction active",
+                       {"brain_count": brain_count, "max": BRAIN_CACHE_MAX,
+                        "risk": "Memory pressure, may trigger OOM on Railway"})
+
+    if brain_count >= BRAIN_CACHE_MAX * 0.8:
+        return _result("P15", "WARN",
+                       f"Brain cache nearing capacity: {brain_count}/{BRAIN_CACHE_MAX} ({brain_count/BRAIN_CACHE_MAX*100:.0f}%)",
+                       {"brain_count": brain_count, "max": BRAIN_CACHE_MAX})
+
+    return _result("P15", "PASS",
+                   f"Brain cache healthy: {brain_count}/{BRAIN_CACHE_MAX} entries",
+                   {"brain_count": brain_count, "max": BRAIN_CACHE_MAX})
+
+
+# ─── P16: Engine Restart Loop Detection ───────────────────────────────
+
+def check_p16_restart_loop() -> dict:
+    """P16: Detect if engine is stuck in a restart loop (short uptimes)."""
+    ok, data, lat = _call_engine("/api/health")
+    if not ok:
+        return _result("P16", "FAIL", "Engine API unreachable",
+                       {"error": data.get("error")})
+
+    crash_count = data.get("crash_count", 0)
+    uptime_min = data.get("uptime_minutes", 0)
+    last_crash = data.get("last_crash", "")
+
+    # If uptime < 5 min AND crash_count > 2, likely in restart loop
+    if uptime_min < 5 and crash_count >= 2:
+        return _result("P16", "FAIL",
+                       f"Restart loop detected: uptime={uptime_min:.1f}min, {crash_count} crashes",
+                       {"uptime_minutes": uptime_min, "crash_count": crash_count,
+                        "last_crash": last_crash,
+                        "action": "Check logs for repeating init errors"})
+
+    if crash_count >= 3:
+        return _result("P16", "WARN",
+                       f"High crash count ({crash_count}) but stable uptime ({uptime_min:.0f}min) — recovered",
+                       {"uptime_minutes": uptime_min, "crash_count": crash_count})
+
+    return _result("P16", "PASS",
+                   f"No restart loop — uptime={uptime_min:.0f}min, crashes={crash_count}",
+                   {"uptime_minutes": uptime_min, "crash_count": crash_count})
+
+
 # ─── Check Registry ───────────────────────────────────────────────────
 
 def check_p9_coin_tiers() -> dict:
@@ -524,6 +657,10 @@ ALL_CHECKS = {
     "P9":  check_p9_coin_tiers,
     "P11": check_p11_process_health,
     "P12": check_p12_log_quality,
+    "P13": check_p13_crash_history,
+    "P14": check_p14_watchdog_thread,
+    "P15": check_p15_brain_cache_pressure,
+    "P16": check_p16_restart_loop,
     "I2":  check_i2_bot_id_env,
     "I4":  check_i4_trade_count,
     "I7":  check_i7_leverage_bounds,

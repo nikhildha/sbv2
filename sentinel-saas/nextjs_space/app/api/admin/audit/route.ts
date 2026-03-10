@@ -16,6 +16,8 @@
  *   S17 — Engine slot usage (active trades vs MAX_CONCURRENT_POSITIONS)
  *   S18 — Multi-user conflict (multiple bots active simultaneously on same engine)
  *   S19 — Paper engine orphan trades (active DB trades not found in engine tradebook)
+ *   S20 — Engine thread liveness (Flask alive but engine dead detection)
+ *   S21 — Engine crash & restart loop monitoring
  *
  * Returns: { run_ts, section, results[], summary }
  * Called by: tools/audit_runner.sh (daily cron) or admin dashboard
@@ -33,11 +35,11 @@ export const dynamic = 'force-dynamic';
 type CheckStatus = 'PASS' | 'WARN' | 'FAIL' | 'SKIP';
 
 interface CheckResult {
-    check:   string;
-    status:  CheckStatus;
+    check: string;
+    status: CheckStatus;
     message: string;
     detail?: Record<string, any>;
-    ts:      string;
+    ts: string;
 }
 
 function result(check: string, status: CheckStatus, message: string, detail?: Record<string, any>): CheckResult {
@@ -291,8 +293,10 @@ async function checkS14OrphanActiveTrades(): Promise<CheckResult> {
         if (orphanActiveLive > 0) {
             return result('S14', 'FAIL',
                 `${orphanActiveLive} LIVE active trade(s) on stopped bot(s) — possible hidden exchange exposure`,
-                { orphanActiveLive, orphanActiveTotal: orphanActive,
-                  action: 'Run /api/admin/force-sync-user or close positions manually on CoinDCX' });
+                {
+                    orphanActiveLive, orphanActiveTotal: orphanActive,
+                    action: 'Run /api/admin/force-sync-user or close positions manually on CoinDCX'
+                });
         }
         if (orphanActive > 0) {
             return result('S14', 'WARN',
@@ -401,8 +405,10 @@ async function checkI11DbEngineDivergence(): Promise<CheckResult> {
             const severity = delta > 5 ? 'FAIL' : 'WARN';
             return result('I11', severity,
                 `Trade count divergence: DB has ${dbActiveLive} active live trades, engine has ${engineActiveLive} (delta=${delta})`,
-                { dbActiveLive, engineActiveLive, delta,
-                  action: 'Run /api/admin/force-sync-user to reconcile' });
+                {
+                    dbActiveLive, engineActiveLive, delta,
+                    action: 'Run /api/admin/force-sync-user to reconcile'
+                });
         }
 
         return result('I11', 'PASS',
@@ -458,6 +464,110 @@ async function checkI6TimestampValidity(): Promise<CheckResult> {
     }
 }
 
+// ─── S20: Engine Thread Liveness ────────────────────────────────────
+// Catches the "Flask alive but engine dead" scenario that was a major root cause
+// of the engine appearing OFF. The watchdog thread now auto-restarts, but this
+// check verifies that from the SaaS side.
+async function checkS20EngineLiveness(): Promise<CheckResult> {
+    // Try both engine URLs
+    for (const mode of ['live', 'paper'] as const) {
+        const engineUrl = getEngineUrl(mode);
+        if (!engineUrl) continue;
+
+        try {
+            const res = await fetch(`${engineUrl}/api/health`, {
+                signal: AbortSignal.timeout(6000),
+                cache: 'no-store',
+            });
+            if (!res.ok) {
+                return result('S20', 'WARN',
+                    `Engine (${mode}) /api/health returned HTTP ${res.status}`,
+                    { mode, httpStatus: res.status });
+            }
+
+            const health = await res.json();
+            const status = health.status || 'unknown';
+            const crashCount = health.crash_count ?? 0;
+            const uptimeMin = health.uptime_minutes ?? 0;
+
+            if (status === 'stopped' || status === 'crashed') {
+                return result('S20', 'FAIL',
+                    `Engine thread is DEAD (status="${status}") — Flask is alive but engine loop is not running. Watchdog should auto-restart within 60s.`,
+                    { mode, status, crash_count: crashCount, uptime_minutes: uptimeMin });
+            }
+
+            if (uptimeMin < 2 && crashCount > 0) {
+                return result('S20', 'WARN',
+                    `Engine just restarted (uptime=${uptimeMin.toFixed(1)}min, ${crashCount} crash(es)) — may be recovering`,
+                    { mode, status, crash_count: crashCount, uptime_minutes: uptimeMin });
+            }
+
+            return result('S20', 'PASS',
+                `Engine thread alive (${mode}) — status="${status}", uptime=${uptimeMin.toFixed(0)}min`,
+                { mode, status, crash_count: crashCount, uptime_minutes: uptimeMin });
+
+        } catch (err: any) {
+            return result('S20', 'FAIL',
+                `Engine (${mode}) unreachable: ${err.message} — entire engine may be down`,
+                { mode, error: err.message });
+        }
+    }
+
+    return result('S20', 'SKIP', 'No engine URLs configured');
+}
+
+// ─── S21: Engine Crash & Restart Loop Monitor ────────────────────────
+async function checkS21CrashMonitor(): Promise<CheckResult> {
+    for (const mode of ['live', 'paper'] as const) {
+        const engineUrl = getEngineUrl(mode);
+        if (!engineUrl) continue;
+
+        try {
+            const res = await fetch(`${engineUrl}/api/health`, {
+                signal: AbortSignal.timeout(6000),
+                cache: 'no-store',
+            });
+            if (!res.ok) continue;
+
+            const health = await res.json();
+            const crashCount = health.crash_count ?? 0;
+            const uptimeMin = health.uptime_minutes ?? 0;
+            const lastCrash = health.last_crash || null;
+
+            // Restart loop: low uptime + multiple crashes
+            if (uptimeMin < 5 && crashCount >= 2) {
+                return result('S21', 'FAIL',
+                    `RESTART LOOP detected (${mode}): uptime=${uptimeMin.toFixed(1)}min, ${crashCount} crashes. Engine is repeatedly crashing and restarting.`,
+                    {
+                        mode, crash_count: crashCount, uptime_minutes: uptimeMin, last_crash: lastCrash,
+                        action: 'Check engine logs for repeating init errors or missing env vars'
+                    });
+            }
+
+            if (crashCount >= 3) {
+                return result('S21', 'WARN',
+                    `High crash count (${mode}): ${crashCount} crashes this session, but currently stable (uptime=${uptimeMin.toFixed(0)}min)`,
+                    { mode, crash_count: crashCount, uptime_minutes: uptimeMin, last_crash: lastCrash });
+            }
+
+            if (crashCount > 0) {
+                return result('S21', 'WARN',
+                    `${crashCount} crash(es) recorded (${mode}), engine recovered (uptime=${uptimeMin.toFixed(0)}min)`,
+                    { mode, crash_count: crashCount, uptime_minutes: uptimeMin, last_crash: lastCrash });
+            }
+
+            return result('S21', 'PASS',
+                `No crashes (${mode}) — uptime=${uptimeMin.toFixed(0)}min`,
+                { mode, crash_count: 0, uptime_minutes: uptimeMin });
+
+        } catch {
+            continue;
+        }
+    }
+
+    return result('S21', 'SKIP', 'Engine unreachable for crash monitoring');
+}
+
 // ─── Main Handler ────────────────────────────────────────────────────
 
 export async function GET() {
@@ -480,25 +590,27 @@ export async function GET() {
     ]);
 
     // Engine-dependent checks after DB checks complete
-    const [i3, i5, i11] = await Promise.all([
+    const [i3, i5, i11, s20, s21] = await Promise.all([
         checkI3ModeCrossSystem(),
         checkI5BalanceAccuracy(),
         checkI11DbEngineDivergence(),
+        checkS20EngineLiveness(),
+        checkS21CrashMonitor(),
     ]);
 
-    const results: CheckResult[] = [s1, s2, s14, s15, i2, i3, i5, i6, i11];
+    const results: CheckResult[] = [s1, s2, s14, s15, i2, i3, i5, i6, i11, s20, s21];
 
     const summary = {
-        pass:  results.filter(r => r.status === 'PASS').length,
-        warn:  results.filter(r => r.status === 'WARN').length,
-        fail:  results.filter(r => r.status === 'FAIL').length,
-        skip:  results.filter(r => r.status === 'SKIP').length,
+        pass: results.filter(r => r.status === 'PASS').length,
+        warn: results.filter(r => r.status === 'WARN').length,
+        fail: results.filter(r => r.status === 'FAIL').length,
+        skip: results.filter(r => r.status === 'SKIP').length,
         total: results.length,
     };
 
     return NextResponse.json({
         section: 'saas',
-        run_ts:  runTs,
+        run_ts: runTs,
         results,
         summary,
     });
