@@ -27,6 +27,7 @@ import telegram as tg
 import sentiment_engine as _sent_mod
 import orderflow_engine as _of_mod
 import coindcx_client as cdx
+from llm_reasoning import AthenaEngine
 
 # ─── Logging Setup ───────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -106,6 +107,15 @@ class RegimeMasterBot:
                 logger.info("📊 Order Flow Engine ready (L2 depth + taker flow + cumDelta)")
             except Exception as e:
                 logger.warning("⚠️  Order Flow Engine failed to load: %s", e)
+
+        # ── Athena — LLM Reasoning Layer ───────────────────────────────
+        self._athena = None
+        if config.LLM_REASONING_ENABLED:
+            try:
+                self._athena = AthenaEngine()
+                logger.info("🏛️ Athena LLM Reasoning Layer ready (model: %s)", config.LLM_MODEL)
+            except Exception as e:
+                logger.warning("⚠️  Athena failed to load: %s", e)
 
     # ─── Main Loop ───────────────────────────────────────────────────────────
 
@@ -294,6 +304,10 @@ class RegimeMasterBot:
 
         # ── 0. Weekly coin tier re-classification (background) ───
         self._maybe_reclassify_tiers()
+
+        # ── 0b. Reset Athena rate limiter for this cycle ─────────
+        if self._athena:
+            self._athena.reset_cycle()
 
         # ── 1. Refresh coin list periodically ────────────────────
         if config.MULTI_COIN_MODE:
@@ -762,6 +776,47 @@ class RegimeMasterBot:
                 }
                 return None
 
+            # ── Athena LLM Reasoning Gate (contextual validation) ──
+            athena_action = None
+            if self._athena and config.LLM_REASONING_ENABLED:
+                try:
+                    llm_ctx = {
+                        "ticker": symbol,
+                        "side": side,
+                        "hmm_regime": regime_summary,
+                        "hmm_confidence": round(conf, 4),
+                        "conviction": round(conviction, 1),
+                        "brain_id": brain_id,
+                        "current_price": current_price,
+                        "atr": current_atr,
+                        "tf_agreement": tf_agreement,
+                        "btc_regime": btc_regime_str,
+                        "btc_margin": round(btc_margin, 3),
+                        "vol_percentile": round(vol_pct, 3),
+                        "sentiment": self._sentiment.get_coin_sentiment(symbol) if self._sentiment else None,
+                    }
+                    athena_decision = self._athena.validate_signal(llm_ctx)
+                    athena_action = athena_decision.action
+
+                    if athena_decision.action == "VETO":
+                        self._coin_states[symbol] = {
+                            "symbol": symbol, "regime": regime_summary,
+                            "confidence": round(conf, 4), "price": current_price,
+                            "action": f"ATHENA_VETO:{athena_decision.reasoning[:60]}",
+                            "brain": brain_id,
+                        }
+                        return None
+
+                    if athena_decision.action == "REDUCE_SIZE":
+                        old_conv = conviction
+                        conviction *= athena_decision.adjusted_confidence
+                        logger.info(
+                            "🏛️ Athena [%s] REDUCE_SIZE: conviction %.1f → %.1f (×%.2f)",
+                            symbol, old_conv, conviction, athena_decision.adjusted_confidence,
+                        )
+                except Exception as e:
+                    logger.debug("Athena error for %s (fail-open): %s", symbol, e)
+
             # Update coin state for dashboard
             self._coin_states[symbol] = {
                 "symbol": symbol,
@@ -773,6 +828,7 @@ class RegimeMasterBot:
                 "brain": brain_id,
                 "tf_agreement": tf_agreement,
                 "regime_summary": regime_summary,
+                "athena": athena_action,
             }
 
             return {
@@ -786,6 +842,7 @@ class RegimeMasterBot:
                 "brain_id": brain_id,
                 "brain_cfg": brain_cfg,
                 "tf_agreement": tf_agreement,
+                "athena": athena_action,
                 "reason": f"{brain_cfg['label']} | {regime_summary} | conv={conviction:.1f} TF={tf_agreement}/3",
             }
 

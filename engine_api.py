@@ -280,6 +280,8 @@ def api_health():
         "recent_crashes": crash_log.get("crashes", [])[-5:],
         # Memory
         "memory_mb": mem_mb,
+        # Athena LLM Reasoning Layer
+        "athena": _engine_bot._athena.get_state() if _engine_bot and hasattr(_engine_bot, '_athena') and _engine_bot._athena else {"enabled": False},
     })
 
 

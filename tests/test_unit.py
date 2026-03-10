@@ -1215,6 +1215,171 @@ class TestCoinScannerUnit(unittest.TestCase):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  Phase H: LLM Reasoning — Athena Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestAthenaLLMReasoning(unittest.TestCase):
+    """Unit tests for Athena LLM reasoning layer — no real API calls."""
+
+    def setUp(self):
+        from llm_reasoning import AthenaEngine, AthenaDecision
+        self.AthenaEngine = AthenaEngine
+        self.AthenaDecision = AthenaDecision
+        self.engine = AthenaEngine()
+        self._sample_ctx = {
+            "ticker": "ETHUSDT",
+            "side": "BUY",
+            "hmm_regime": "BULL(1D) BULL(1H) BULL(15m)",
+            "hmm_confidence": 0.82,
+            "conviction": 75.5,
+            "brain_id": "balanced",
+            "current_price": 2850.0,
+            "atr": 45.0,
+            "tf_agreement": 3,
+            "btc_regime": "BULL",
+            "btc_margin": 0.65,
+            "vol_percentile": 0.45,
+            "sentiment": None,
+        }
+
+    def test_athena_decision_dataclass_defaults(self):
+        d = self.AthenaDecision(
+            action="EXECUTE", adjusted_confidence=1.0,
+            reasoning="Test", risk_flags=[],
+        )
+        self.assertEqual(d.action, "EXECUTE")
+        self.assertEqual(d.adjusted_confidence, 1.0)
+        self.assertFalse(d.cached)
+        self.assertEqual(d.latency_ms, 0)
+
+    def test_default_execute_returns_full_confidence(self):
+        result = self.engine._default_execute("BTCUSDT", reason="test")
+        self.assertEqual(result.action, "EXECUTE")
+        self.assertEqual(result.adjusted_confidence, 1.0)
+        self.assertIn("test", result.reasoning)
+
+    def test_rate_limit_returns_execute_after_max(self):
+        """After LLM_MAX_CALLS_PER_CYCLE, should return EXECUTE without API call."""
+        self.engine._cycle_call_count = config.LLM_MAX_CALLS_PER_CYCLE
+        result = self.engine.validate_signal(self._sample_ctx)
+        self.assertEqual(result.action, "EXECUTE")
+        self.assertIn("Rate limit", result.reasoning)
+
+    def test_reset_cycle_clears_counter(self):
+        self.engine._cycle_call_count = 99
+        self.engine.reset_cycle()
+        self.assertEqual(self.engine._cycle_call_count, 0)
+
+    def test_cache_hit_returns_cached_decision(self):
+        """Cached decisions should be returned without API call."""
+        import time
+        decision = self.AthenaDecision(
+            action="VETO", adjusted_confidence=0.2,
+            reasoning="Cached test", risk_flags=["test_flag"],
+            model="test-model",
+        )
+        self.engine._cache["ETHUSDT"] = (decision, time.time() + 600)
+        result = self.engine.validate_signal(self._sample_ctx)
+        self.assertEqual(result.action, "VETO")
+        self.assertTrue(result.cached)
+
+    def test_cache_expired_not_returned(self):
+        """Expired cache should not be returned."""
+        import time
+        decision = self.AthenaDecision(
+            action="VETO", adjusted_confidence=0.2,
+            reasoning="Old", risk_flags=[],
+        )
+        self.engine._cache["ETHUSDT"] = (decision, time.time() - 1)  # Expired
+        result = self.engine._check_cache("ETHUSDT")
+        self.assertIsNone(result)
+
+    def test_build_prompt_includes_all_fields(self):
+        prompt = self.engine._build_prompt(self._sample_ctx)
+        self.assertIn("ETHUSDT", prompt)
+        self.assertIn("BUY", prompt)
+        self.assertIn("2,850.00", prompt)
+        self.assertIn("balanced", prompt)
+        self.assertIn("3/3", prompt)
+
+    @patch("llm_reasoning.AthenaEngine._ensure_initialized", return_value=True)
+    def test_api_failure_returns_execute(self, _mock_init):
+        """API errors should fail-open to EXECUTE."""
+        self.engine._initialized = True
+        self.engine._model = MagicMock()
+        self.engine._model.generate_content.side_effect = Exception("Timeout")
+        result = self.engine.validate_signal(self._sample_ctx)
+        self.assertEqual(result.action, "EXECUTE")
+        self.assertIn("API error", result.reasoning)
+
+    @patch("llm_reasoning.AthenaEngine._ensure_initialized", return_value=True)
+    def test_malformed_json_returns_execute(self, _mock_init):
+        """Non-JSON response should fail-open."""
+        self.engine._initialized = True
+        self.engine._model = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = "This is not JSON at all"
+        self.engine._model.generate_content.return_value = mock_response
+        result = self.engine.validate_signal(self._sample_ctx)
+        self.assertEqual(result.action, "EXECUTE")
+        self.assertIn("Parse error", result.reasoning)
+
+    @patch("llm_reasoning.AthenaEngine._ensure_initialized", return_value=True)
+    def test_low_confidence_auto_veto(self, _mock_init):
+        """adjusted_confidence below LLM_VETO_THRESHOLD should auto-VETO."""
+        self.engine._initialized = True
+        self.engine._model = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = '{"action":"REDUCE_SIZE","adjusted_confidence":0.1,"reasoning":"Very risky","risk_flags":["high_vol"]}'
+        self.engine._model.generate_content.return_value = mock_response
+        result = self.engine.validate_signal(self._sample_ctx)
+        self.assertEqual(result.action, "VETO")
+        self.assertLess(result.adjusted_confidence, config.LLM_VETO_THRESHOLD)
+
+    @patch("llm_reasoning.AthenaEngine._ensure_initialized", return_value=True)
+    def test_valid_execute_response(self, _mock_init):
+        """Valid EXECUTE response should pass through correctly."""
+        self.engine._initialized = True
+        self.engine._model = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = '{"action":"EXECUTE","adjusted_confidence":0.95,"reasoning":"Signal looks solid","risk_flags":[]}'
+        self.engine._model.generate_content.return_value = mock_response
+        result = self.engine.validate_signal(self._sample_ctx)
+        self.assertEqual(result.action, "EXECUTE")
+        self.assertAlmostEqual(result.adjusted_confidence, 0.95)
+
+    @patch("llm_reasoning.AthenaEngine._ensure_initialized", return_value=True)
+    def test_reduce_size_response(self, _mock_init):
+        """REDUCE_SIZE should return with adjusted confidence."""
+        self.engine._initialized = True
+        self.engine._model = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = '{"action":"REDUCE_SIZE","adjusted_confidence":0.65,"reasoning":"Mixed signals","risk_flags":["btc_divergence"]}'
+        self.engine._model.generate_content.return_value = mock_response
+        result = self.engine.validate_signal(self._sample_ctx)
+        self.assertEqual(result.action, "REDUCE_SIZE")
+        self.assertAlmostEqual(result.adjusted_confidence, 0.65)
+        self.assertIn("btc_divergence", result.risk_flags)
+
+    def test_get_state_returns_expected_keys(self):
+        state = self.engine.get_state()
+        self.assertIn("enabled", state)
+        self.assertIn("model", state)
+        self.assertIn("initialized", state)
+        self.assertIn("cycle_calls", state)
+        self.assertIn("cache_size", state)
+        self.assertIn("recent_decisions", state)
+
+    def test_not_initialized_returns_execute(self):
+        """When no API key is set, should return EXECUTE (fail-open)."""
+        with patch.object(config, "LLM_API_KEY", ""):
+            engine = self.AthenaEngine()
+            result = engine.validate_signal(self._sample_ctx)
+            self.assertEqual(result.action, "EXECUTE")
+            self.assertIn("Not initialized", result.reasoning)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  Entrypoint
 # ═══════════════════════════════════════════════════════════════════════════════
 

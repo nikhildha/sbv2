@@ -276,6 +276,19 @@ SENTIMENT_RSS_FEEDS      = [
 ]
 SENTIMENT_LOG_FILE       = os.path.join(DATA_DIR, "sentiment_log.csv")
 
+# ─── Athena — LLM Reasoning Layer (Gemini) ────────────────────────────────────
+# Strategic AI brain that validates HMM signals using contextual reasoning.
+# Acts as a "risk committee" — can EXECUTE, REDUCE_SIZE, or VETO trades.
+LLM_REASONING_ENABLED       = True
+LLM_API_KEY                 = os.getenv("GEMINI_API_KEY", "")
+LLM_MODEL                   = "gemini-2.0-flash"         # Fast + cheap for real-time decisions
+LLM_CACHE_MINUTES           = 10                          # Cache per-coin LLM decisions
+LLM_TIMEOUT_SECONDS         = 10                          # Max wait for API response
+LLM_VETO_THRESHOLD          = 0.30                        # Below this → LLM vetoes the trade
+LLM_CONFIDENCE_WEIGHT       = 0.20                        # LLM can adjust conviction by ±20%
+LLM_MAX_CALLS_PER_CYCLE     = 5                           # Rate limit: max N coins per cycle
+LLM_LOG_FILE                = os.path.join(DATA_DIR, "athena_decisions.json")
+
 # ─── Coin Tiers (from experiment_3state_calibration.py evaluation) ────────────
 COIN_TIER_FILE = os.path.join(DATA_DIR, "coin_tiers.csv")  # Tier A/B/C classification
 TIER_RECLASSIFY_DAYS = 7                                    # Re-run calibration every N days
