@@ -217,7 +217,7 @@ def open_trade(symbol, side, leverage, quantity, entry_price, atr,
         "last_funding_check": now_iso,
         "profile_id":       profile_id,
         "bot_name":         bot_name,
-        "bot_id":           bot_id if bot_id is not None else config.ENGINE_BOT_ID,  # DB Bot.id — stamped for sync layer
+        "bot_id":           "",  # Removed — engine is broadcaster, no bot_id scoping
         # CoinDCX exchange tracking
         "exchange":         exchange,
         "pair":             pair,

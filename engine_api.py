@@ -234,7 +234,37 @@ def api_all():
         "multi": multi,
         "tradebook": tradebook,
         "engine": engine,
+        # Athena LLM Reasoning Layer state (from live bot object, not disk)
+        "athena": _engine_bot._athena.get_state() if _engine_bot and hasattr(_engine_bot, '_athena') and _engine_bot._athena else {"enabled": False},
     })
+
+
+@app.route("/api/gemini-health", methods=["GET"])
+def api_gemini_health():
+    """Check if the Gemini API key is configured and working."""
+    has_key = bool(config.LLM_API_KEY)
+    if not has_key:
+        return jsonify({"status": "missing", "message": "GEMINI_API_KEY not configured", "key_set": False})
+
+    # Try a minimal API call to verify key validity
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=config.LLM_API_KEY)
+        model = genai.GenerativeModel("gemini-2.0-flash")
+        response = model.generate_content("Say 'OK' in one word.", generation_config={"max_output_tokens": 10})
+        return jsonify({
+            "status": "ok",
+            "message": "Gemini API key is valid and working",
+            "key_set": True,
+            "model": config.LLM_MODEL,
+            "test_response": response.text.strip()[:50],
+            "athena_enabled": config.LLM_REASONING_ENABLED,
+            "brain_type": config.ENGINE_BRAIN_TYPE,
+        })
+    except ImportError:
+        return jsonify({"status": "error", "message": "google-generativeai not installed", "key_set": True})
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Key validation failed: {str(e)[:200]}", "key_set": True})
 
 
 @app.route("/api/health", methods=["GET"])

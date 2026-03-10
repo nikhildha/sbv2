@@ -288,14 +288,22 @@ export function BotsClient({ bots: initialBots }: BotsClientProps) {
   };
 
   const handleDeleteBot = async (botId: string) => {
-    if (!confirm('Are you sure you want to delete this bot?')) return;
+    if (!confirm('Are you sure you want to delete this bot? All associated trades will be removed.')) return;
     try {
       const res = await fetch('/api/bots/delete', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ botId }),
       });
-      if (res.ok) window.location.reload();
-    } catch (error) { console.error('Error deleting bot:', error); }
+      if (res.ok) {
+        window.location.reload();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Failed to delete bot. Try stopping it first.');
+      }
+    } catch (error) {
+      console.error('Error deleting bot:', error);
+      alert('Failed to delete bot. Please try again.');
+    }
   };
 
   const getModel = (botName: string) =>

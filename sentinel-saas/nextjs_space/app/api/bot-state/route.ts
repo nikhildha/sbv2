@@ -181,7 +181,7 @@ export async function GET() {
                 timestamp: lastAnalysis,
             },
             scanner: { coins: Object.keys(coinStates) },
-            athena: engineState?.athena || { enabled: false, recent_decisions: [] },
+            athena: engineData?.athena || { enabled: false, recent_decisions: [] },
             perBot,
 
             tradebook: {
