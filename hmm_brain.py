@@ -220,3 +220,143 @@ class HMMBrain:
     @property
     def is_trained(self):
         return self._is_trained
+
+
+class MultiTFHMMBrain:
+    """
+    Multi-Timeframe HMM Brain — manages 3 separate HMMBrain instances per coin.
+
+    Architecture:
+      - Daily  (1D × 1000 bars = ~2.7 yrs) → 40 pts weight (macro trend)
+      - Hourly (1H × 1000 bars = ~42 days)  → 35 pts weight (swing regime)
+      - 15min  (15m × 1000 bars = ~10 days) → 25 pts weight (momentum)
+
+    Combined via:
+      1. Majority vote (≥2/3 TFs must agree on direction)
+      2. Weighted conviction score (0-100)
+
+    Backtest: +$2,421 PnL, PF 1.49 across 41 coins.
+    Walk-forward: ✅ BALANCED (test WR ≥ train WR, no overfitting).
+    """
+
+    def __init__(self, symbol):
+        self.symbol = symbol
+        self._brains = {}        # timeframe → HMMBrain
+        self._predictions = {}   # timeframe → (regime, margin)
+
+    def set_brain(self, timeframe, brain):
+        """Register a trained HMMBrain for a specific timeframe."""
+        if isinstance(brain, HMMBrain) and brain.is_trained:
+            self._brains[timeframe] = brain
+
+    def is_ready(self):
+        """At least MIN_MODELS timeframes must have trained brains."""
+        return len(self._brains) >= config.MULTI_TF_MIN_MODELS
+
+    def predict(self, tf_data):
+        """
+        Run prediction for each timeframe and cache results.
+
+        Parameters
+        ----------
+        tf_data : dict
+            timeframe → DataFrame with HMM features (from compute_all_features)
+
+        Returns
+        -------
+        self (for chaining)
+        """
+        self._predictions = {}
+        for tf, brain in self._brains.items():
+            if tf in tf_data and brain.is_trained:
+                regime, margin = brain.predict(tf_data[tf])
+                self._predictions[tf] = (regime, margin)
+        return self
+
+    def get_conviction(self):
+        """
+        Compute multi-TF conviction score and direction.
+
+        Returns
+        -------
+        (conviction: float 0-100, direction: str 'BUY'/'SELL'/None, agreement: int)
+
+        conviction = weighted sum of each TF's contribution (scaled by margin tier)
+        direction  = majority vote direction (None if no consensus)
+        agreement  = number of TFs agreeing with consensus
+        """
+        if not self._predictions:
+            return 0.0, None, 0
+
+        weights = config.MULTI_TF_WEIGHTS
+        directions = []
+
+        # Count votes
+        for tf, (regime, margin) in self._predictions.items():
+            if regime == config.REGIME_BULL:
+                directions.append(("BUY", tf, margin))
+            elif regime == config.REGIME_BEAR:
+                directions.append(("SELL", tf, margin))
+            # CHOP → no vote
+
+        if not directions:
+            return 0.0, None, 0
+
+        buys = sum(1 for d, _, _ in directions if d == "BUY")
+        sells = sum(1 for d, _, _ in directions if d == "SELL")
+
+        # Need majority
+        if buys > sells:
+            consensus = "BUY"
+        elif sells > buys:
+            consensus = "SELL"
+        else:
+            return 0.0, None, 0  # Tied — skip
+
+        agreement = buys if consensus == "BUY" else sells
+
+        # Check minimum agreement
+        if agreement < config.MULTI_TF_MIN_AGREEMENT:
+            return 0.0, None, agreement
+
+        # Weighted conviction score
+        total = 0.0
+        for tf, (regime, margin) in self._predictions.items():
+            w = weights.get(tf, 0)
+            agrees = (
+                (regime == config.REGIME_BULL and consensus == "BUY")
+                or (regime == config.REGIME_BEAR and consensus == "SELL")
+            )
+
+            if regime == config.REGIME_CHOP:
+                total += 0  # Chop = no contribution
+            elif agrees:
+                # Margin-tiered scoring (matches config.HMM_CONF_TIER_*)
+                if margin >= config.HMM_CONF_TIER_HIGH:
+                    total += w * 1.0
+                elif margin >= config.HMM_CONF_TIER_MED_HIGH:
+                    total += w * 0.85
+                elif margin >= config.HMM_CONF_TIER_MED:
+                    total += w * 0.65
+                elif margin >= config.HMM_CONF_TIER_LOW:
+                    total += w * 0.40
+                else:
+                    total += w * 0.20
+            else:
+                # Disagreement penalty
+                total -= w * 0.5
+
+        conviction = max(0.0, min(100.0, total))
+        return round(conviction, 1), consensus, agreement
+
+    def get_regime_summary(self):
+        """Return human-readable regime summary for dashboard/logging."""
+        parts = []
+        for tf in config.MULTI_TF_TIMEFRAMES:
+            if tf in self._predictions:
+                regime, margin = self._predictions[tf]
+                name = config.REGIME_NAMES.get(regime, "?")
+                parts.append(f"{tf}={name}({margin:.2f})")
+            else:
+                parts.append(f"{tf}=N/A")
+        return " | ".join(parts)

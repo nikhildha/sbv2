@@ -37,7 +37,19 @@ SECONDARY_SYMBOLS = ["ETHUSDT"]
 # ─── Timeframes ─────────────────────────────────────────────────────────────────
 TIMEFRAME_EXECUTION = "15m"   # Entry / exit timing (optimized from 5m)
 TIMEFRAME_CONFIRMATION = "1h" # Trend confirmation
-TIMEFRAME_MACRO = "4h"        # Macro regime
+TIMEFRAME_MACRO = "4h"        # Macro regime (legacy — replaced by Multi-TF HMM)
+
+# ─── Multi-Timeframe HMM (backtest-proven: +$2,421 PnL, PF 1.49) ────────────
+MULTI_TF_ENABLED = True               # Use 3 separate HMM brains per coin
+MULTI_TF_TIMEFRAMES = ["1d", "1h", "15m"]   # Daily (macro), Hourly (swing), 15min (momentum)
+MULTI_TF_CANDLE_LIMIT = 1000          # Candles to fetch per TF (~2.7yr daily, ~42d hourly, ~10d 15m)
+MULTI_TF_WEIGHTS = {"1d": 40, "1h": 35, "15m": 25}  # Conviction weights (sum=100)
+MULTI_TF_MIN_AGREEMENT = 2            # Minimum TFs agreeing on direction (2 of 3)
+MULTI_TF_MIN_MODELS = 2               # Minimum trained models required
+
+# ─── Weekend Skip ───────────────────────────────────────────────────────────────
+WEEKEND_SKIP_ENABLED = True            # Skip new entries on Saturday + Sunday (UTC)
+WEEKEND_SKIP_DAYS = [5, 6]             # 5=Saturday, 6=Sunday (Python weekday convention)
 
 # ─── HMM Brain ──────────────────────────────────────────────────────────────────
 HMM_N_STATES = 3              # Bull, Chop, Bear (3-state — CRASH merged into BEAR: 10.9% accuracy, worse than random)
@@ -70,41 +82,66 @@ CONFIDENCE_HIGH = 0.99   # Above 99% → 35x  (optimized from 0.95)
 CONFIDENCE_MEDIUM = 0.96 # 96–99% → 25x  (optimized from 0.91)
 CONFIDENCE_LOW = 0.92    # 92–96% → 15x  (optimized from 0.85, below 92% = no deploy)
 
-# ─── Strategy Profiles ──────────────────────────────────────────────────────────
-# Each profile defines its own conviction thresholds, leverage mapping, risk params.
-# The HMM analysis runs ONCE; each profile then applies its own lens to the raw scores.
+# ─── Strategy Profiles (legacy — kept for backward compatibility) ───────────────
 STRATEGY_PROFILES = {
     "standard": {
-        "label": "SM-Standard",
-        "confidence_min": 0.92,
-        "confidence_tiers": {0.99: 35, 0.96: 25, 0.92: 15},
-        "max_positions": 15,
+        "label": "SM-Adaptive",
+        "confidence_min": 0.10,         # Multi-TF conviction replaces this
+        "confidence_tiers": {0.10: 10}, # Brain switcher sets leverage
+        "max_positions": 10,
         "capital_per_trade": 100,
         "atr_sl_mult": 1.5,
         "atr_tp_mult": 3.0,
-        "trailing_sl": True,
-        "multi_target": True,
-        "mt_rr_ratio": 5,
-    },
-    "conservative": {
-        "label": "SM-Conservative",
-        "confidence_min": 0.97,
-        "confidence_tiers": {0.99: 10, 0.97: 5},
-        "max_positions": 5,
-        "capital_per_trade": 100,
-        "atr_sl_mult": 1.0,
-        "atr_tp_mult": 2.0,
-        "trailing_sl": True,
+        "trailing_sl": False,
         "multi_target": False,
         "mt_rr_ratio": 3,
     },
 }
-ACTIVE_PROFILES = ["standard"]  # Only run the profile the user deployed
+ACTIVE_PROFILES = ["standard"]
+
+# ─── Brain Profiles (Adaptive Switcher — replaces static strategy profiles) ────
+# Each brain has its own leverage, conviction threshold, and SL/TP params.
+# The BrainSwitcher selects the active brain based on market conditions.
+BRAIN_PROFILES = {
+    "conservative": {
+        "label": "🟢 Conservative",
+        "leverage": 10,
+        "conviction_min": 70,
+        "atr_sl_mult": 1.5,
+        "atr_tp_mult": 3.0,
+        "max_loss_pct": 8,
+        "max_positions": 10,
+        "capital_per_trade": 100,
+        "scan_limit": 15,             # Fewer coins = highest liquidity only
+    },
+    "balanced": {
+        "label": "🟡 Balanced",
+        "leverage": 15,
+        "conviction_min": 60,
+        "atr_sl_mult": 2.0,
+        "atr_tp_mult": 4.0,
+        "max_loss_pct": 8,
+        "max_positions": 10,
+        "capital_per_trade": 100,
+        "scan_limit": 30,             # Mid-range scan for normal conditions
+    },
+    "aggressive": {
+        "label": "🔴 Aggressive",
+        "leverage": 25,
+        "conviction_min": 50,
+        "atr_sl_mult": 2.0,
+        "atr_tp_mult": 3.0,
+        "max_loss_pct": 10,
+        "max_positions": 10,
+        "capital_per_trade": 100,
+        "scan_limit": 50,             # Wide net during strong trends
+    },
+}
 
 # ─── Risk Management ────────────────────────────────────────────────────────────
 RISK_PER_TRADE = 0.04
 KILL_SWITCH_DRAWDOWN = 0.10   # Pause bot if 10% drawdown in 24h
-MAX_LOSS_PER_TRADE_PCT = -15     # Hard max-loss per trade – flat for all leverage
+MAX_LOSS_PER_TRADE_PCT = -10     # Hard max-loss per trade (brain switcher may use -8%)
 MIN_LEVERAGE_FLOOR = 5           # Skip trade if leverage must drop below this
 MIN_HOLD_MINUTES = 30         # Minimum hold time before regime-change exits
 DEFAULT_QUANTITY = 0.002      # BTC quantity (overridden by position sizer)
@@ -133,7 +170,7 @@ def get_atr_multipliers(leverage=1):
 # Each step: (trigger_pnl_pct, lock_pnl_pct)
 #   When leveraged P&L >= trigger → move SL to lock that % profit
 #   lock 0% = breakeven (entry price)
-TRAILING_SL_ENABLED = True
+TRAILING_SL_ENABLED = False       # Disabled — backtest shows no trailing yields better PnL
 TRAILING_SL_STEPS = [
     (5.0,   0.0),   # At +5%  leveraged P&L → SL to Breakeven
     (10.0,  5.0),   # At +10% leveraged P&L → Lock +5% profit
@@ -155,7 +192,7 @@ TRAILING_TP_EXTENSION_ATR = 1.5
 TRAILING_TP_MAX_EXTENSIONS = 3
 
 # ─── Multi-Target Partial Profit Booking (0304_v1) ─────────────────────────────
-MULTI_TARGET_ENABLED = True
+MULTI_TARGET_ENABLED = False      # Disabled — let winners run to full TP (backtest-proven)
 MT_RR_RATIO = 5                  # SL : T3 = 1:5
 MT_T1_FRAC = 0.333               # T1 at 33.3% of T3 distance (Even spacing)
 MT_T2_FRAC = 0.666               # T2 at 66.6% of T3 distance
@@ -182,12 +219,13 @@ SIDEWAYS_POSITION_REDUCTION = 0.30  # 30% smaller positions in chop
 
 # ─── Bot Loop ────────────────────────────────────────────────────────────────────
 LOOP_INTERVAL_SECONDS = 10        # 10-second heartbeat (faster trailing SL sync for live trading)
-ANALYSIS_INTERVAL_SECONDS = 300   # 5-minute full analysis cycle (HMM scan, trades)
+ANALYSIS_INTERVAL_SECONDS = 600   # 10-minute full analysis cycle (was 5m — 10m is safer for 50-coin aggressive scans)
 ERROR_RETRY_SECONDS = 60          # Retry after error
 
 # ─── Multi-Coin Trading ──────────────────────────────────────────────────────────
-MAX_CONCURRENT_POSITIONS = 15   # Max symbols traded at once
-TOP_COINS_LIMIT = 25            # How many coins to scan by volume
+MAX_CONCURRENT_POSITIONS = 10   # Max symbols traded at once (reduced from 15)
+MAX_OPEN_TRADES = 25            # User-configurable max (overridden by /api/set-config at bot start)
+TOP_COINS_LIMIT = 50            # Max coins to scan (brain switcher may reduce: 15/30/50)
 CAPITAL_PER_COIN_PCT = 0.05     # 5% of balance per coin (max 15 = 75% deployed)
 SCAN_INTERVAL_CYCLES = 4        # Re-scan top coins every N analysis cycles (4 × 15m = 1h)
 MULTI_COIN_MODE = True          # Enable multi-coin scanning

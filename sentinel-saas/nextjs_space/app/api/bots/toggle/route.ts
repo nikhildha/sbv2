@@ -187,7 +187,7 @@ export async function POST(request: Request) {
         console.warn('[toggle] set-bot-id failed (continuing):', e);
       }
 
-      // ──── Push per-bot risk config (maxLossPct, capitalPerTrade) to engine ──
+      // ──── Push per-bot risk config (maxLossPct, capitalPerTrade, maxOpenTrades) to engine ──
       try {
         await fetch(`${engineUrl}/api/set-config`, {
           method: 'POST',
@@ -195,10 +195,11 @@ export async function POST(request: Request) {
           body: JSON.stringify({
             max_loss_pct: bot.config?.maxLossPct ?? -15,
             capital_per_trade: bot.config?.capitalPerTrade ?? 100,
+            max_open_trades: bot.config?.maxOpenTrades ?? 25,
           }),
           signal: AbortSignal.timeout(5000),
         });
-        console.log(`[toggle] set-config: maxLossPct=${bot.config?.maxLossPct ?? -15}, capitalPerTrade=${bot.config?.capitalPerTrade ?? 100}`);
+        console.log(`[toggle] set-config: maxLossPct=${bot.config?.maxLossPct ?? -15}, capitalPerTrade=${bot.config?.capitalPerTrade ?? 100}, maxOpenTrades=${bot.config?.maxOpenTrades ?? 25}`);
       } catch (e) {
         console.warn('[toggle] set-config failed (continuing):', e);
       }

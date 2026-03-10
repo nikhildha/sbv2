@@ -634,6 +634,23 @@ def api_set_config():
         except (TypeError, ValueError):
             pass
 
+    max_open = data.get("max_open_trades")
+    if max_open is not None:
+        try:
+            mot = int(max_open)
+            if mot > 0:
+                # Store as global config override
+                config.MAX_OPEN_TRADES = mot
+                # Also update all brain profiles
+                for brain_name, brain_profile in config.BRAIN_PROFILES.items():
+                    brain_profile["max_positions"] = mot
+                # Update strategy profiles too
+                for profile in config.STRATEGY_PROFILES.values():
+                    profile["max_positions"] = mot
+                applied["max_open_trades"] = mot
+        except (TypeError, ValueError):
+            pass
+
     paper_balance = data.get("paper_balance")
     if paper_balance is not None:
         try:

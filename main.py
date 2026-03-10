@@ -12,7 +12,8 @@ from datetime import datetime, timezone, timedelta
 IST = timezone(timedelta(hours=5, minutes=30))
 
 import config
-from hmm_brain import HMMBrain
+from hmm_brain import HMMBrain, MultiTFHMMBrain
+from brain_switcher import BrainSwitcher
 from data_pipeline import fetch_klines, get_multi_timeframe_data, _get_binance_client
 from feature_engine import compute_all_features, compute_hmm_features, compute_trend, compute_support_resistance, compute_sr_position, compute_ema
 from execution_engine import ExecutionEngine
@@ -73,9 +74,13 @@ class RegimeMasterBot:
         # Multi-coin state
         self._coin_list = []
         self._active_positions = {}  # symbol → {regime, confidence, side, entry_time}
-        self._coin_brains = {}       # symbol → HMMBrain (cached per coin)
+        self._coin_brains = {}       # symbol → HMMBrain (cached per coin) — legacy 1H
+        self._multi_tf_brains = {}   # symbol → MultiTFHMMBrain (3 TFs per coin)
         self._coin_states = {}       # symbol → latest state dict (for dashboard)
         self._live_prices = {}       # symbol → {ls, fr, ...} (fetched each cycle)
+
+        # Adaptive Brain Switcher
+        self._brain_switcher = BrainSwitcher()
 
         # Weekly tier re-classification state
         self._reclassify_thread: threading.Thread | None = None
@@ -297,7 +302,13 @@ class RegimeMasterBot:
                 self._coin_list = get_top_coins_by_volume(limit=config.TOP_COINS_LIMIT)
                 logger.info("📋 Tracking %d coins: %s ...", len(self._coin_list),
                             ", ".join(self._coin_list[:5]))
-            symbols = self._coin_list
+            # Slice coin list by active brain's scan_limit (C=15, B=30, A=50)
+            brain_scan_limit = config.BRAIN_PROFILES.get(
+                self.brain_switcher.active_brain, {}
+            ).get("scan_limit", config.TOP_COINS_LIMIT)
+            symbols = self._coin_list[:brain_scan_limit]
+            logger.info("🧠 Brain=%s → scanning %d/%d coins",
+                        self.brain_switcher.active_brain, len(symbols), len(self._coin_list))
         else:
             symbols = [config.PRIMARY_SYMBOL]
 
@@ -586,30 +597,173 @@ class RegimeMasterBot:
         regime, conf = brain.predict(df_1h_feat)
         regime_name = brain.get_regime_name(regime)
 
-        # ── 4h Macro Regime Confirmation ──
-        macro_key = f"{symbol}_4h"
-        macro_brain = self._coin_brains.get(macro_key)
-        if macro_brain is None:
-            macro_brain = HMMBrain()
-            self._coin_brains[macro_key] = macro_brain
+        # ── Multi-TF HMM Analysis (replaces single 1H + 4H) ──
+        if config.MULTI_TF_ENABLED:
+            # Get or create MultiTFBrain for this coin
+            mtf_brain = self._multi_tf_brains.get(symbol)
+            if mtf_brain is None:
+                mtf_brain = MultiTFHMMBrain(symbol)
+                self._multi_tf_brains[symbol] = mtf_brain
 
+            # Fetch and train each timeframe
+            tf_data = {}  # timeframe → feature DataFrame
+            for tf in config.MULTI_TF_TIMEFRAMES:
+                tf_key = f"{symbol}_{tf}"
+                tf_brain = self._coin_brains.get(tf_key)
+                if tf_brain is None:
+                    tf_brain = HMMBrain()
+                    self._coin_brains[tf_key] = tf_brain
+
+                try:
+                    df_tf = fetch_klines(symbol, tf, limit=config.MULTI_TF_CANDLE_LIMIT)
+                    if df_tf is not None and len(df_tf) >= 60:
+                        df_tf_feat = compute_all_features(df_tf)
+                        df_tf_hmm = compute_hmm_features(df_tf)
+                        if tf_brain.needs_retrain():
+                            tf_brain.train(df_tf_hmm)
+                        if tf_brain.is_trained:
+                            mtf_brain.set_brain(tf, tf_brain)
+                            tf_data[tf] = df_tf_feat
+                except Exception as e:
+                    logger.debug("Multi-TF %s fetch failed for %s: %s", tf, symbol, e)
+
+            # Check if enough models are ready
+            if not mtf_brain.is_ready():
+                self._coin_states[symbol] = {
+                    "symbol": symbol, "regime": "N/A", "confidence": 0,
+                    "price": 0, "action": "MTF_INSUFFICIENT_MODELS",
+                }
+                return None
+
+            # Predict across all timeframes
+            mtf_brain.predict(tf_data)
+            conviction, side, tf_agreement = mtf_brain.get_conviction()
+            regime_summary = mtf_brain.get_regime_summary()
+
+            if side is None:
+                self._coin_states[symbol] = {
+                    "symbol": symbol, "regime": regime_summary,
+                    "confidence": 0, "price": 0, "action": "MTF_NO_CONSENSUS",
+                }
+                return None
+
+            # Use 1H data for trade execution params (ATR, price, etc.)
+            # 1H should always be available since it's in MULTI_TF_TIMEFRAMES
+            df_1h_feat = tf_data.get("1h")
+            if df_1h_feat is None:
+                return None
+
+            current_price = float(df_1h_feat["close"].iloc[-1])
+            current_atr = float(df_1h_feat["atr"].iloc[-1]) if "atr" in df_1h_feat.columns else 0.0
+            regime = config.REGIME_BULL if side == "BUY" else config.REGIME_BEAR
+            regime_name = config.REGIME_NAMES.get(regime, "UNKNOWN")
+            # Use the average margin across agreeing TFs as confidence
+            conf = conviction / 100.0
+
+            # Get BTC Daily regime for brain switcher
+            btc_regime_str = "CHOP"
+            btc_margin = 0.0
+            btc_daily_key = "BTCUSDT_1d"
+            btc_brain = self._coin_brains.get(btc_daily_key)
+            if btc_brain and btc_brain.is_trained and "1d" in tf_data:
+                btc_r, btc_m = btc_brain.predict(tf_data["1d"])
+                if btc_r == config.REGIME_BULL:
+                    btc_regime_str = "BULL"
+                elif btc_r == config.REGIME_BEAR:
+                    btc_regime_str = "BEAR"
+                btc_margin = btc_m
+            elif symbol != "BTCUSDT":
+                # Try to use BTCUSDT's cached brain
+                btc_mtf = self._multi_tf_brains.get("BTCUSDT")
+                if btc_mtf and btc_mtf._predictions.get("1d"):
+                    btc_r, btc_m = btc_mtf._predictions["1d"]
+                    if btc_r == config.REGIME_BULL:
+                        btc_regime_str = "BULL"
+                    elif btc_r == config.REGIME_BEAR:
+                        btc_regime_str = "BEAR"
+                    btc_margin = btc_m
+
+            # Brain switcher: select optimal brain config
+            vol_pct = (current_atr / current_price / 0.03) if current_price > 0 else 0.5
+            vol_pct = max(0.0, min(1.0, vol_pct))
+            brain_id = self._brain_switcher.select_brain(
+                btc_regime=btc_regime_str,
+                btc_margin=btc_margin,
+                vol_percentile=vol_pct,
+                tf_agreement=tf_agreement,
+            )
+            brain_cfg = BrainSwitcher.get_brain_config(brain_id)
+
+            # Weekend skip
+            if config.WEEKEND_SKIP_ENABLED:
+                now_utc = datetime.now(timezone.utc)
+                if now_utc.weekday() in config.WEEKEND_SKIP_DAYS:
+                    self._coin_states[symbol] = {
+                        "symbol": symbol, "regime": regime_summary,
+                        "confidence": round(conf, 4), "price": current_price,
+                        "action": "WEEKEND_SKIP",
+                    }
+                    return None
+
+            # Volatility filter
+            if config.VOL_FILTER_ENABLED and current_atr > 0:
+                vol_ratio = current_atr / current_price
+                if vol_ratio < config.VOL_MIN_ATR_PCT:
+                    self._coin_states[symbol] = {
+                        "symbol": symbol, "regime": regime_summary,
+                        "confidence": round(conf, 4), "price": current_price,
+                        "action": "VOL_TOO_LOW",
+                    }
+                    return None
+                if vol_ratio > config.VOL_MAX_ATR_PCT:
+                    self._coin_states[symbol] = {
+                        "symbol": symbol, "regime": regime_summary,
+                        "confidence": round(conf, 4), "price": current_price,
+                        "action": "VOL_TOO_HIGH",
+                    }
+                    return None
+
+            # Conviction threshold check (brain-specific)
+            if conviction < brain_cfg["conviction_min"]:
+                self._coin_states[symbol] = {
+                    "symbol": symbol, "regime": regime_summary,
+                    "confidence": round(conf, 4), "price": current_price,
+                    "action": f"LOW_CONVICTION:{conviction:.1f}<{brain_cfg['conviction_min']}",
+                    "brain": brain_id,
+                }
+                return None
+
+            # Update coin state for dashboard
+            self._coin_states[symbol] = {
+                "symbol": symbol,
+                "regime": regime_name,
+                "confidence": round(conf, 4),
+                "price": current_price,
+                "action": f"ELIGIBLE_{side}",
+                "conviction": round(conviction, 1),
+                "brain": brain_id,
+                "tf_agreement": tf_agreement,
+                "regime_summary": regime_summary,
+            }
+
+            return {
+                "symbol": symbol,
+                "side": side,
+                "atr": current_atr,
+                "regime": regime,
+                "regime_name": regime_name,
+                "confidence": conf,
+                "conviction": conviction,
+                "brain_id": brain_id,
+                "brain_cfg": brain_cfg,
+                "tf_agreement": tf_agreement,
+                "reason": f"{brain_cfg['label']} | {regime_summary} | conv={conviction:.1f} TF={tf_agreement}/3",
+            }
+
+        # ── Legacy single-TF path (when MULTI_TF_ENABLED=False) ──
         macro_regime_name = None
-        sr_pos_4h   = None
+        sr_pos_4h = None
         vwap_pos_4h = None
-        try:
-            df_4h = fetch_klines(symbol, config.TIMEFRAME_MACRO, limit=config.HMM_LOOKBACK)
-            if df_4h is not None and len(df_4h) >= 60:
-                df_4h_feat = compute_all_features(df_4h)
-                df_4h_hmm = compute_hmm_features(df_4h)
-                if macro_brain.needs_retrain():
-                    macro_brain.train(df_4h_hmm)
-                if macro_brain.is_trained:
-                    macro_regime, macro_conf = macro_brain.predict(df_4h_feat)
-                    macro_regime_name = macro_brain.get_regime_name(macro_regime)
-                # 4h S/R: 50-bar lookback = ~200h / 8 days — structural swing levels
-                sr_pos_4h, vwap_pos_4h = compute_sr_position(df_4h_feat, lookback=50)
-        except Exception as e:
-            logger.debug("4h macro analysis failed for %s: %s", symbol, e)
 
         # Update coin state for dashboard
         current_price = float(df_1h_feat["close"].iloc[-1])
@@ -894,15 +1048,23 @@ class RegimeMasterBot:
 
     def _evaluate_for_profile(self, raw, profile_id, profile, balance):
         """
-        Take a raw coin analysis result and apply a strategy profile's
+        Take a raw coin analysis result and apply brain-specific or profile
         conviction → leverage mapping + position sizing.
         Returns a trade dict ready for deployment, or None if filtered out.
         """
         conviction = raw["conviction"]
         symbol = raw["symbol"]
 
-        # Profile-specific leverage mapping
-        leverage = self.risk.get_conviction_leverage_for_profile(conviction, profile)
+        # Multi-TF path: use brain_cfg for leverage + SL/TP
+        brain_cfg = raw.get("brain_cfg")
+        if brain_cfg:
+            leverage = brain_cfg["leverage"]
+            max_loss_pct = brain_cfg.get("max_loss_pct", abs(config.MAX_LOSS_PER_TRADE_PCT))
+        else:
+            # Legacy path: profile-based leverage
+            leverage = self.risk.get_conviction_leverage_for_profile(conviction, profile)
+            max_loss_pct = abs(config.MAX_LOSS_PER_TRADE_PCT)
+
         if leverage == 0:
             logger.info("⛔ [%s] %s: leverage=0 (conviction=%.1f below profile min)",
                         profile_id, symbol, conviction)
@@ -911,25 +1073,21 @@ class RegimeMasterBot:
         # Check profile's max position limit
         profile_prefix = f"{profile_id}:"
         profile_active = sum(1 for k in self._active_positions if k.startswith(profile_prefix))
-        max_pos = profile.get("max_positions", config.MAX_CONCURRENT_POSITIONS)
+        max_pos = brain_cfg.get("max_positions", profile.get("max_positions", config.MAX_CONCURRENT_POSITIONS)) if brain_cfg else profile.get("max_positions", config.MAX_CONCURRENT_POSITIONS)
         if profile_active >= max_pos:
             logger.info("⛔ [%s] %s: max positions reached (%d/%d)",
                         profile_id, symbol, profile_active, max_pos)
             return None
 
         # Position sizing — always requires valid balance for correct user experience
-        # User sets capital_per_trade in their profile; balance validates funds exist
-        user_budget = profile.get("capital_per_trade", 100.0)
+        user_budget = brain_cfg.get("capital_per_trade", 100.0) if brain_cfg else profile.get("capital_per_trade", 100.0)
 
         if not config.PAPER_TRADE and balance <= 0:
-            # LIVE mode: never deploy without confirmed balance
             logger.warning("⛔ [%s] %s: LIVE balance=$0 — cannot deploy", profile_id, symbol)
             return None
 
         # ── Margin-First Position Sizing ──
-        # User's capital_per_trade is the EXACT margin deployed.
-        # Leverage is reduced (not increased) to keep SL loss ≤ MAX_LOSS_PER_TRADE_PCT.
-        margin = user_budget  # capital_per_trade
+        margin = user_budget
 
         # Live mode: ensure margin doesn't exceed wallet balance
         if not config.PAPER_TRADE and balance > 0:
@@ -950,10 +1108,12 @@ class RegimeMasterBot:
 
         # Use the risk-capped leverage (may be lower than conviction leverage)
         leverage = final_leverage
+        brain_id = raw.get("brain_id", "legacy")
+        brain_label = brain_cfg["label"] if brain_cfg else profile["label"]
 
         logger.debug(
-            "✅ [%s] %s PASS: conviction=%.1f lev=%dx margin=$%.0f qty=%.6f price=%.2f",
-            profile_id, symbol, conviction, leverage, margin, quantity, current_price,
+            "✅ [%s] %s PASS: conviction=%.1f lev=%dx margin=$%.0f qty=%.6f price=%.2f brain=%s",
+            profile_id, symbol, conviction, leverage, margin, quantity, current_price, brain_id,
         )
 
         return {
@@ -967,8 +1127,9 @@ class RegimeMasterBot:
             "confidence": raw["confidence"],
             "conviction": conviction,
             "profile_id": profile_id,
-            "bot_name": profile["label"],
-            "reason": f"{profile['label']} | {raw['reason']} | lev={leverage}x",
+            "bot_name": brain_label,
+            "brain_id": brain_id,
+            "reason": f"{brain_label} | {raw['reason']} | lev={leverage}x",
         }
 
     # ─── Exit & Sync Logic ────────────────────────────────────────────────────
