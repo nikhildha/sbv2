@@ -616,7 +616,7 @@ export function SignalSummaryTable({ coinStates, multi }: SignalSummaryProps) {
                     <table style={{ width: '100%', minWidth: '900px', borderCollapse: 'collapse', fontSize: '12px' }}>
                         <thead>
                             <tr style={{ borderBottom: '2px solid rgba(255,255,255,0.08)' }}>
-                                {['#', 'Bot', 'Coin', 'Regime', 'Conf %', 'Action', 'Deploy', 'Reason', 'Scan Time'].map(h => (
+                                {['#', 'Bot', 'Coin', 'Regime', 'Conf %', 'Deploy', 'Reason', 'Scan Time'].map(h => (
                                     <th key={h} style={{ padding: '10px 8px', textAlign: h === '#' || h === 'Coin' || h === 'Bot' || h === 'Reason' ? 'left' : 'center', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', color: '#4B5563', position: 'sticky' as const, top: 0, background: 'var(--color-surface, rgba(17,24,39,0.98))' }}>{h}</th>
                                 ))}
                             </tr>
@@ -646,7 +646,6 @@ export function SignalSummaryTable({ coinStates, multi }: SignalSummaryProps) {
                                         <td style={{ padding: '8px 8px' }}><div style={{ fontWeight: 700, color: '#F0F4F8', fontSize: '13px' }}>{(c.symbol || '').replace('USDT', '')}</div></td>
                                         <td style={{ padding: '8px 8px', textAlign: 'center' }}><span style={{ background: regBg, color: regColor(regime), padding: '3px 10px', borderRadius: '10px', fontSize: '9px', fontWeight: 700 }}>{regime}</span></td>
                                         <td style={{ padding: '8px 8px', textAlign: 'center', fontWeight: 700, fontSize: '13px', color: conf > 80 ? '#22C55E' : conf > 60 ? '#0EA5E9' : conf > 40 ? '#F59E0B' : '#6B7280' }}>{conf.toFixed(1)}%</td>
-                                        <td style={{ padding: '8px 8px', textAlign: 'center' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: as.bg, color: as.color, padding: '3px 10px', borderRadius: '10px', fontSize: '9px', fontWeight: 700, whiteSpace: 'nowrap' as const }}><span style={{ fontSize: '10px' }}>{as.icon}</span>{action || '—'}</span></td>
                                         <td style={{ padding: '8px 8px', textAlign: 'center' }}><span style={{ background: dBg, color: dColor, padding: '4px 12px', borderRadius: '10px', fontSize: '10px', fontWeight: 700 }}>{dLabel}</span></td>
                                         <td style={{ padding: '8px 8px', fontSize: '11px', color: '#9CA3AF', maxWidth: '200px' }}>{getReason(c)}</td>
                                         <td style={{ padding: '8px 8px', textAlign: 'center', fontFamily: 'monospace', fontSize: '10px', color: '#6B7280' }}>{formatIST(lastCycle)}</td>
