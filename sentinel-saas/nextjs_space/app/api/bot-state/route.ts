@@ -42,14 +42,14 @@ export async function GET() {
                 include: { config: true },
                 orderBy: [{ isActive: 'desc' }, { updatedAt: 'desc' }],
             });
-            // Use live engine if ANY active bot is in live mode
+            // Use live engine for DASHBOARD display if ANY active bot is live
             const hasLiveBot = userBots.some((b: any) =>
                 b.isActive && (b.config?.mode || '').toLowerCase().includes('live')
             );
             if (hasLiveBot) engineMode = 'live';
         }
 
-        // Fetch only from the engine that matches the bot's mode — no cross-engine calls
+        // Fetch engine data for DASHBOARD UI (coin states, engine status, etc.)
         const engineData = await fetchEngineData(engineMode);
 
         const multi = engineData?.multi || { coin_states: {}, last_analysis_time: null, deployed_count: 0 };
@@ -64,15 +64,24 @@ export async function GET() {
         let trades: any[] = [];
 
         if (session && userId) {
-            // MULTI-BOT FIX: sync engine trades to ALL active bots (each gets its own copy)
-            if (engineTradesRaw.length > 0) {
-                for (const ub of userBots) {
-                    if (!ub.startedAt) continue; // skip bots never started
-                    try {
-                        await syncEngineTrades(engineTradesRaw, ub.id, ub.startedAt);
-                    } catch (err) {
-                        console.error(`[bot-state] Trade sync failed for bot ${ub.id}:`, err);
+            // ISOLATION FIX: sync each bot from its OWN engine (not one engine for all)
+            // This prevents paper bots from getting live trades and vice versa.
+            const engineTradeCache: Record<string, any[]> = {};
+            for (const ub of userBots) {
+                if (!ub.startedAt) continue;
+                const botMode: EngineMode = ((ub.config as any)?.mode || 'paper').toLowerCase().includes('live') ? 'live' : 'paper';
+                try {
+                    // Cache engine trades per mode to avoid duplicate fetches
+                    if (!engineTradeCache[botMode]) {
+                        const data = await fetchEngineData(botMode);
+                        engineTradeCache[botMode] = data?.tradebook?.trades || [];
                     }
+                    const botTrades = engineTradeCache[botMode];
+                    if (botTrades.length > 0) {
+                        await syncEngineTrades(botTrades, ub.id, ub.startedAt);
+                    }
+                } catch (err) {
+                    console.error(`[bot-state] Trade sync failed for bot ${ub.id}:`, err);
                 }
             }
 

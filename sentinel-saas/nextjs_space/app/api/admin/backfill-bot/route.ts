@@ -12,27 +12,31 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import prisma from '@/lib/prisma';
-import { getEngineUrl } from '@/lib/engine-url';
+import { getEngineUrl, getAllEngineUrls } from '@/lib/engine-url';
 
 export const dynamic = 'force-dynamic';
 
-const ENGINE_API_URL = getEngineUrl('live');
-
-async function fetchEngineTrades(): Promise<any[]> {
-    if (!ENGINE_API_URL) return [];
-    try {
-        const res = await fetch(`${ENGINE_API_URL}/api/all`, {
-            cache: 'no-store',
-            signal: AbortSignal.timeout(15000),
-        });
-        if (res.ok) {
-            const data = await res.json();
-            return data?.tradebook?.trades || [];
+// ISOLATION FIX: fetch from BOTH engines, not just live
+async function fetchAllEngineTrades(): Promise<any[]> {
+    const urls = getAllEngineUrls();
+    const allTrades: any[] = [];
+    for (const [mode, url] of Object.entries(urls)) {
+        if (!url) continue;
+        try {
+            const res = await fetch(`${url}/api/all`, {
+                cache: 'no-store',
+                signal: AbortSignal.timeout(15000),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                const trades = data?.tradebook?.trades || [];
+                allTrades.push(...trades);
+            }
+        } catch (err) {
+            console.error(`[backfill-bot] Engine (${mode}) fetch failed:`, err);
         }
-    } catch (err) {
-        console.error('[backfill-bot] Engine fetch failed:', err);
     }
-    return [];
+    return allTrades;
 }
 
 async function requireAdmin() {
@@ -47,10 +51,10 @@ export async function POST() {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        const engineTrades = await fetchEngineTrades();
+        const engineTrades = await fetchAllEngineTrades();
         if (engineTrades.length === 0) {
             return NextResponse.json({
-                message: 'No engine trades found — is ENGINE_API_URL set and is the engine running?',
+                message: 'No engine trades found — are ENGINE_API_URL / ENGINE_API_URL_PAPER set and engines running?',
                 backfilled: 0,
                 skipped: 0,
                 errors: 0,

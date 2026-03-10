@@ -68,28 +68,27 @@ export default async function TradesPage() {
 
   const userId = (session.user as any)?.id;
 
-  // MULTI-BOT FIX: fetch ALL user bots for broadcast sync
+  // MULTI-BOT + ISOLATION FIX: sync each bot from its OWN engine
   const userBots = await prisma.bot.findMany({
     where: { userId },
     include: { config: true },
     orderBy: { updatedAt: 'desc' },
   });
-  const hasLiveBot = userBots.some((b: any) =>
-    b.isActive && ((b.config as any)?.mode || '').toLowerCase().includes('live')
-  );
-  const engineMode: EngineMode = hasLiveBot ? 'live' : 'paper';
 
-  const engineTrades = await fetchEngineTradesAll(engineMode);
-
-  // Sync to ALL user bots (each gets its own copy via broadcast model)
-  if (engineTrades.length > 0) {
-    for (const ub of userBots) {
-      if (!ub.startedAt) continue;
-      try {
-        await syncEngineTrades(engineTrades, ub.id, ub.startedAt);
-      } catch (err) {
-        console.error(`[trades-page] Sync failed for bot ${ub.id}:`, err);
+  // Sync each bot from its own engine (paper or live)
+  const engineTradeCache: Record<string, any[]> = {};
+  for (const ub of userBots) {
+    if (!ub.startedAt) continue;
+    const botMode: EngineMode = ((ub.config as any)?.mode || 'paper').toLowerCase().includes('live') ? 'live' : 'paper';
+    try {
+      if (!engineTradeCache[botMode]) {
+        engineTradeCache[botMode] = await fetchEngineTradesAll(botMode);
       }
+      if (engineTradeCache[botMode].length > 0) {
+        await syncEngineTrades(engineTradeCache[botMode], ub.id, ub.startedAt);
+      }
+    } catch (err) {
+      console.error(`[trades-page] Sync failed for bot ${ub.id} (${botMode}):`, err);
     }
   }
 

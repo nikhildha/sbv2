@@ -26,68 +26,75 @@ export async function POST(request: Request) {
 
         const userId = (session.user as any)?.id;
 
-        // Determine engine mode from user's bot config
         // MULTI-BOT FIX: fetch all bots
-        let engineMode: EngineMode = 'paper';
         const userBots = await prisma.bot.findMany({
             where: { userId },
             orderBy: [{ isActive: 'desc' }, { updatedAt: 'desc' }],
             include: { config: true },
         });
-        // Use live engine if ANY active bot is live
+
+        // Check if any active bot is live (for exchange sync)
         const hasLiveBot = userBots.some((b: any) =>
             b.isActive && ((b.config as any)?.mode || '').toLowerCase().includes('live')
         );
-        if (hasLiveBot) engineMode = 'live';
 
-        const engineUrl = getEngineUrl(engineMode);
-        if (!engineUrl) {
-            return NextResponse.json({ error: 'Engine not configured' }, { status: 503 });
-        }
-
-        // Step 1: Call engine sync-exchange
+        // Step 1: Call engine sync-exchange (live only)
         let syncResult: any = { message: 'Paper mode — no exchange sync needed' };
-        if (engineMode === 'live') {
-            try {
-                const syncRes = await fetch(`${engineUrl}/api/sync-exchange`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    signal: AbortSignal.timeout(20000),
-                });
-                syncResult = await syncRes.json();
-                console.log('[trades/sync] Engine sync result:', JSON.stringify(syncResult));
-            } catch (err) {
-                console.error('[trades/sync] Engine sync failed:', err);
-                return NextResponse.json({ error: 'Engine sync-exchange call failed' }, { status: 502 });
-            }
-        }
-
-        // Step 2: Fetch updated tradebook from engine and sync to ALL user bots
-        let tradesSynced = 0;
-        try {
-            const allRes = await fetch(`${engineUrl}/api/all`, {
-                cache: 'no-store',
-                signal: AbortSignal.timeout(8000),
-            });
-            if (allRes.ok) {
-                const engineData = await allRes.json();
-                const engineTrades = engineData?.tradebook?.trades || [];
-
-                if (engineTrades.length > 0) {
-                    for (const ub of userBots) {
-                        if (!ub.startedAt) continue;
-                        const count = await syncEngineTrades(engineTrades, ub.id, ub.startedAt);
-                        tradesSynced += count;
-                    }
+        if (hasLiveBot) {
+            const liveEngineUrl = getEngineUrl('live');
+            if (liveEngineUrl) {
+                try {
+                    const syncRes = await fetch(`${liveEngineUrl}/api/sync-exchange`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        signal: AbortSignal.timeout(20000),
+                    });
+                    syncResult = await syncRes.json();
+                    console.log('[trades/sync] Engine sync result:', JSON.stringify(syncResult));
+                } catch (err) {
+                    console.error('[trades/sync] Engine sync failed:', err);
+                    return NextResponse.json({ error: 'Engine sync-exchange call failed' }, { status: 502 });
                 }
             }
-        } catch (err) {
-            console.error('[trades/sync] Tradebook re-sync failed:', err);
+        }
+
+        // Step 2: ISOLATION FIX — sync each bot from its OWN engine
+        // Paper bots get paper trades, live bots get live trades
+        let tradesSynced = 0;
+        const engineTradeCache: Record<string, any[]> = {};
+        for (const ub of userBots) {
+            if (!ub.startedAt) continue;
+            const botMode: EngineMode = ((ub.config as any)?.mode || 'paper').toLowerCase().includes('live') ? 'live' : 'paper';
+            try {
+                if (!engineTradeCache[botMode]) {
+                    const url = getEngineUrl(botMode);
+                    if (url) {
+                        const allRes = await fetch(`${url}/api/all`, {
+                            cache: 'no-store',
+                            signal: AbortSignal.timeout(8000),
+                        });
+                        if (allRes.ok) {
+                            const engineData = await allRes.json();
+                            engineTradeCache[botMode] = engineData?.tradebook?.trades || [];
+                        } else {
+                            engineTradeCache[botMode] = [];
+                        }
+                    } else {
+                        engineTradeCache[botMode] = [];
+                    }
+                }
+                if (engineTradeCache[botMode].length > 0) {
+                    const count = await syncEngineTrades(engineTradeCache[botMode], ub.id, ub.startedAt);
+                    tradesSynced += count;
+                }
+            } catch (err) {
+                console.error(`[trades/sync] Sync failed for bot ${ub.id} (${botMode}):`, err);
+            }
         }
 
         return NextResponse.json({
             success: true,
-            engineMode,
+            engineModes: Object.keys(engineTradeCache),
             syncResult,
             tradesSynced,
         });

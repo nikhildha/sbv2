@@ -7,7 +7,7 @@ import { getEngineUrl, type EngineMode } from '@/lib/engine-url';
 
 export const dynamic = 'force-dynamic';
 
-async function fetchEngineTrades(mode: EngineMode = 'live'): Promise<any[]> {
+async function fetchEngineTrades(mode: EngineMode = 'paper'): Promise<any[]> {
     const url = getEngineUrl(mode);
     if (!url) return [];
     try {
@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
         const statusFilter = searchParams.get('status') || undefined;
         const coinFilter = searchParams.get('coin');
         const botIdFilter = searchParams.get('botId') || undefined;
+        const modeFilter = searchParams.get('mode') || undefined;  // 'paper' or 'live'
         const page = parseInt(searchParams.get('page') || '1');
         const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100);
 
@@ -52,28 +53,26 @@ export async function GET(request: NextRequest) {
             orderBy: { updatedAt: 'desc' },
         });
 
-        // Determine correct engine based on bot mode
-        // Use live engine if ANY bot is in live mode
-        const hasLiveBot = userBots.some((b: any) =>
-            b.isActive && (b.config?.mode || '').toLowerCase().includes('live')
-        );
-        const engineMode: EngineMode = hasLiveBot ? 'live' : 'paper';
-
-        try {
-            const engineTrades = await fetchEngineTrades(engineMode);
-            if (engineTrades.length > 0) {
-                // Sync to ALL bots that have been started
-                for (const ub of userBots) {
-                    if (!ub.startedAt) continue;
-                    await syncEngineTrades(engineTrades, ub.id, ub.startedAt);
+        // ISOLATION FIX: sync each bot from its OWN engine
+        // Paper bots get paper trades, live bots get live trades — no cross-contamination
+        const engineTradeCache: Record<string, any[]> = {};
+        for (const ub of userBots) {
+            if (!ub.startedAt) continue;
+            const botMode: EngineMode = ((ub.config as any)?.mode || 'paper').toLowerCase().includes('live') ? 'live' : 'paper';
+            try {
+                if (!engineTradeCache[botMode]) {
+                    engineTradeCache[botMode] = await fetchEngineTrades(botMode);
                 }
+                if (engineTradeCache[botMode].length > 0) {
+                    await syncEngineTrades(engineTradeCache[botMode], ub.id, ub.startedAt);
+                }
+            } catch (err) {
+                console.error(`[trades] Sync failed for bot ${ub.id} (${botMode}):`, err);
             }
-        } catch (err) {
-            console.error('[trades] Sync failed:', err);
         }
 
-        // Read from Prisma — already user-isolated, optionally filtered by botId
-        let trades = await getUserTrades(userId, statusFilter, botIdFilter);
+        // Read from Prisma — user-isolated, optionally filtered by botId and mode
+        let trades = await getUserTrades(userId, statusFilter, botIdFilter, modeFilter);
 
         // Apply coin filter
         if (coinFilter) {

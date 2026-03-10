@@ -155,12 +155,13 @@ export async function syncEngineTrades(
 /**
  * Fetch user's trades from Prisma, scoped to their bots.
  */
-export async function getUserTrades(userId: string, statusFilter?: string, botId?: string) {
+export async function getUserTrades(userId: string, statusFilter?: string, botId?: string, modeFilter?: string) {
     const trades = await prisma.trade.findMany({
         where: {
             bot: { userId },
             ...(botId ? { botId } : {}),
             ...(statusFilter ? { status: statusFilter.toLowerCase() } : {}),
+            ...(modeFilter ? { mode: modeFilter.toLowerCase() } : {}),
         },
         orderBy: { entryTime: 'desc' },
         include: {
