@@ -116,29 +116,20 @@ class AthenaEngine:
         self._decision_log = []  # In-memory log (last 50)
 
     def _ensure_initialized(self):
-        """Lazy-init the Gemini client (avoids import errors if not installed)."""
+        """Lazy-init the Gemini client (new google.genai SDK)."""
         if self._initialized:
             return True
         try:
-            import google.generativeai as genai
+            from google import genai
             if not config.LLM_API_KEY:
                 logger.warning("🏛️ Athena disabled — no GEMINI_API_KEY configured")
                 return False
-            genai.configure(api_key=config.LLM_API_KEY)
-            self._model = genai.GenerativeModel(
-                model_name=config.LLM_MODEL,
-                system_instruction=ATHENA_SYSTEM_PROMPT,
-                generation_config={
-                    "temperature": 0.3,      # Low temp for consistent decisions
-                    "max_output_tokens": 300,
-                    "response_mime_type": "application/json",
-                },
-            )
+            self._client = genai.Client(api_key=config.LLM_API_KEY)
             self._initialized = True
-            logger.info("🏛️ Athena initialized — model: %s", config.LLM_MODEL)
+            logger.info("🏛️ Athena initialized — model: %s (google.genai SDK)", config.LLM_MODEL)
             return True
         except ImportError:
-            logger.warning("🏛️ Athena disabled — google-generativeai not installed")
+            logger.warning("🏛️ Athena disabled — google-genai not installed")
             return False
         except Exception as e:
             logger.warning("🏛️ Athena init failed: %s", e)
@@ -190,22 +181,58 @@ class AthenaEngine:
 
     def _call_gemini(self, symbol: str, ctx: dict) -> AthenaDecision:
         """Make the actual Gemini API call and parse the response."""
+        from google.genai import types
+
         # Build the prompt with signal context
         prompt = self._build_prompt(ctx)
 
         start = time.time()
-        response = self._model.generate_content(prompt)
+        response = self._client.models.generate_content(
+            model=config.LLM_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=ATHENA_SYSTEM_PROMPT,
+                temperature=0.3,
+                max_output_tokens=1024,
+            ),
+        )
         latency_ms = int((time.time() - start) * 1000)
 
         self._cycle_call_count += 1
 
-        # Parse JSON response
+        # Extract text from response (new SDK response object)
+        raw = ""
         try:
-            text = response.text.strip()
-            data = json.loads(text)
+            # Primary: response.text (new SDK property)
+            if hasattr(response, 'text') and response.text:
+                raw = response.text.strip()
+            # Fallback: candidates → parts → text
+            elif hasattr(response, 'candidates') and response.candidates:
+                for candidate in response.candidates:
+                    if hasattr(candidate, 'content') and candidate.content:
+                        for part in candidate.content.parts:
+                            if hasattr(part, 'text') and part.text:
+                                raw = part.text.strip()
+                                break
+                    if raw:
+                        break
+
+            if not raw:
+                logger.warning("🏛️ Athena [%s] empty response (latency=%dms)", symbol, latency_ms)
+                return self._default_execute(symbol, reason="Empty API response")
+
+            # Strip markdown code fences if present
+            if raw.startswith("```"):
+                raw = raw.split("\n", 1)[-1]
+                raw = raw.rsplit("```", 1)[0].strip()
+
+            data = json.loads(raw)
         except (json.JSONDecodeError, ValueError) as e:
-            logger.warning("🏛️ Athena [%s] malformed response: %s", symbol, str(e)[:100])
+            logger.warning("🏛️ Athena [%s] malformed response: %s | raw=%s", symbol, str(e)[:80], repr(raw[:200] if raw else '<empty>'))
             return self._default_execute(symbol, reason=f"Parse error: {str(e)[:80]}")
+        except Exception as e:
+            logger.warning("🏛️ Athena [%s] response error: %s", symbol, str(e)[:100])
+            return self._default_execute(symbol, reason=f"Response error: {str(e)[:80]}")
 
         # Build decision
         action = data.get("action", "EXECUTE").upper()

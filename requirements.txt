@@ -10,7 +10,7 @@ requests>=2.31.0
 praw>=7.7.0
 pycryptodome>=3.20.0
 flask>=3.0.0
-google-generativeai>=0.8.0
+google-genai>=1.0.0
 
 # SaaS backend only (saas_engine/)
 # psycopg2-binary>=2.9.9
