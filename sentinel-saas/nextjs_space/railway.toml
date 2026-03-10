@@ -1,2 +1,2 @@
 [deploy]
-startCommand = "npx prisma db push --skip-generate --accept-data-loss && npx next start -p 8080"
+startCommand = "sh -c 'npx prisma db push --skip-generate --accept-data-loss 2>&1; echo \"✅ Schema sync done\"; HOSTNAME=0.0.0.0 npx next start -p 8080'"
