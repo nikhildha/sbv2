@@ -251,13 +251,13 @@ COMMANDS_FILE = os.path.join(DATA_DIR, "commands.json")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 # ─── Sentiment Engine ─────────────────────────────────────────────────────────
-SENTIMENT_ENABLED           = True
+SENTIMENT_ENABLED           = False    # DISABLED — reduces memory + processing (FinBERT loads 400MB model)
 SENTIMENT_CACHE_MINUTES     = 15       # Cache per-coin results for N minutes
 SENTIMENT_WINDOW_HOURS      = 4        # Look back N hours of articles
 SENTIMENT_MIN_ARTICLES      = 3        # Minimum articles to compute a score
 SENTIMENT_VETO_THRESHOLD    = -0.65    # Hard veto gate (fast path before conviction)
 SENTIMENT_STRONG_POS        = 0.45     # Threshold for "strongly positive" label
-SENTIMENT_USE_FINBERT       = True     # Use FinBERT in addition to VADER (requires transformers)
+SENTIMENT_USE_FINBERT       = False    # DISABLED — FinBERT loads ~400MB transformer model (OOM on Railway)
 SENTIMENT_VADER_WEIGHT      = 0.4      # VADER contribution when blending with FinBERT
 SENTIMENT_FINBERT_WEIGHT    = 0.6      # FinBERT contribution when blending with VADER
 SENTIMENT_DEDUPE_URL_LIMIT  = 5000     # Max tracked URLs before trimming seen-url set
@@ -297,7 +297,7 @@ TIER_RECLASSIFY_DAYS = 7                                    # Re-run calibration
 TIER_RECLASSIFY_STATE_FILE = os.path.join(DATA_DIR, "tier_reclassify_state.json")
 
 # ─── Order Flow Engine ────────────────────────────────────────────────────────
-ORDERFLOW_ENABLED          = True
+ORDERFLOW_ENABLED          = False     # DISABLED — reduces memory + API calls
 ORDERFLOW_CACHE_SECONDS    = 60        # Cache orderflow snapshot per coin (60s)
 ORDERFLOW_DEPTH_LEVELS     = 20        # Number of L2 order book levels to fetch
 ORDERFLOW_WALL_THRESHOLD   = 3.0       # A level is a "wall" if it is N× the avg level size
@@ -307,14 +307,14 @@ ORDERFLOW_LARGE_ORDER_USD  = 50_000    # USD threshold to flag a single order as
 
 # ─── Conviction Score Weights (must sum to 100) ───────────────────────────────
 # EXP 4 IC-guided weight optimization (300 trials) — Sharpe +0.2442 improvement
-CONVICTION_WEIGHT_HMM       = 61   # HMM regime confidence       (44 + 15 from sentiment + 2 from S/R)
+CONVICTION_WEIGHT_HMM       = 71   # HMM regime confidence       (61 + 10 reclaimed from orderflow)
 CONVICTION_WEIGHT_BTC_MACRO = 7    # BTC macro regime alignment
 CONVICTION_WEIGHT_FUNDING   = 11   # Funding rate (contrarian signal)
 CONVICTION_WEIGHT_SR_VWAP   = 0    # REMOVED — S/R + VWAP (was weak, noise)
 CONVICTION_WEIGHT_OI        = 11   # Open Interest change
 CONVICTION_WEIGHT_VOL       = 0    # REMOVED — Volatility quality (noise)
 CONVICTION_WEIGHT_SENTIMENT = 0    # REMOVED — Sentiment (unreliable)
-CONVICTION_WEIGHT_ORDERFLOW = 10   # Order book flow
+CONVICTION_WEIGHT_ORDERFLOW = 0    # DISABLED — Order flow engine off
 # Total: 61+7+11+0+11+0+0+10 = 100
 
 # ─── Conviction Score: Leverage Bands ────────────────────────────────────────
