@@ -784,8 +784,8 @@ def api_set_config():
 
 @app.route("/api/set-bot-id", methods=["POST"])
 def api_set_bot_id():
-    """Set the ENGINE_BOT_ID at runtime — called by dashboard when user starts a bot.
-    This stamps all subsequent trades with the correct bot_id for data isolation."""
+    """Add a bot to the active bots list — called by dashboard when user starts a bot.
+    All subsequent trades are stamped with bot_ids from this list (multi-bot support)."""
     data = request.get_json() or {}
     bot_id = data.get("bot_id", "")
     user_id = data.get("user_id", "")
@@ -794,6 +794,7 @@ def api_set_bot_id():
     if not bot_id:
         return jsonify({"error": "bot_id is required"}), 400
 
+    # Update legacy single bot_id for backward compat
     old_id = config.ENGINE_BOT_ID
     config.ENGINE_BOT_ID = bot_id
 
@@ -805,9 +806,19 @@ def api_set_bot_id():
     if user_id:
         config.ENGINE_USER_ID = user_id
 
+    # ── MULTI-BOT: Add to active bots list (dedup by bot_id) ──
+    config.ENGINE_ACTIVE_BOTS = [
+        b for b in config.ENGINE_ACTIVE_BOTS if b.get("bot_id") != bot_id
+    ]
+    config.ENGINE_ACTIVE_BOTS.append({
+        "bot_id": bot_id,
+        "user_id": user_id or config.ENGINE_USER_ID,
+        "brain_type": config.ENGINE_BRAIN_TYPE,
+    })
+
     logger.info(
-        "🔑 ENGINE_BOT_ID updated: %s → %s (user: %s, brain: %s → %s)",
-        old_id or "<empty>", bot_id, user_id or "<unchanged>",
+        "🔑 Bot added: %s → active_bots=%d (user: %s, brain: %s → %s)",
+        bot_id, len(config.ENGINE_ACTIVE_BOTS), user_id or "<unchanged>",
         old_brain, config.ENGINE_BRAIN_TYPE,
     )
 
@@ -817,6 +828,35 @@ def api_set_bot_id():
         "previous_bot_id": old_id,
         "user_id": user_id or config.ENGINE_USER_ID,
         "brain_type": config.ENGINE_BRAIN_TYPE,
+        "active_bots": len(config.ENGINE_ACTIVE_BOTS),
+    })
+
+
+@app.route("/api/remove-bot-id", methods=["POST"])
+def api_remove_bot_id():
+    """Remove a bot from the active bots list — called when user stops a bot."""
+    data = request.get_json() or {}
+    bot_id = data.get("bot_id", "")
+
+    if not bot_id:
+        return jsonify({"error": "bot_id is required"}), 400
+
+    before = len(config.ENGINE_ACTIVE_BOTS)
+    config.ENGINE_ACTIVE_BOTS = [
+        b for b in config.ENGINE_ACTIVE_BOTS if b.get("bot_id") != bot_id
+    ]
+    after = len(config.ENGINE_ACTIVE_BOTS)
+
+    # If removed bot was the current ENGINE_BOT_ID, switch to first remaining
+    if config.ENGINE_BOT_ID == bot_id:
+        config.ENGINE_BOT_ID = config.ENGINE_ACTIVE_BOTS[0]["bot_id"] if config.ENGINE_ACTIVE_BOTS else ""
+
+    logger.info("🔑 Bot removed: %s (%d → %d active)", bot_id, before, after)
+
+    return jsonify({
+        "success": True,
+        "removed": bot_id,
+        "active_bots": after,
     })
 
 

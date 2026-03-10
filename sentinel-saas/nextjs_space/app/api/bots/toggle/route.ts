@@ -78,6 +78,23 @@ export async function POST(request: Request) {
         console.error('[toggle] closeBotSession failed:', err);
       }
 
+      // ─── Remove bot from engine's active bots list ───────────────────
+      const stopBotMode = (bot.config?.mode ?? 'paper').toLowerCase();
+      const stopEngineUrl = getEngineUrl(stopBotMode.startsWith('live') ? 'live' : 'paper');
+      if (stopEngineUrl) {
+        try {
+          await fetch(`${stopEngineUrl}/api/remove-bot-id`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bot_id: botId }),
+            signal: AbortSignal.timeout(5000),
+          });
+          console.log(`[toggle] remove-bot-id: removed botId=${botId} from engine active list`);
+        } catch (e) {
+          console.warn('[toggle] remove-bot-id failed (continuing):', e);
+        }
+      }
+
       // ─── LIVE MODE STOP: close CoinDCX positions FIRST ────────────
       // C4 FIX: case-insensitive mode check for live exit (also handles 'live-coindcx')
       const botMode = (bot.config?.mode ?? 'paper').toLowerCase();

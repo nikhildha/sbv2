@@ -3,6 +3,7 @@ Project Regime-Master — Main Bot Loop (Multi-Coin)
 Scans top 50 coins by volume, runs HMM regime analysis on each,
 and deploys paper/live trades on all eligible symbols simultaneously.
 """
+import gc
 import json
 import os
 import time
@@ -92,7 +93,7 @@ class RegimeMasterBot:
         self._multi_tf_brains = {}   # symbol → MultiTFHMMBrain (3 TFs per coin)
         self._coin_states = {}       # symbol → latest state dict (for dashboard)
         self._live_prices = {}       # symbol → {ls, fr, ...} (fetched each cycle)
-        self._BRAIN_CACHE_MAX = 60   # LRU eviction cap for HMM brain caches
+        self._BRAIN_CACHE_MAX = 40   # LRU eviction cap (15 coins × 3 TFs = 45, tight to prevent OOM)
 
         # Adaptive Brain Switcher
         self._brain_switcher = BrainSwitcher()
@@ -153,6 +154,7 @@ class RegimeMasterBot:
             try:
                 self._heartbeat()
                 self._evict_brain_cache()  # Memory safeguard
+                gc.collect()  # Force GC after eviction to prevent OOM on Railway
                 time.sleep(config.LOOP_INTERVAL_SECONDS)
 
             except KeyboardInterrupt:
@@ -319,9 +321,11 @@ class RegimeMasterBot:
         """Full analysis cycle — runs every ANALYSIS_INTERVAL_SECONDS."""
         cycle_start = time.time()
         self._cycle_count += 1
-        # Snapshot bot_id once per tick — prevents race condition if set-bot-id
-        # is called mid-cycle while another user starts their bot.
-        _tick_bot_id = config.ENGINE_BOT_ID
+        # Snapshot ALL active bot IDs once per tick (multi-bot support)
+        # Each trade will be recorded for the first active bot, and synced
+        # to all bots via the SaaS bot-state trade sync layer.
+        _tick_active_bots = list(config.ENGINE_ACTIVE_BOTS)  # snapshot
+        _tick_bot_id = _tick_active_bots[0]["bot_id"] if _tick_active_bots else config.ENGINE_BOT_ID
 
         # ── 0. Weekly coin tier re-classification (background) ───
         self._maybe_reclassify_tiers()
@@ -569,6 +573,8 @@ class RegimeMasterBot:
                     pair=result.get("pair") if result else None,
                     position_id=result.get("position_id") if result else None,
                     bot_id=_tick_bot_id,
+                    # Multi-bot: also record all active bot IDs so SaaS can sync to all bots
+                    all_bot_ids=[b["bot_id"] for b in _tick_active_bots] if len(_tick_active_bots) > 1 else None,
                 )
 
                 self._active_positions[pos_key] = {
