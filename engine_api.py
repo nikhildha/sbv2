@@ -38,6 +38,80 @@ _engine_last_crash = None
 
 logger = logging.getLogger("EngineAPI")
 
+# ─── Persistent crash log (survives process restarts) ─────────────────
+CRASH_LOG_FILE = "engine_crashes.json"
+BOOT_COUNT_FILE = "engine_boot_count.json"
+
+def _load_crash_log():
+    """Load persistent crash history from disk."""
+    try:
+        if os.path.exists(CRASH_LOG_FILE):
+            with open(CRASH_LOG_FILE, "r") as f:
+                return json.loads(f.read())
+    except Exception:
+        pass
+    return {"boots": 0, "total_crashes": 0, "crashes": []}
+
+def _save_crash(error_msg, crash_type="thread_crash"):
+    """Append a crash entry to the persistent crash log."""
+    try:
+        log = _load_crash_log()
+        log["total_crashes"] = log.get("total_crashes", 0) + 1
+        entry = {
+            "time": datetime.now(timezone.utc).isoformat(),
+            "type": crash_type,
+            "error": str(error_msg)[:500],
+            "boot": log.get("boots", 0),
+            "memory_mb": _get_memory_mb(),
+        }
+        log["crashes"] = (log.get("crashes", []) + [entry])[-20:]  # keep last 20
+        with open(CRASH_LOG_FILE, "w") as f:
+            f.write(json.dumps(log, indent=2))
+    except Exception as e:
+        logger.warning("Could not save crash log: %s", e)
+
+def _increment_boot_count():
+    """Track how many times this process has started (Railway restarts)."""
+    try:
+        log = _load_crash_log()
+        log["boots"] = log.get("boots", 0) + 1
+        log["last_boot"] = datetime.now(timezone.utc).isoformat()
+        with open(CRASH_LOG_FILE, "w") as f:
+            f.write(json.dumps(log, indent=2))
+        return log["boots"]
+    except Exception:
+        return 0
+
+def _get_memory_mb():
+    """Get current process memory usage in MB."""
+    try:
+        import resource
+        # maxrss is in KB on Linux, bytes on macOS
+        rusage = resource.getrusage(resource.RUSAGE_SELF)
+        if os.uname().sysname == "Darwin":
+            return round(rusage.ru_maxrss / 1024 / 1024, 1)
+        return round(rusage.ru_maxrss / 1024, 1)
+    except Exception:
+        try:
+            # Fallback: read /proc/self/status on Linux
+            with open("/proc/self/status") as f:
+                for line in f:
+                    if line.startswith("VmRSS:"):
+                        return round(int(line.split()[1]) / 1024, 1)
+        except Exception:
+            pass
+    return 0
+
+# Track process boots on startup
+_boot_number = _increment_boot_count()
+_boot_crash_log = _load_crash_log()
+if _boot_number > 1 and _boot_crash_log.get("crashes"):
+    last = _boot_crash_log["crashes"][-1]
+    logger.warning("⚠️ Process boot #%d — previous crash: %s at %s (mem: %sMB)",
+                   _boot_number, last.get("error", "?")[:100], last.get("time", "?"), last.get("memory_mb", "?"))
+else:
+    logger.info("✅ Process boot #%d — clean start", _boot_number)
+
 # ─── In-memory log buffer (circular, last 500 lines) ─────────────────
 from collections import deque
 _log_buffer = deque(maxlen=500)
@@ -177,6 +251,10 @@ def api_health():
     engine_state = _read_json("engine_state.json", {})
     multi_state = _read_json("multi_bot_state.json", {})
 
+    # Memory tracking
+    mem_mb = _get_memory_mb()
+    crash_log = _load_crash_log()
+
     return jsonify({
         "status": "running" if is_alive else "stopped",
         "uptime_seconds": uptime_seconds,
@@ -192,9 +270,16 @@ def api_health():
         "paper_trade": config.PAPER_TRADE,
         "exchange_live": config.EXCHANGE_LIVE or "",
         "mode": "paper" if config.PAPER_TRADE else f"live:{config.EXCHANGE_LIVE}",
-        # Crash tracking
+        # Crash tracking (in-memory for this boot)
         "crash_count": _engine_crash_count,
         "last_crash": _engine_last_crash,
+        # Persistent tracking (survives process restarts)
+        "boot_number": _boot_number,
+        "total_crashes_all_boots": crash_log.get("total_crashes", 0),
+        "last_boot_time": crash_log.get("last_boot"),
+        "recent_crashes": crash_log.get("crashes", [])[-5:],
+        # Memory
+        "memory_mb": mem_mb,
     })
 
 
@@ -735,6 +820,7 @@ def _run_engine():
             _engine_crash_count += 1
             _engine_last_crash = datetime.now(timezone.utc).isoformat()
             logger.critical("💥 Engine thread crashed (attempt %d/%d): %s", retry + 1, MAX_RETRIES, e, exc_info=True)
+            _save_crash(str(e), crash_type="thread_crash")
 
             # If engine ran for > 5 minutes, reset retry counter (it was healthy)
             run_duration = time.time() - loop_start
@@ -751,6 +837,7 @@ def _run_engine():
 
     if retry >= MAX_RETRIES:
         logger.critical("❌ Engine exhausted all %d restart attempts — giving up", MAX_RETRIES)
+        _save_crash("Exhausted all restart attempts", crash_type="permanent_failure")
 
 
 def start_engine():
