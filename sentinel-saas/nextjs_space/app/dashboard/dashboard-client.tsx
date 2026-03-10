@@ -6,6 +6,7 @@ import { StatsCard } from '@/components/stats-card';
 import { BotCard } from '@/components/bot-card';
 import { RegimeCard, PnlCard, ActivePositionsCard, SignalSummaryTable } from '@/components/dashboard/command-center';
 import { EngineConsole } from '@/components/dashboard/engine-console';
+import { AthenaPanel } from '@/components/dashboard/athena-panel';
 import { Bot, TrendingUp, Activity, DollarSign, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -42,6 +43,14 @@ interface BotState {
     timestamp: string | null;
   };
   tradebook: { trades: any[]; summary: any };
+  athena?: {
+    enabled: boolean;
+    model?: string;
+    initialized?: boolean;
+    cycle_calls?: number;
+    cache_size?: number;
+    recent_decisions?: any[];
+  };
 }
 
 export function DashboardClient({ user, stats, bots, recentTrades }: DashboardClientProps) {
@@ -793,6 +802,18 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
           >
             <SignalSummaryTable coinStates={multi?.coin_states || {}} multi={multi} />
           </motion.div>
+
+          {/* ═══ Row 6: Athena Intelligence Panel ═══ */}
+          {botState?.athena?.enabled && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="mt-6"
+            >
+              <AthenaPanel athena={botState.athena} coinStates={multi?.coin_states} />
+            </motion.div>
+          )}
         </div>
       </main>
 

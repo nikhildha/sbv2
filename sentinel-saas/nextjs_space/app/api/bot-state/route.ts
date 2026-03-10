@@ -165,6 +165,7 @@ export async function GET() {
                 timestamp: lastAnalysis,
             },
             scanner: { coins: Object.keys(coinStates) },
+            athena: engineState?.athena || { enabled: false, recent_decisions: [] },
             tradebook: {
                 trades,
                 // F2 FIX: compute per-user summary from user's trades, not engine-wide
