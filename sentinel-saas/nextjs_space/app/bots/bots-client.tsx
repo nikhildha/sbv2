@@ -13,18 +13,11 @@ import { useSession } from 'next-auth/react';
 /* ═══ Bot Model Definitions ═══ */
 const BOT_MODELS = [
   {
-    id: 'standard',
-    name: 'Standard',
+    id: 'adaptive',
+    name: 'Synaptic Adaptive',
     color: '#22C55E',
-    description: 'Balanced risk-reward, full HMM signals',
-    badge: '⚡',
-  },
-  {
-    id: 'conservative',
-    name: 'Conservative',
-    color: '#0EA5E9',
-    description: 'Lower risk, tighter stops, moderate leverage',
-    badge: '🛡️',
+    description: 'Auto-adjusts between Conservative, Balanced & Aggressive based on market conditions',
+    badge: '🧠',
   },
 ];
 
@@ -170,7 +163,7 @@ export function BotsClient({ bots: initialBots }: BotsClientProps) {
   const [loading, setLoading] = useState(false);
 
   // Deploy modal state
-  const [deployModel, setDeployModel] = useState('standard');
+  const [deployModel, setDeployModel] = useState('adaptive');
   const [deployExchange, setDeployExchange] = useState('binance');
   const [deployMode, setDeployMode] = useState('paper');
   const [deployMaxTrades, setDeployMaxTrades] = useState(25);

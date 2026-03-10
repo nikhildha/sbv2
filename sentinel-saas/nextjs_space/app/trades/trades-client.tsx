@@ -12,7 +12,7 @@ interface Trade {
   confidence: number; leverage: number; capital: number;
   entryPrice: number; currentPrice?: number | null;
   exitPrice?: number | null; stopLoss: number; takeProfit: number;
-  slType: string; targetType?: string | null; status: string; mode?: string;
+  status: string; mode?: string;
   activePnl: number; activePnlPercent: number;
   totalPnl: number; totalPnlPercent: number;
   exitPercent?: number | null; exitReason?: string | null;
@@ -47,44 +47,6 @@ function mapTrade(t: any): Trade {
   const sym = t.symbol || t.coin || '';
   const uniqueId = `${baseId}-${sym}`;
 
-  // Determine SL type from engine fields, with PnL-based fallback
-  const trailingActive = t.trailing_active || t.trailingActive || false;
-  const stepLevel = t.stepped_lock_level ?? t.steppedLockLevel ?? -1;
-  const SL_STEPS = [
-    { trigger: 5, label: 'Breakeven' },
-    { trigger: 10, label: 'Lock +5%' },
-    { trigger: 15, label: 'Lock +10%' },
-    { trigger: 20, label: 'Lock +15%' },
-    { trigger: 25, label: 'Lock +20%' },
-    { trigger: 30, label: 'Lock +25%' },
-    { trigger: 35, label: 'Lock +30%' },
-    { trigger: 40, label: 'Lock +35%' },
-    { trigger: 45, label: 'Lock +40%' },
-    { trigger: 50, label: 'Lock +45%' },
-  ];
-  let slType: string;
-  if (trailingActive && stepLevel >= 0 && stepLevel < SL_STEPS.length) {
-    slType = SL_STEPS[stepLevel].label;
-  } else {
-    // Fallback: derive from PnL% if engine field is missing
-    const pnlPct = Math.abs(t.unrealized_pnl_pct || t.activePnlPercent || 0);
-    let derived = 'Fixed SL';
-    for (let i = SL_STEPS.length - 1; i >= 0; i--) {
-      if (pnlPct >= SL_STEPS[i].trigger) {
-        derived = SL_STEPS[i].label;
-        break;
-      }
-    }
-    slType = derived;
-  }
-
-  // Determine current target level from engine data
-  const t1Hit = t.t1_hit || t.t1Hit || false;
-  const t2Hit = t.t2_hit || t.t2Hit || false;
-  let targetType = t.target_type || t.tp_type || t.targetType || 'T1';
-  if (t2Hit) targetType = 'T3';
-  else if (t1Hit) targetType = 'T2';
-
   return {
     id: uniqueId,
     coin: sym.replace('USDT', ''),
@@ -97,16 +59,8 @@ function mapTrade(t: any): Trade {
     entryPrice: t.entry_price || t.entryPrice || 0,
     currentPrice: t.current_price || t.currentPrice || null,
     exitPrice: t.exit_price || t.exitPrice || null,
-    stopLoss: (() => {
-      const baseSl = t.stop_loss || t.stopLoss || 0;
-      const trailSl = t.trailing_sl || t.trailingSl;
-      // Only use trailing SL when trailing is actually active and value is valid
-      if ((t.trailing_active || t.trailingActive) && trailSl && trailSl > 0) return trailSl;
-      return baseSl;
-    })(),
+    stopLoss: t.stop_loss || t.stopLoss || 0,
     takeProfit: t.take_profit || t.takeProfit || 0,
-    slType,
-    targetType,
     status,
     mode: t.mode || 'paper',
     activePnl: t.unrealized_pnl || t.active_pnl || t.activePnl || 0,
@@ -358,11 +312,10 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
   const exportCSV = () => {
     // Export all trades for the selected mode (ignoring status/position/regime filters)
     const exportTrades = modeFiltered;
-    const headers = ['Bot', 'Type', 'Coin', 'Side', 'Leverage', 'Capital', 'Entry Price', 'Exit Price', 'SL', 'TP', 'SL Type', 'Target Type', 'P&L $', 'P&L %', 'Fee', 'Status', 'Entry Time', 'Exit Time'];
+    const headers = ['Bot', 'Type', 'Coin', 'Side', 'Leverage', 'Capital', 'Entry Price', 'Exit Price', 'SL', 'TP', 'P&L $', 'P&L %', 'Fee', 'Status', 'Entry Time', 'Exit Time'];
     const rows = exportTrades.map(t => [
       t.botName || 'Unknown Bot', t.mode || 'paper', t.coin, t.position, t.leverage, t.capital,
       t.entryPrice, t.exitPrice || t.currentPrice || '', t.stopLoss, t.takeProfit,
-      t.slType, t.targetType,
       t.status === 'active' ? t.activePnl : t.totalPnl,
       t.status === 'active' ? t.activePnlPercent : t.totalPnlPercent,
       t.fee || '',
@@ -620,7 +573,7 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
                   <table style={{ width: '100%', minWidth: '1300px', borderCollapse: 'collapse', fontSize: '17px' }}>
                     <thead>
                       <tr style={{ borderBottom: '2px solid rgba(255,255,255,0.08)' }}>
-                        {['Bot', 'Coin', 'Position', 'Leverage', 'Capital', 'Entry', 'LTP', 'Stop Loss', 'Target Price', 'SL Type', 'PnL', 'Fee', 'Net PnL', 'Exit', 'Action'].map(h => (
+                        {['Bot', 'Coin', 'Position', 'Leverage', 'Capital', 'Entry', 'LTP', 'Stop Loss', 'Target Price', 'PnL', 'Fee', 'Net PnL', 'Exit', 'Action'].map(h => (
                           <th key={h} style={{
                             padding: '10px 10px', textAlign: h === 'Bot' || h === 'Coin' ? 'left' : 'center',
                             fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.8px',
@@ -696,23 +649,6 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
                             </td>
                             <td style={{ padding: '10px', textAlign: 'center', color: '#EF4444', fontFamily: 'monospace', fontSize: '12px' }}>{fmtPrice(t.stopLoss)}</td>
                             <td style={{ padding: '10px', textAlign: 'center', color: '#22C55E', fontFamily: 'monospace', fontSize: '12px' }}>{fmtPrice(t.takeProfit)}</td>
-                            <td style={{ padding: '10px', textAlign: 'center' }}>
-                              <span style={{
-                                padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 600,
-                                background: t.slType === 'Fixed SL'
-                                  ? 'rgba(107,114,128,0.15)'
-                                  : t.slType === 'Breakeven'
-                                    ? 'rgba(245,158,11,0.15)'
-                                    : 'rgba(34,197,94,0.15)',
-                                color: t.slType === 'Fixed SL'
-                                  ? '#9CA3AF'
-                                  : t.slType === 'Breakeven'
-                                    ? '#F59E0B'
-                                    : '#22C55E',
-                              }}>
-                                {t.slType}
-                              </span>
-                            </td>
 
                             <td style={{ padding: '10px', textAlign: 'center', fontWeight: 700, color: pnlColor(pnl) }}>
                               {fmt$(pnl)} <span style={{ fontSize: '10px', fontWeight: 600, color: pnlColor(pnlPct) }}>({fmtPct(pnlPct)})</span>
