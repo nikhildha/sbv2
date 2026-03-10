@@ -511,6 +511,9 @@ export function SignalSummaryTable({ coinStates, multi }: SignalSummaryProps) {
     const getReason = (c: any) => {
         const a = c.action || '', r = c.regime || '';
         const pct = c.confidence != null ? (c.confidence <= 1 ? c.confidence * 100 : c.confidence) : 0;
+        // If coin was eligible but filtered in deploy phase, show the deploy filter reason
+        const ds = c.deploy_status || '';
+        if (ds.startsWith('FILTERED')) return ds.replace('FILTERED: ', '').charAt(0).toUpperCase() + ds.replace('FILTERED: ', '').slice(1);
         if (a.includes('ELIGIBLE_BUY')) return `Bullish @ ${pct.toFixed(0)}% — LONG ready`;
         if (a.includes('ELIGIBLE_SELL')) return `Bearish @ ${pct.toFixed(0)}% — SHORT ready`;
         if (a.includes('ELIGIBLE')) return `${r} @ ${pct.toFixed(0)}% — trade ready`;
@@ -632,9 +635,9 @@ export function SignalSummaryTable({ coinStates, multi }: SignalSummaryProps) {
                                 const deployStatus = c.deploy_status || '';
                                 let dLabel = 'PENDING', dColor = '#6B7280', dBg = 'rgba(107,114,128,0.08)';
                                 if (isDeployed || deployStatus === 'ACTIVE') { dLabel = 'DEPLOYED'; dColor = '#06B6D4'; dBg = 'rgba(6,182,212,0.12)'; }
-                                else if (deployStatus.startsWith('FILTERED')) { dLabel = deployStatus.replace('FILTERED: ', '').toUpperCase(); dColor = '#F59E0B'; dBg = 'rgba(245,158,11,0.08)'; }
+                                else if (deployStatus.startsWith('FILTERED')) { dLabel = 'NOT ELIGIBLE'; dColor = '#F59E0B'; dBg = 'rgba(245,158,11,0.08)'; }
                                 else if (isE) { dLabel = 'READY'; dColor = '#22C55E'; dBg = 'rgba(34,197,94,0.12)'; }
-                                else if (action.includes('SKIP') || action.includes('VETO') || action.includes('CONFLICT') || action.includes('CRASH')) { dLabel = 'FILTERED'; dColor = '#EF4444'; dBg = 'rgba(239,68,68,0.08)'; }
+                                else if (action.includes('SKIP') || action.includes('VETO') || action.includes('CONFLICT') || action.includes('CRASH')) { dLabel = 'NOT ELIGIBLE'; dColor = '#EF4444'; dBg = 'rgba(239,68,68,0.08)'; }
 
                                 return (
                                     <tr key={c.symbol} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: isE ? 'rgba(34,197,94,0.04)' : 'transparent' }}>
