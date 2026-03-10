@@ -249,14 +249,22 @@ export default function PricingPage() {
                   <p style={{ fontSize: '13px', color: '#9CA3AF', margin: '4px 0 12px' }}>{plan.tagline}</p>
 
                   <div>
-                    <span style={{ fontSize: '36px', fontWeight: 800, color: '#F9FAFB' }}>{plan.price}</span>
-                    {plan.priceUSD && (
-                      <span style={{ fontSize: '14px', color: '#6B7280', marginLeft: '6px' }}>({plan.priceUSD})</span>
-                    )}
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '36px', fontWeight: 800, color: '#F9FAFB' }}>{plan.price}</span>
+                      {plan.priceUSD && (
+                        <span style={{ fontSize: '14px', color: '#6B7280' }}>({plan.priceUSD})</span>
+                      )}
+                    </div>
                     <div style={{ fontSize: '13px', color: '#6B7280' }}>{plan.period}</div>
                     {plan.annualPrice && (
-                      <div style={{ fontSize: '11px', color: '#10B981', fontWeight: 600, marginTop: '2px' }}>
-                        {plan.annualPrice}
+                      <div style={{
+                        marginTop: '6px', padding: '6px 12px', borderRadius: '8px',
+                        background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.15)',
+                        display: 'inline-block',
+                      }}>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#10B981' }}>
+                          {plan.annualPrice}
+                        </div>
                       </div>
                     )}
                   </div>
