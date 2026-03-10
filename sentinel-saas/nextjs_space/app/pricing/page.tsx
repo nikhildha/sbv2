@@ -33,12 +33,32 @@ interface Plan {
 export default function PricingPage() {
   const [mounted, setMounted] = useState(false);
   const [annual, setAnnual] = useState(false);
+  const [currency, setCurrency] = useState<'INR' | 'USD'>('INR');
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   if (!mounted) return null;
+
+  const sym = currency === 'INR' ? '₹' : '$';
+
+  // Centralized pricing data
+  const pricing = {
+    starter: { monthly: { INR: '3,999', USD: '49' }, annual: { INR: '3,330', USD: '41' }, yearlySave: { INR: '₹8,000', USD: '$96' }, yearlyTotal: { INR: '₹39,960/yr', USD: '$492/yr' } },
+    pro: { monthly: { INR: '11,999', USD: '149' }, annual: { INR: '9,999', USD: '124' }, yearlySave: { INR: '₹24,000', USD: '$300' }, yearlyTotal: { INR: '₹1,19,988/yr', USD: '$1,488/yr' } },
+    institutional: { monthly: { INR: '39,999', USD: '499' }, annual: { INR: '33,330', USD: '416' }, yearlySave: { INR: '₹80,000', USD: '$996' }, yearlyTotal: { INR: '₹3,99,960/yr', USD: '$4,992/yr' } },
+  };
+
+  const getPrice = (tier: 'starter' | 'pro' | 'institutional') => {
+    const p = pricing[tier];
+    return annual ? `${sym}${p.annual[currency]}` : `${sym}${p.monthly[currency]}`;
+  };
+  const getAnnualInfo = (tier: 'starter' | 'pro' | 'institutional') => {
+    if (!annual) return undefined;
+    const p = pricing[tier];
+    return `${p.yearlyTotal[currency]} — save ${p.yearlySave[currency]}`;
+  };
 
   const plans: Plan[] = [
     {
@@ -66,10 +86,9 @@ export default function PricingPage() {
       tier: 'STARTER',
       icon: '💎',
       name: 'Starter',
-      price: annual ? '₹3,920' : '₹3,999',
-      priceUSD: annual ? '~$47' : '~$49',
+      price: getPrice('starter'),
       period: annual ? 'per month (billed annually)' : 'per month',
-      annualPrice: annual ? '₹47,000/yr — save ₹950' : undefined,
+      annualPrice: getAnnualInfo('starter'),
       trial: '14-day free trial',
       tagline: 'For serious retail traders',
       coinScans: '15 coin scans',
@@ -92,10 +111,9 @@ export default function PricingPage() {
       tier: 'PRO',
       icon: '🏛️',
       name: 'Pro',
-      price: annual ? '₹11,920' : '₹11,999',
-      priceUSD: annual ? '~$143' : '~$149',
+      price: getPrice('pro'),
       period: annual ? 'per month (billed annually)' : 'per month',
-      annualPrice: annual ? '₹1,43,000/yr — save ₹24,000' : undefined,
+      annualPrice: getAnnualInfo('pro'),
       trial: '14-day free trial',
       tagline: 'For power users — our most popular plan',
       coinScans: '30+ coin scans',
@@ -121,10 +139,9 @@ export default function PricingPage() {
       tier: 'INSTITUTIONAL',
       icon: '🏢',
       name: 'Institutional',
-      price: annual ? '₹39,920' : '₹39,999',
-      priceUSD: annual ? '~$479' : '~$499',
+      price: getPrice('institutional'),
       period: annual ? 'per month (billed annually)' : 'per month',
-      annualPrice: annual ? '₹4,79,000/yr — save ₹80,000' : undefined,
+      annualPrice: getAnnualInfo('institutional'),
       tagline: 'For funds, prop desks & whales',
       coinScans: '50+ coin scans',
       features: [
@@ -192,6 +209,28 @@ export default function PricingPage() {
                 Annual <span style={{ fontSize: '11px', color: '#10B981', fontWeight: 700, marginLeft: '4px' }}>Save 2 months</span>
               </span>
             </div>
+
+            {/* Currency Selector */}
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', marginLeft: '12px',
+              background: 'rgba(17,24,39,0.8)', borderRadius: '40px',
+              border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden',
+            }}>
+              {(['INR', 'USD'] as const).map(c => (
+                <button
+                  key={c}
+                  onClick={() => setCurrency(c)}
+                  style={{
+                    padding: '6px 16px', fontSize: '13px', fontWeight: 700, border: 'none',
+                    cursor: 'pointer', transition: 'all 0.2s',
+                    background: currency === c ? 'var(--color-primary)' : 'transparent',
+                    color: currency === c ? '#0A0E1A' : '#6B7280',
+                  }}
+                >
+                  {c === 'INR' ? '🇮🇳 INR' : '🇺🇸 USD'}
+                </button>
+              ))}
+            </div>
           </motion.div>
 
           {/* Cards Grid */}
@@ -251,9 +290,6 @@ export default function PricingPage() {
                   <div>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '36px', fontWeight: 800, color: '#F9FAFB' }}>{plan.price}</span>
-                      {plan.priceUSD && (
-                        <span style={{ fontSize: '14px', color: '#6B7280' }}>({plan.priceUSD})</span>
-                      )}
                     </div>
                     <div style={{ fontSize: '13px', color: '#6B7280' }}>{plan.period}</div>
                     {plan.annualPrice && (
