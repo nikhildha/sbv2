@@ -59,7 +59,7 @@ export function RegimeCard({ regime, confidence, symbol, macroRegime, trend15m, 
     else if (pct >= 50) gaugeColor = '#F59E0B';
 
     // SVG ring constants
-    const ringRadius = 36;
+    const ringRadius = 46;
     const ringCircumference = 2 * Math.PI * ringRadius;
     const ringOffset = ringCircumference - (pct / 100) * ringCircumference;
 
@@ -128,7 +128,7 @@ export function RegimeCard({ regime, confidence, symbol, macroRegime, trend15m, 
                 }}>Market Regime</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{
-                        fontSize: '13px', fontWeight: 700, fontFamily: 'monospace',
+                        fontSize: '20px', fontWeight: 700, fontFamily: 'monospace',
                         color: '#E5E7EB', letterSpacing: '-0.5px',
                     }}>
                         {btcPrice ? `$${btcPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '...'}
@@ -149,11 +149,11 @@ export function RegimeCard({ regime, confidence, symbol, macroRegime, trend15m, 
             {/* Main content: Confidence ring + Regime info */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '8px' }}>
                 {/* SVG Confidence Ring */}
-                <div style={{ position: 'relative', width: '90px', height: '90px', flexShrink: 0 }}>
-                    <svg width="90" height="90" viewBox="0 0 90 90" style={{ transform: 'rotate(-90deg)' }}>
-                        <circle cx="45" cy="45" r={ringRadius} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="5" />
-                        <circle cx="45" cy="45" r={ringRadius} fill="none" stroke={gaugeColor}
-                            strokeWidth="5" strokeLinecap="round"
+                <div style={{ position: 'relative', width: '110px', height: '110px', flexShrink: 0 }}>
+                    <svg width="110" height="110" viewBox="0 0 110 110" style={{ transform: 'rotate(-90deg)' }}>
+                        <circle cx="55" cy="55" r={ringRadius} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="6" />
+                        <circle cx="55" cy="55" r={ringRadius} fill="none" stroke={gaugeColor}
+                            strokeWidth="6" strokeLinecap="round"
                             strokeDasharray={ringCircumference} strokeDashoffset={ringOffset}
                             style={{ transition: 'stroke-dashoffset 1s ease, stroke 0.5s ease' }} />
                     </svg>
@@ -161,8 +161,8 @@ export function RegimeCard({ regime, confidence, symbol, macroRegime, trend15m, 
                         position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' as const,
                         alignItems: 'center', justifyContent: 'center',
                     }}>
-                        <span style={{ fontSize: '18px', fontWeight: 800, color: gaugeColor, lineHeight: 1 }}>{pct}%</span>
-                        <span style={{ fontSize: '7px', color: '#6B7280', letterSpacing: '0.5px', marginTop: '2px' }}>CONF</span>
+                        <span style={{ fontSize: '22px', fontWeight: 800, color: gaugeColor, lineHeight: 1 }}>{pct}%</span>
+                        <span style={{ fontSize: '8px', color: '#6B7280', letterSpacing: '0.5px', marginTop: '3px' }}>CONF</span>
                     </div>
                 </div>
 
@@ -375,7 +375,7 @@ export function PnlCard({ trades, coinDcxBalance, binanceBalance }: PnlCardProps
             </div>
 
             {/* Exchange balances */}
-            <div style={{ display: 'flex', flexDirection: 'row' as const, gap: '8px', marginBottom: hasAnyBalance ? '10px' : '0' }}>
+            <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '8px', marginBottom: hasAnyBalance ? '10px' : '0' }}>
                 {/* Binance */}
                 <div style={{
                     flex: 1, padding: '10px 12px', borderRadius: '10px',

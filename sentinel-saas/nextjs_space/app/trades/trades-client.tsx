@@ -882,7 +882,7 @@ export function TradesClient({ trades: initialTrades }: TradesClientProps) {
                       <div style={{
                         fontSize: '13px', fontWeight: 800, textTransform: 'uppercase' as const,
                         letterSpacing: '2px', color: '#6B7280', marginBottom: '6px',
-                      }}>📈 P&L Timeline</div>
+                      }}>P&L Timeline</div>
                       <div style={{ fontSize: '32px', fontWeight: 800, color: pnlColor, lineHeight: 1.1 }}>
                         {fmt$(totalPnl)}
                         <span style={{ fontSize: '13px', fontWeight: 600, marginLeft: '8px', color: '#6B7280' }}>
