@@ -72,30 +72,42 @@ export async function syncEngineTrades(
             // getUserTrades(userId) at query time. Bot_id is NOT used for scoping.
             const resolvedBotId = botId;
 
-            // ── SL/TP Recalculation (fixes engine-side cross-contamination bug) ──
-            // The engine's tradebook.json sometimes stores SL/TP from the WRONG trade.
-            // We recalculate from each trade's own entry_price, atr_at_entry, leverage, position.
+            // ── SL/TP Sanity Check (fixes engine-side cross-contamination bug) ──
+            // Engine's tradebook.json has SL/TP AND atr_at_entry from wrong trades.
+            // We use percentage-based defaults relative to entry_price as fallback.
             const entryPrice = t.entry_price || t.entryPrice || 0;
-            const atrAtEntry = t.atr_at_entry || t.atr || 0;
             const leverage = t.leverage || 1;
             const isLong = side === 'buy' || side === 'long';
             let recalcSl = t.stop_loss || t.stopLoss || 0;
             let recalcTp = t.take_profit || t.takeProfit || 0;
 
-            if (entryPrice > 0 && atrAtEntry > 0) {
-                // ATR multipliers: same formula as config.get_atr_multipliers(leverage)
-                let slMult: number, tpMult: number;
-                if (leverage >= 50) { slMult = 0.5; tpMult = 1.0; }
-                else if (leverage >= 10) { slMult = 1.0; tpMult = 2.0; }
-                else if (leverage >= 5) { slMult = 1.2; tpMult = 2.4; }
-                else { slMult = 1.5; tpMult = 3.0; } // default 1-4x
+            if (entryPrice > 0) {
+                // Percentage-based defaults per leverage tier
+                let slPct: number, tpPct: number;
+                if (leverage >= 50) { slPct = 0.01; tpPct = 0.02; }
+                else if (leverage >= 10) { slPct = 0.025; tpPct = 0.05; }
+                else if (leverage >= 5) { slPct = 0.04; tpPct = 0.08; }
+                else { slPct = 0.06; tpPct = 0.12; }
 
-                if (isLong) {
-                    recalcSl = Math.round((entryPrice - atrAtEntry * slMult) * 1e6) / 1e6;
-                    recalcTp = Math.round((entryPrice + atrAtEntry * tpMult) * 1e6) / 1e6;
-                } else {
-                    recalcSl = Math.round((entryPrice + atrAtEntry * slMult) * 1e6) / 1e6;
-                    recalcTp = Math.round((entryPrice - atrAtEntry * tpMult) * 1e6) / 1e6;
+                const slDist = Math.abs(entryPrice - recalcSl);
+                const maxSaneDist = entryPrice * 0.20;
+
+                const slGarbage = recalcSl <= 0 || slDist > maxSaneDist ||
+                    (isLong && recalcSl > entryPrice * 1.01) ||
+                    (!isLong && recalcSl < entryPrice * 0.99);
+                const tpGarbage = recalcTp <= 0 || Math.abs(recalcTp - entryPrice) > maxSaneDist ||
+                    (isLong && recalcTp < entryPrice * 0.99) ||
+                    (!isLong && recalcTp > entryPrice * 1.01);
+
+                if (slGarbage) {
+                    recalcSl = isLong
+                        ? Math.round((entryPrice * (1 - slPct)) * 1e6) / 1e6
+                        : Math.round((entryPrice * (1 + slPct)) * 1e6) / 1e6;
+                }
+                if (tpGarbage) {
+                    recalcTp = isLong
+                        ? Math.round((entryPrice * (1 + tpPct)) * 1e6) / 1e6
+                        : Math.round((entryPrice * (1 - tpPct)) * 1e6) / 1e6;
                 }
             }
 

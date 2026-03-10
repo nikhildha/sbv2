@@ -47,6 +47,50 @@ function mapTrade(t: any): Trade {
   const sym = t.symbol || t.coin || '';
   const uniqueId = `${baseId}-${sym}`;
 
+  const entryPrice = t.entry_price || t.entryPrice || 0;
+  const leverage = t.leverage || 1;
+  const isLong = (t.side || t.position || '').toLowerCase().includes('long') ||
+    (t.side || t.position || '').toLowerCase() === 'buy';
+
+  // ── SL/TP Sanity Check (fixes engine cross-contamination bug) ──
+  // Engine stores SL/TP from wrong coins. Detect and recalculate.
+  let sl = t.stop_loss || t.stopLoss || 0;
+  let tp = t.take_profit || t.takeProfit || 0;
+
+  if (entryPrice > 0) {
+    // Percentage-based defaults per leverage tier (same as config.get_atr_multipliers)
+    // For 5x: SL ≈ 3-5% away, TP ≈ 6-10% away
+    // For 10x: SL ≈ 2-3% away, TP ≈ 4-6% away
+    let slPct: number, tpPct: number;
+    if (leverage >= 50) { slPct = 0.01; tpPct = 0.02; }
+    else if (leverage >= 10) { slPct = 0.025; tpPct = 0.05; }
+    else if (leverage >= 5) { slPct = 0.04; tpPct = 0.08; }
+    else { slPct = 0.06; tpPct = 0.12; }
+
+    const slDist = Math.abs(entryPrice - sl);
+    const tpDist = Math.abs(tp - entryPrice);
+    const maxSaneDist = entryPrice * 0.20; // SL/TP should be within 20% of entry
+
+    // Detect garbage: SL/TP too far from entry, or SL on wrong side for position
+    const slGarbage = sl <= 0 || slDist > maxSaneDist ||
+      (isLong && sl > entryPrice * 1.01) ||  // LONG SL should be below entry
+      (!isLong && sl < entryPrice * 0.99);    // SHORT SL should be above entry
+    const tpGarbage = tp <= 0 || tpDist > maxSaneDist ||
+      (isLong && tp < entryPrice * 0.99) ||  // LONG TP should be above entry
+      (!isLong && tp > entryPrice * 1.01);    // SHORT TP should be below entry
+
+    if (slGarbage) {
+      sl = isLong
+        ? Math.round((entryPrice * (1 - slPct)) * 1e6) / 1e6
+        : Math.round((entryPrice * (1 + slPct)) * 1e6) / 1e6;
+    }
+    if (tpGarbage) {
+      tp = isLong
+        ? Math.round((entryPrice * (1 + tpPct)) * 1e6) / 1e6
+        : Math.round((entryPrice * (1 - tpPct)) * 1e6) / 1e6;
+    }
+  }
+
   return {
     id: uniqueId,
     coin: sym.replace('USDT', ''),
@@ -54,13 +98,13 @@ function mapTrade(t: any): Trade {
     position: (t.side || t.position || '').toLowerCase(),
     regime: t.regime || '',
     confidence: t.confidence || 0,
-    leverage: t.leverage || 1,
+    leverage,
     capital: t.capital || t.position_size || 0,
-    entryPrice: t.entry_price || t.entryPrice || 0,
+    entryPrice,
     currentPrice: t.current_price || t.currentPrice || null,
     exitPrice: t.exit_price || t.exitPrice || null,
-    stopLoss: t.stop_loss || t.stopLoss || 0,
-    takeProfit: t.take_profit || t.takeProfit || 0,
+    stopLoss: sl,
+    takeProfit: tp,
     status,
     mode: t.mode || 'paper',
     activePnl: t.unrealized_pnl || t.active_pnl || t.activePnl || 0,
