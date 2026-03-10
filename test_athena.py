@@ -22,7 +22,11 @@ import time
 from datetime import datetime
 
 # ─── Setup ──────────────────────────────────────────────────────────────────────
-os.environ.setdefault("GEMINI_API_KEY", "AIzaSyB3r1L3iWIqM7EBH3BV5U9SscfiAjoOSuE")
+# Ensure GEMINI_API_KEY is set in your environment (never hardcode keys)
+if not os.environ.get("GEMINI_API_KEY"):
+    print("ERROR: Set GEMINI_API_KEY environment variable before running.")
+    print("  export GEMINI_API_KEY=your_key_here")
+    sys.exit(1)
 
 import config
 from data_pipeline import fetch_klines
