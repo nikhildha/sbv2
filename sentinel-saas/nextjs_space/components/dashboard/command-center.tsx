@@ -120,30 +120,12 @@ export function RegimeCard({ regime, confidence, symbol, macroRegime, trend15m, 
                 background: `linear-gradient(90deg, ${info.color}, ${info.color}44, transparent)`,
             }} />
 
-            {/* Header row: Label + BTC price */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            {/* Header row: Label only */}
+            <div style={{ marginBottom: '10px' }}>
                 <div style={{
                     fontSize: '12px', fontWeight: 700, textTransform: 'uppercase' as const,
                     letterSpacing: '2px', color: '#6B7280',
                 }}>Market Regime</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{
-                        fontSize: '20px', fontWeight: 700, fontFamily: 'monospace',
-                        color: '#E5E7EB', letterSpacing: '-0.5px',
-                    }}>
-                        {btcPrice ? `$${btcPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '...'}
-                    </span>
-                    {btcPrice && (
-                        <span style={{
-                            fontSize: '13px', fontWeight: 700,
-                            padding: '2px 8px', borderRadius: '6px',
-                            background: btcChange >= 0 ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
-                            color: btcChange >= 0 ? '#22C55E' : '#EF4444',
-                        }}>
-                            {btcChange >= 0 ? '▲' : '▼'} {Math.abs(btcChange).toFixed(2)}%
-                        </span>
-                    )}
-                </div>
             </div>
 
             {/* Main content: Confidence ring + Regime info */}
@@ -166,7 +148,7 @@ export function RegimeCard({ regime, confidence, symbol, macroRegime, trend15m, 
                     </div>
                 </div>
 
-                {/* Dominant regime + BTC price below */}
+                {/* Dominant regime + BTC price + change below */}
                 <div style={{ flex: 1, textAlign: 'center' }}>
                     <div style={{ fontSize: '22px', fontWeight: 800, color: info.color, marginBottom: '4px', letterSpacing: '-0.3px' }}>
                         {dominantRegime === 'WAITING' ? 'SCANNING' : dominantRegime}
@@ -177,6 +159,14 @@ export function RegimeCard({ regime, confidence, symbol, macroRegime, trend15m, 
                     }}>
                         {btcPrice ? `$${btcPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '...'}
                     </div>
+                    {btcPrice && (
+                        <div style={{
+                            fontSize: '14px', fontWeight: 800, marginTop: '4px',
+                            color: btcChange >= 0 ? '#22C55E' : '#EF4444',
+                        }}>
+                            {btcChange >= 0 ? '▲' : '▼'} {Math.abs(btcChange).toFixed(2)}%
+                        </div>
+                    )}
                 </div>
             </div>
 
