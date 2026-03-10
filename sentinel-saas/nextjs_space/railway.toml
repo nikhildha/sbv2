@@ -1,2 +1,2 @@
 [deploy]
-startCommand = "npx next start -p 8080"
+startCommand = "npx prisma db push --skip-generate --accept-data-loss && npx next start -p 8080"
