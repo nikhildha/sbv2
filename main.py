@@ -384,12 +384,23 @@ class RegimeMasterBot:
         tradebook_active_count = len(tradebook_active)
         # Build set of profile:symbol keys for active trades
         tradebook_active_keys = set()
+        deployed_symbols = set()
         for t in tradebook_active:
             pid = t.get("profile_id", "standard")
             tradebook_active_keys.add(f"{pid}:{t['symbol']}")
+            deployed_symbols.add(t["symbol"])
         raw_results = []
 
-        for symbol in symbols:
+        # Filter out already-deployed coins (no need to re-scan) and cap at 15
+        scan_symbols = [s for s in symbols if s not in deployed_symbols]
+        SCAN_LIMIT = 15
+        if len(scan_symbols) > SCAN_LIMIT:
+            scan_symbols = scan_symbols[:SCAN_LIMIT]
+        logger.info("📡 Scanning %d coins (%d deployed, skipped): %s",
+                    len(scan_symbols), len(deployed_symbols),
+                    ", ".join(s.replace("USDT", "") for s in scan_symbols[:8]))
+
+        for symbol in scan_symbols:
             try:
                 result = self._analyze_coin(symbol, balance)
                 if result:
