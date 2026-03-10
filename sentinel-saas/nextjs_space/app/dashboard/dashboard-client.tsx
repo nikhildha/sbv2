@@ -413,7 +413,7 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
                 return (
                   <div style={{
                     background: 'transparent',
-                    borderRadius: '20px', padding: '4px 20px',
+                    borderRadius: '20px', padding: '4px 4px 1px 4px',
                     display: 'flex', flexDirection: 'column' as const, alignItems: 'center',
                     justifyContent: 'center', minHeight: '150px',
                     position: 'relative' as const,
