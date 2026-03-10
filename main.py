@@ -304,11 +304,11 @@ class RegimeMasterBot:
                             ", ".join(self._coin_list[:5]))
             # Slice coin list by active brain's scan_limit (C=15, B=30, A=50)
             brain_scan_limit = config.BRAIN_PROFILES.get(
-                self.brain_switcher.active_brain, {}
+                self._brain_switcher.active_brain, {}
             ).get("scan_limit", config.TOP_COINS_LIMIT)
             symbols = self._coin_list[:brain_scan_limit]
             logger.info("🧠 Brain=%s → scanning %d/%d coins",
-                        self.brain_switcher.active_brain, len(symbols), len(self._coin_list))
+                        self._brain_switcher.active_brain, len(symbols), len(self._coin_list))
         else:
             symbols = [config.PRIMARY_SYMBOL]
 
