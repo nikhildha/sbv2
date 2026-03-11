@@ -3,13 +3,13 @@
 import { useState, useEffect, useRef } from 'react';
 
 const REGIME_MAP: Record<string, { emoji: string; color: string; bgGlow: string }> = {
-    'BULLISH': { emoji: '🟢', color: '#22C55E', bgGlow: 'rgba(34, 197, 94, 0.15)' },
-    'BEARISH': { emoji: '🔴', color: '#EF4444', bgGlow: 'rgba(239, 68, 68, 0.15)' },
-    'SIDEWAYS/CHOP': { emoji: '🟡', color: '#F59E0B', bgGlow: 'rgba(245, 158, 11, 0.15)' },
-    'CRASH/PANIC': { emoji: '💀', color: '#DC2626', bgGlow: 'rgba(220, 38, 38, 0.2)' },
-    'WAITING': { emoji: '🔍', color: '#A78BFA', bgGlow: 'rgba(167, 139, 250, 0.1)' },
-    'SCANNING': { emoji: '🔍', color: '#A78BFA', bgGlow: 'rgba(167, 139, 250, 0.1)' },
-    'OFFLINE': { emoji: '⚫', color: '#6B7280', bgGlow: 'rgba(107, 114, 128, 0.1)' },
+    'BULLISH': { emoji: '🟢', color: '#00FF88', bgGlow: 'rgba(0,255,136,0.12)' },
+    'BEARISH': { emoji: '🔴', color: '#FF3B5C', bgGlow: 'rgba(255,59,92,0.12)' },
+    'SIDEWAYS/CHOP': { emoji: '🟡', color: '#FFB300', bgGlow: 'rgba(255,179,0,0.12)' },
+    'CRASH/PANIC': { emoji: '💀', color: '#FF3B5C', bgGlow: 'rgba(255,59,92,0.18)' },
+    'WAITING': { emoji: '🔍', color: '#A78BFA', bgGlow: 'rgba(167,139,250,0.10)' },
+    'SCANNING': { emoji: '🔍', color: '#00E5FF', bgGlow: 'rgba(0,229,255,0.10)' },
+    'OFFLINE': { emoji: '⚫', color: '#4B5563', bgGlow: 'rgba(75,85,99,0.08)' },
 };
 
 function getRegimeInfo(regime: string) {
@@ -53,10 +53,10 @@ export function RegimeCard({ regime, confidence, symbol, macroRegime, trend15m, 
         return '#6B7280';
     };
 
-    let gaugeColor = '#EF4444';
-    if (pct >= 85) gaugeColor = '#22C55E';
-    else if (pct >= 65) gaugeColor = '#0EA5E9';
-    else if (pct >= 50) gaugeColor = '#F59E0B';
+    let gaugeColor = '#FF3B5C';
+    if (pct >= 85) gaugeColor = '#00FF88';
+    else if (pct >= 65) gaugeColor = '#00E5FF';
+    else if (pct >= 50) gaugeColor = '#FFB300';
 
     // SVG ring constants
     const ringRadius = 46;
@@ -104,91 +104,243 @@ export function RegimeCard({ regime, confidence, symbol, macroRegime, trend15m, 
         { label: 'Crash', coins: regimeCoins.crash, color: '#DC2626', emoji: '💀' },
     ].filter(c => c.coins.length > 0);
 
+    // Gauge dimensions — upscaled for visual impact
+    const GAUGE_SIZE = 220;
+    const GAUGE_CX = GAUGE_SIZE / 2;
+    const GAUGE_CY = GAUGE_SIZE / 2;
+    const OUTER_R = 96;
+    const INNER_R = 74;
+    const ARC_R = 85;
+    const arcCirc = 2 * Math.PI * ARC_R;
+    // Arc spans 240° (starting from 150° → 390°) for the C-shape gauge
+    const ARC_SPAN_DEG = 240;
+    const ARC_SPAN = (ARC_SPAN_DEG / 360) * arcCirc;
+    const arcOffset = arcCirc - (pct / 100) * ARC_SPAN;
+    const startDeg = 150; // gauge starts bottom-left, sweeps clockwise
+
+    // Mini ECG sparkline points for inside the gauge
+    const ecgPoints = Array.from({ length: 32 }, (_, i) => {
+        const x = (i / 31) * 90 + 5;
+        const base = 50 + Math.sin(i * 0.7 + (btcPrice || 0) * 0.0001) * 14;
+        const spike = (i === 14) ? base - 22 : (i === 15) ? base + 18 : (i === 16) ? base - 10 : base;
+        return `${x},${spike}`;
+    }).join(' ');
+
+    const displayRegime = (() => {
+        if (dominantRegime === 'WAITING' || dominantRegime === 'SCANNING') return 'HIGH VOLATILITY';
+        if (dominantRegime === 'BULLISH') return 'BULLISH TREND';
+        if (dominantRegime === 'BEARISH') return 'BEARISH TREND';
+        if (dominantRegime === 'SIDEWAYS/CHOP') return 'SIDEWAYS / CHOP';
+        if (dominantRegime === 'CRASH/PANIC') return 'CRASH / PANIC';
+        return dominantRegime;
+    })();
+
+    const btcDom = 30; // BTC dominance placeholder
+
     return (
         <div style={{
-            background: 'linear-gradient(135deg, rgba(17,24,39,0.95), rgba(10,15,28,0.98))',
-            backdropFilter: 'blur(16px)',
-            border: `1px solid ${info.color}22`,
-            borderRadius: '20px',
-            padding: '14px 20px',
+            background: 'linear-gradient(160deg, rgba(8,14,26,0.97) 0%, rgba(4,8,16,0.99) 100%)',
+            backdropFilter: 'blur(20px)',
+            border: `1px solid ${info.color}18`,
+            borderRadius: '22px',
+            padding: '16px 20px 20px',
             position: 'relative',
             overflow: 'hidden',
+            boxShadow: `0 0 40px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.04)`,
         }}>
             {/* Top accent line */}
             <div style={{
-                position: 'absolute', top: 0, left: 0, right: 0, height: '2px',
-                background: `linear-gradient(90deg, ${info.color}, ${info.color}44, transparent)`,
+                position: 'absolute', top: 0, left: 0, right: 0, height: '1px',
+                background: `linear-gradient(90deg, transparent, ${info.color}60, transparent)`,
             }} />
 
-            {/* Header row: Label only */}
-            <div style={{ marginBottom: '10px' }}>
+            {/* Header row */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
                 <div style={{
-                    fontSize: '12px', fontWeight: 700, textTransform: 'uppercase' as const,
-                    letterSpacing: '2px', color: '#6B7280',
+                    fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' as const,
+                    letterSpacing: '2.5px', color: '#4B6080',
                 }}>Market Regime</div>
+                <div style={{
+                    fontSize: '11px', fontWeight: 700, color: '#4B6080',
+                    fontFamily: 'var(--font-mono)',
+                }}>{btcDom}%</div>
             </div>
 
-            {/* Main content: Confidence ring + Regime info */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '8px' }}>
-                {/* SVG Confidence Ring */}
-                <div style={{ position: 'relative', width: '110px', height: '110px', flexShrink: 0 }}>
-                    <svg width="110" height="110" viewBox="0 0 110 110" style={{ transform: 'rotate(-90deg)' }}>
-                        <circle cx="55" cy="55" r={ringRadius} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="6" />
-                        <circle cx="55" cy="55" r={ringRadius} fill="none" stroke={gaugeColor}
-                            strokeWidth="6" strokeLinecap="round"
-                            strokeDasharray={ringCircumference} strokeDashoffset={ringOffset}
-                            style={{ transition: 'stroke-dashoffset 1s ease, stroke 0.5s ease' }} />
+            {/* ── Premium 3D Bezel Gauge ── */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
+                <div style={{ position: 'relative', width: GAUGE_SIZE, height: GAUGE_SIZE }}>
+                    <svg width={GAUGE_SIZE} height={GAUGE_SIZE} viewBox={`0 0 ${GAUGE_SIZE} ${GAUGE_SIZE}`}>
+                        <defs>
+                            {/* Deep bezel gradient — dark center gives depth */}
+                            <radialGradient id="bezelGrad" cx="50%" cy="45%">
+                                <stop offset="0%" stopColor="#0A1428" stopOpacity="1" />
+                                <stop offset="60%" stopColor="#050A14" stopOpacity="1" />
+                                <stop offset="100%" stopColor="#020608" stopOpacity="1" />
+                            </radialGradient>
+                            {/* Outer rim gradient for 3D sheen */}
+                            <radialGradient id="rimGrad" cx="30%" cy="25%">
+                                <stop offset="0%" stopColor="rgba(0,229,255,0.25)" />
+                                <stop offset="100%" stopColor="rgba(0,80,120,0.04)" />
+                            </radialGradient>
+                            {/* Arc glow filter */}
+                            <filter id="arcGlow" x="-30%" y="-30%" width="160%" height="160%">
+                                <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
+                                <feMerge>
+                                    <feMergeNode in="blur" />
+                                    <feMergeNode in="blur" />
+                                    <feMergeNode in="SourceGraphic" />
+                                </feMerge>
+                            </filter>
+                        </defs>
+
+                        {/* Outer ambient glow ring */}
+                        <circle cx={GAUGE_CX} cy={GAUGE_CY} r={OUTER_R + 6}
+                            fill="none" stroke={info.color} strokeWidth="16"
+                            strokeOpacity="0.04" />
+
+                        {/* Outer bezel ring — dark glassy */}
+                        <circle cx={GAUGE_CX} cy={GAUGE_CY} r={OUTER_R + 2}
+                            fill="url(#rimGrad)" stroke="rgba(0,229,255,0.08)" strokeWidth="1" />
+
+                        {/* Main bezel body */}
+                        <circle cx={GAUGE_CX} cy={GAUGE_CY} r={OUTER_R}
+                            fill="url(#bezelGrad)"
+                            stroke="rgba(0,229,255,0.06)" strokeWidth="0.5" />
+
+                        {/* Inner dark well — creates the concave depth illusion */}
+                        <circle cx={GAUGE_CX} cy={GAUGE_CY} r={INNER_R + 2}
+                            fill="none" stroke="rgba(0,0,0,0.8)" strokeWidth="8" />
+                        <circle cx={GAUGE_CX} cy={GAUGE_CY} r={INNER_R}
+                            fill="rgba(2,6,14,0.95)" />
+
+                        {/* Track arc — faint background sweep */}
+                        <circle cx={GAUGE_CX} cy={GAUGE_CY} r={ARC_R}
+                            fill="none"
+                            stroke="rgba(0,229,255,0.05)"
+                            strokeWidth="5"
+                            strokeLinecap="round"
+                            strokeDasharray={`${ARC_SPAN} ${arcCirc - ARC_SPAN}`}
+                            strokeDashoffset={arcCirc * (1 - startDeg / 360)}
+                            style={{ transform: `rotate(${startDeg}deg)`, transformOrigin: `${GAUGE_CX}px ${GAUGE_CY}px` }}
+                        />
+
+                        {/* Active arc — glowing colored fill */}
+                        <circle cx={GAUGE_CX} cy={GAUGE_CY} r={ARC_R}
+                            fill="none"
+                            stroke={gaugeColor}
+                            strokeWidth="5"
+                            strokeLinecap="round"
+                            strokeDasharray={`${(pct / 100) * ARC_SPAN} ${arcCirc - (pct / 100) * ARC_SPAN}`}
+                            strokeDashoffset={arcCirc * (1 - startDeg / 360)}
+                            filter="url(#arcGlow)"
+                            style={{
+                                transform: `rotate(${startDeg}deg)`,
+                                transformOrigin: `${GAUGE_CX}px ${GAUGE_CY}px`,
+                                transition: 'stroke-dasharray 1.5s cubic-bezier(0.4,0,0.2,1)',
+                            }}
+                        />
+
+                        {/* ECG sparkline inside the gauge */}
+                        <g clipPath={`url(#gaugeClip)`}>
+                            <clipPath id="gaugeClip">
+                                <circle cx={GAUGE_CX} cy={GAUGE_CY} r={INNER_R - 4} />
+                            </clipPath>
+                            <svg x={GAUGE_CX - 50} y={GAUGE_CY + 8} width="100" height="36" viewBox="0 0 100 70" preserveAspectRatio="none">
+                                {/* Gradient fill under ECG */}
+                                <defs>
+                                    <linearGradient id="ecgFill" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor={gaugeColor} stopOpacity="0.3" />
+                                        <stop offset="100%" stopColor={gaugeColor} stopOpacity="0" />
+                                    </linearGradient>
+                                </defs>
+                                <polyline points={ecgPoints} fill="none" stroke={gaugeColor} strokeWidth="1.5" strokeLinejoin="round" opacity="0.8" />
+                                <polygon points={`5,70 ${ecgPoints} 95,70`} fill="url(#ecgFill)" opacity="0.5" />
+                            </svg>
+                        </g>
+
+                        {/* Center text — ~15% CONFID */}
+                        <text x={GAUGE_CX} y={GAUGE_CY - 8} textAnchor="middle"
+                            fontSize="20" fontWeight="800" fill={gaugeColor}
+                            fontFamily="monospace"
+                            style={{ filter: `drop-shadow(0 0 6px ${gaugeColor}88)` }}>
+                            ~{pct}%
+                        </text>
+                        <text x={GAUGE_CX} y={GAUGE_CY + 8} textAnchor="middle"
+                            fontSize="9" fontWeight="700" fill="rgba(100,160,200,0.6)"
+                            fontFamily="sans-serif" letterSpacing="2">
+                            CONFID
+                        </text>
                     </svg>
-                    <div style={{
-                        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' as const,
-                        alignItems: 'center', justifyContent: 'center',
-                    }}>
-                        <span style={{ fontSize: '24px', fontWeight: 800, color: gaugeColor, lineHeight: 1 }}>{pct}%</span>
-                        <span style={{ fontSize: '9px', color: '#6B7280', letterSpacing: '0.5px', marginTop: '3px' }}>CONF</span>
-                    </div>
+                </div>
+            </div>
+
+            {/* Regime label + BTC price */}
+            <div style={{ textAlign: 'center' }}>
+                {/* "REGIME: HIGH VOLATILITY" */}
+                <div style={{ marginBottom: '6px' }}>
+                    <span style={{
+                        fontSize: '11px', fontWeight: 700, letterSpacing: '1.5px',
+                        color: '#4B6080', textTransform: 'uppercase' as const,
+                    }}>Regime: </span>
+                    <span style={{
+                        fontSize: '11px', fontWeight: 800, letterSpacing: '1.5px',
+                        color: info.color, textTransform: 'uppercase' as const,
+                        textShadow: `0 0 8px ${info.color}88`,
+                    }}>{displayRegime}</span>
                 </div>
 
-                {/* Dominant regime + BTC price + change below */}
-                <div style={{ flex: 1, textAlign: 'center' }}>
-                    <div style={{ fontSize: '22px', fontWeight: 800, color: info.color, marginBottom: '4px', letterSpacing: '-0.3px' }}>
-                        {dominantRegime === 'WAITING' ? 'SCANNING' : dominantRegime}
-                    </div>
+                {/* BTC price — large dominant */}
+                <div style={{
+                    fontSize: '26px', fontWeight: 900,
+                    fontFamily: 'var(--font-mono, monospace)',
+                    color: '#E8EDF5', letterSpacing: '-1.5px', lineHeight: 1,
+                    textShadow: '0 0 20px rgba(0,229,255,0.15)',
+                }}>
+                    {btcPrice ? `$${btcPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '—'}
+                </div>
+
+                {btcPrice && (
                     <div style={{
-                        fontSize: '28px', fontWeight: 800, fontFamily: 'monospace',
-                        color: '#E5E7EB', letterSpacing: '-1px', lineHeight: 1.2,
+                        fontSize: 12, fontWeight: 700, marginTop: 5,
+                        fontFamily: 'var(--font-mono, monospace)',
+                        color: btcChange >= 0 ? '#00FF88' : '#FF3B5C',
+                        textShadow: btcChange >= 0 ? '0 0 8px rgba(0,255,136,0.5)' : '0 0 8px rgba(255,59,92,0.5)',
                     }}>
-                        {btcPrice ? `$${btcPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '...'}
+                        {btcChange >= 0 ? '▲' : '▼'} {Math.abs(btcChange).toFixed(2)}%
                     </div>
-                    {btcPrice && (
-                        <div style={{
-                            fontSize: '14px', fontWeight: 800, marginTop: '4px',
-                            color: btcChange >= 0 ? '#22C55E' : '#EF4444',
+                )}
+            </div>
+
+            {/* TF breakdown chips — compact row */}
+            {tfEntries.length > 0 && (
+                <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', marginTop: '14px', flexWrap: 'wrap' as const }}>
+                    {tfEntries.map(e => (
+                        <div key={e.tf} style={{
+                            display: 'flex', alignItems: 'center', gap: '4px',
+                            padding: '3px 8px', borderRadius: '8px',
+                            background: 'rgba(255,255,255,0.03)',
+                            border: `1px solid ${getTfColor(e.regime)}18`,
                         }}>
-                            {btcChange >= 0 ? '▲' : '▼'} {Math.abs(btcChange).toFixed(2)}%
+                            <span style={{ fontSize: '9px', fontWeight: 700, color: '#4B6080', letterSpacing: '0.5px' }}>{e.tf}</span>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: getTfColor(e.regime) }}>{e.regime.slice(0, 4)}</span>
+                            <span style={{ fontSize: '9px', color: '#4B6080', fontFamily: 'monospace' }}>{(e.conf * 100).toFixed(0)}%</span>
                         </div>
-                    )}
+                    ))}
                 </div>
-            </div>
+            )}
 
-            {/* BTC 5min Sparkline — transparent heartbeat */}
-            {(() => {
-                // Generate a sparkline path from the BTC price (sine wave simulation when no data)
-                const points = Array.from({ length: 60 }, (_, i) => {
-                    const x = (i / 59) * 100;
-                    const y = 50 + Math.sin(i * 0.5 + (btcPrice || 0) * 0.001) * 20 + Math.sin(i * 1.3) * 8;
-                    return `${x},${y}`;
-                });
-                const pathD = `M ${points.join(' L ')}`;
-                return (
-                    <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{
-                        position: 'absolute', bottom: 0, left: 0, right: 0, height: '60px',
-                        opacity: 0.08, pointerEvents: 'none', zIndex: 0,
-                    }}>
-                        <path d={pathD} fill="none" stroke={info.color} strokeWidth="1" />
-                        <path d={`${pathD} L 100,100 L 0,100 Z`} fill={info.color} opacity="0.3" />
-                    </svg>
-                );
-            })()}
+            {/* Coin regime breakdown — very compact */}
+            {categories.length > 0 && (
+                <div style={{ display: 'flex', gap: '8px', marginTop: '10px', justifyContent: 'center', flexWrap: 'wrap' as const }}>
+                    {categories.slice(0, 3).map(cat => (
+                        <div key={cat.label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <span style={{ fontSize: '10px' }}>{cat.emoji}</span>
+                            <span style={{ fontSize: '10px', color: cat.color, fontWeight: 700 }}>{cat.coins.length}</span>
+                            <span style={{ fontSize: '9px', color: '#4B5563' }}>{cat.label.slice(0, 4)}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
@@ -197,205 +349,165 @@ interface PnlCardProps {
     trades: any[];
     coinDcxBalance?: number | null;
     binanceBalance?: number | null;
+    paperPnl?: number;
+    livePnl?: number;
+    paperPct?: number;
+    livePct?: number;
+    activeBots?: number | string;
+    activeTrades?: number | string;
 }
 
-export function PnlCard({ trades, coinDcxBalance, binanceBalance }: PnlCardProps) {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const chartRef = useRef<any>(null);
-    const MAX_CAPITAL = 2500;
-
-    // Compute total PnL across all trades
-    const allTrades = trades || [];
-    let totalPnl = 0;
-    allTrades.forEach((t: any) => {
-        const status = (t.status || '').toUpperCase();
-        if (status === 'CLOSED') {
-            totalPnl += (t.pnl || t.realized_pnl || t.total_pnl || 0);
-        } else if (status === 'ACTIVE') {
-            const entry = t.entry_price || t.entryPrice || 0;
-            const current = t.current_price || t.currentPrice || entry;
-            const lev = t.leverage || 1;
-            const cap = t.capital || t.position_size || 100;
-            const pos = (t.side || t.position || '').toUpperCase();
-            const isLong = pos === 'BUY' || pos === 'LONG';
-            if (entry > 0) {
-                const diff = isLong ? (current - entry) : (entry - current);
-                totalPnl += Math.round(diff / entry * lev * cap * 10000) / 10000;
-            }
-        }
-    });
-    const totalRoi = MAX_CAPITAL > 0 ? (totalPnl / MAX_CAPITAL * 100) : 0;
-    const sign = totalPnl >= 0 ? '+' : '';
-    const mainColor = totalPnl >= 0 ? '#22C55E' : '#EF4444';
-
-    // Build 1-hour buckets for P&L timeline
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas || allTrades.length === 0) return;
-
-        // Dynamic import of Chart.js
-        import('chart.js').then(({ Chart, LineController, LineElement, PointElement, LinearScale, CategoryScale, Filler, Tooltip }) => {
-            Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Filler, Tooltip);
-
-            // Parse trades with valid times, sort by entry_time
-            const parsed = allTrades
-                .map((t: any) => {
-                    const raw = t.entry_time || t.entryTime || t.timestamp || '';
-                    const sanitized = String(raw).replace(/(\.\d{3})\d+/, '$1');
-                    const d = new Date(sanitized);
-                    let pnl: number;
-                    if ((t.status || '').toUpperCase() === 'CLOSED') {
-                        pnl = t.pnl || t.realized_pnl || t.total_pnl || 0;
-                    } else {
-                        const entry = t.entry_price || t.entryPrice || 0;
-                        const current = t.current_price || t.currentPrice || entry;
-                        const lev = t.leverage || 1;
-                        const cap = t.capital || t.position_size || 100;
-                        const pos = (t.side || t.position || '').toUpperCase();
-                        const isLong = pos === 'BUY' || pos === 'LONG';
-                        pnl = entry > 0 ? Math.round((isLong ? current - entry : entry - current) / entry * lev * cap * 10000) / 10000 : 0;
-                    }
-                    return { time: d, pnl, valid: !isNaN(d.getTime()) };
-                })
-                .filter(t => t.valid)
-                .sort((a, b) => a.time.getTime() - b.time.getTime());
-
-            if (parsed.length === 0) return;
-
-            // Group into 1-hour buckets
-            const bucketMap = new Map<string, number>();
-            let cumPnl = 0;
-            parsed.forEach(t => {
-                const hr = new Date(t.time);
-                hr.setMinutes(0, 0, 0);
-                const key = hr.toISOString();
-                cumPnl += t.pnl;
-                bucketMap.set(key, cumPnl);
-            });
-
-            const labels = Array.from(bucketMap.keys()).map(iso => {
-                const d = new Date(iso);
-                return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
-            });
-            const pnlData = Array.from(bucketMap.values());
-
-            // Destroy previous chart
-            if (chartRef.current) chartRef.current.destroy();
-
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return;
-
-            // Gradient fill
-            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-            const isPositive = pnlData[pnlData.length - 1] >= 0;
-            gradient.addColorStop(0, isPositive ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)');
-            gradient.addColorStop(1, 'rgba(0,0,0,0)');
-
-            chartRef.current = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels,
-                    datasets: [{
-                        label: 'Total PNL ($)',
-                        data: pnlData,
-                        borderColor: isPositive ? '#22C55E' : '#EF4444',
-                        backgroundColor: gradient,
-                        borderWidth: 2,
-                        pointRadius: 3,
-                        pointBackgroundColor: isPositive ? '#22C55E' : '#EF4444',
-                        fill: true,
-                        tension: 0.3,
-                    }],
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        tooltip: {
-                            callbacks: {
-                                label: (ctx: any) => `PNL: $${ctx.parsed.y.toFixed(2)}`,
-                            },
-                        },
-                    },
-                    scales: {
-                        x: {
-                            ticks: { color: '#6B7280', font: { size: 9 }, maxRotation: 0 },
-                            grid: { color: 'rgba(255,255,255,0.04)' },
-                        },
-                        y: {
-                            position: 'left' as const,
-                            ticks: {
-                                color: '#6B7280', font: { size: 10 },
-                                callback: (v: any) => `$${v}`,
-                            },
-                            grid: { color: 'rgba(255,255,255,0.04)' },
-                        },
-                    },
-                },
-            });
-        });
-
-        return () => { if (chartRef.current) chartRef.current.destroy(); };
-    }, [allTrades]);
-
+export function PnlCard({ trades, coinDcxBalance, binanceBalance, paperPnl = 0, livePnl = 0, paperPct = 0, livePct = 0, activeBots = 0, activeTrades = 0 }: PnlCardProps) {
     const totalBalance = (binanceBalance ?? 0) + (coinDcxBalance ?? 0);
-    const hasAnyBalance = binanceBalance != null || coinDcxBalance != null;
+    const pSign = (v: number) => v >= 0 ? '+' : '';
+    const pnlColor = (v: number) => v >= 0 ? '#00FF88' : '#FF3B5C';
+    const pnlShadow = (v: number) => v >= 0 ? '0 0 10px rgba(0,255,136,0.4)' : '0 0 10px rgba(255,59,92,0.4)';
+    const fmtAmt = (v: number) => `${pSign(v)}$${Math.abs(v).toFixed(2)}`;
 
     return (
         <div style={{
-            background: 'rgba(17, 24, 39, 0.8)',
-            backdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255,255,255,0.06)',
-            borderRadius: '16px',
-            padding: '12px 16px',
-            position: 'relative' as const,
-            overflow: 'hidden',
+            background: 'linear-gradient(160deg, rgba(8,14,26,0.97) 0%, rgba(4,8,16,0.99) 100%)',
+            backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+            border: '1px solid rgba(0,229,255,0.1)',
+            borderRadius: 22, padding: '14px 16px 16px',
+            position: 'relative' as const, overflow: 'hidden',
+            boxShadow: '0 0 40px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.04)',
+            display: 'flex', flexDirection: 'column' as const,
         }}>
-            {/* Top accent line matching P&L direction */}
+            {/* Top accent */}
             <div style={{
-                position: 'absolute' as const, top: 0, left: 0, right: 0, height: '3px',
-                background: `linear-gradient(90deg, ${mainColor}, transparent)`,
+                position: 'absolute' as const, top: 0, left: 0, right: 0, height: '1px',
+                background: 'linear-gradient(90deg, transparent, rgba(0,229,255,0.5), transparent)',
             }} />
 
-            {/* Header row: label + combined P&L */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '1.5px', color: '#9CA3AF' }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '2.5px', color: '#4B6080' }}>
                     Wallet Balance
                 </div>
+                {(binanceBalance != null || coinDcxBalance != null) && (
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#6B7280', fontFamily: 'var(--font-mono)' }}>
+                        ${totalBalance.toFixed(2)}
+                    </div>
+                )}
             </div>
 
-            {/* Exchange balances */}
-            <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '8px', marginBottom: hasAnyBalance ? '10px' : '0' }}>
-                {/* Binance */}
+            {/* Grid: exchange row | partition | pnl row | bots row */}
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gridTemplateRows: '1fr auto 1fr 1fr',
+                gap: 8,
+                flex: 1,
+            }}>
+                {/* Row 1: Binance | CoinDCX */}
                 <div style={{
-                    flex: 1, padding: '10px 12px', borderRadius: '10px',
-                    background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)',
+                    padding: '10px 12px', borderRadius: 12,
+                    background: 'rgba(240,185,11,0.05)',
+                    border: '1px solid rgba(240,185,11,0.15)',
+                    display: 'flex', flexDirection: 'column' as const,
+                    justifyContent: 'space-between',
                 }}>
-                    <div style={{ fontSize: '9px', fontWeight: 600, color: '#F59E0B', marginBottom: '4px', letterSpacing: '0.5px' }}>🔶 BINANCE</div>
-                    {binanceBalance != null ? (
-                        <div style={{ fontSize: '16px', fontWeight: 700, color: '#F0F4F8', fontFamily: 'monospace' }}>
-                            ${binanceBalance.toFixed(2)}
-                            <span style={{ fontSize: '9px', color: '#6B7280', marginLeft: '4px' }}>USDT</span>
-                        </div>
-                    ) : (
-                        <div style={{ fontSize: '11px', color: '#4B5563', fontStyle: 'italic' }}>Not Connected</div>
-                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ fontSize: 12 }}>🔶</span>
+                        <span style={{ fontSize: '9px', fontWeight: 700, color: '#F0B90B', letterSpacing: '1px' }}>BINANCE</span>
+                        {binanceBalance != null && <span style={{ fontSize: 9 }}>🔒</span>}
+                    </div>
+                    <div style={{ fontSize: '17px', fontWeight: 800, fontFamily: 'var(--font-mono, monospace)', color: '#E8EDF5', lineHeight: 1 }}>
+                        {binanceBalance != null ? `$${binanceBalance.toFixed(2)}` : <span style={{ fontSize: 11, color: '#3D4F63', fontStyle: 'italic' }}>—</span>}
+                        {binanceBalance != null && <span style={{ fontSize: 9, color: '#4B6080', marginLeft: 3 }}>USDT</span>}
+                    </div>
                 </div>
 
-                {/* CoinDCX */}
                 <div style={{
-                    flex: 1, padding: '10px 12px', borderRadius: '10px',
-                    background: 'rgba(14,165,233,0.06)', border: '1px solid rgba(14,165,233,0.15)',
+                    padding: '10px 12px', borderRadius: 12,
+                    background: 'rgba(14,165,233,0.05)',
+                    border: '1px solid rgba(14,165,233,0.15)',
+                    display: 'flex', flexDirection: 'column' as const,
+                    justifyContent: 'space-between',
                 }}>
-                    <div style={{ fontSize: '9px', fontWeight: 600, color: '#0EA5E9', marginBottom: '4px', letterSpacing: '0.5px' }}>🇮🇳 COINDCX</div>
-                    {coinDcxBalance != null ? (
-                        <div style={{ fontSize: '16px', fontWeight: 700, color: '#F0F4F8', fontFamily: 'monospace' }}>
-                            ${coinDcxBalance.toFixed(2)}
-                            <span style={{ fontSize: '9px', color: '#6B7280', marginLeft: '4px' }}>USDT</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ fontSize: 12 }}>🇮🇳</span>
+                        <span style={{ fontSize: '9px', fontWeight: 700, color: '#0EA5E9', letterSpacing: '1px' }}>COINDCX</span>
+                        {coinDcxBalance != null && <span style={{ fontSize: 9 }}>🔒</span>}
+                    </div>
+                    <div style={{ fontSize: '17px', fontWeight: 800, fontFamily: 'var(--font-mono, monospace)', color: '#E8EDF5', lineHeight: 1 }}>
+                        {coinDcxBalance != null ? `$${coinDcxBalance.toFixed(2)}` : <span style={{ fontSize: 11, color: '#3D4F63', fontStyle: 'italic' }}>—</span>}
+                        {coinDcxBalance != null && <span style={{ fontSize: 9, color: '#4B6080', marginLeft: 3 }}>USDT</span>}
+                    </div>
+                </div>
+
+                {/* Partition — auto height, spans both columns */}
+                <div style={{
+                    gridColumn: '1 / -1',
+                    height: 1,
+                    background: 'linear-gradient(90deg, transparent, rgba(0,229,255,0.12), transparent)',
+                    margin: '0 2px',
+                    alignSelf: 'center' as const,
+                }} />
+
+                {/* Row 2: Paper PnL | Live PnL */}
+                <div style={{
+                    padding: '10px 12px', borderRadius: 12,
+                    background: 'rgba(0,255,136,0.04)',
+                    border: '1px solid rgba(0,255,136,0.1)',
+                    display: 'flex', flexDirection: 'column' as const,
+                    justifyContent: 'space-between',
+                }}>
+                    <div style={{ fontSize: '9px', fontWeight: 700, color: '#4B6080', letterSpacing: '1px', textTransform: 'uppercase' as const }}>Paper PnL</div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' as const }}>
+                        <div style={{ fontSize: '22px', fontWeight: 800, fontFamily: 'var(--font-mono, monospace)', color: pnlColor(paperPnl), textShadow: pnlShadow(paperPnl), lineHeight: 1 }}>
+                            {fmtAmt(paperPnl)}
                         </div>
-                    ) : (
-                        <div style={{ fontSize: '11px', color: '#4B5563', fontStyle: 'italic' }}>Not Connected</div>
-                    )}
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: pnlColor(paperPnl) }}>
+                            {pSign(paperPct)}{Math.abs(paperPct).toFixed(1)}%
+                        </div>
+                    </div>
+                </div>
+
+                <div style={{
+                    padding: '10px 12px', borderRadius: 12,
+                    background: 'rgba(255,184,0,0.04)',
+                    border: '1px solid rgba(255,184,0,0.1)',
+                    display: 'flex', flexDirection: 'column' as const,
+                    justifyContent: 'space-between',
+                }}>
+                    <div style={{ fontSize: '9px', fontWeight: 700, color: '#4B6080', letterSpacing: '1px', textTransform: 'uppercase' as const }}>Live PnL</div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' as const }}>
+                        <div style={{ fontSize: '22px', fontWeight: 800, fontFamily: 'var(--font-mono, monospace)', color: pnlColor(livePnl), textShadow: pnlShadow(livePnl), lineHeight: 1 }}>
+                            {fmtAmt(livePnl)}
+                        </div>
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: pnlColor(livePnl) }}>
+                            {pSign(livePct)}{Math.abs(livePct).toFixed(1)}%
+                        </div>
+                    </div>
+                </div>
+
+                {/* Row 3: Active Bots | Active Trades (no icons) */}
+                <div style={{
+                    padding: '10px 12px', borderRadius: 12,
+                    background: 'rgba(0,229,255,0.04)',
+                    border: '1px solid rgba(0,229,255,0.08)',
+                    display: 'flex', flexDirection: 'column' as const,
+                    justifyContent: 'space-between',
+                }}>
+                    <div style={{ fontSize: '9px', color: '#4B6080', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase' as const }}>Active Bots</div>
+                    <div style={{ fontSize: '28px', fontWeight: 800, color: '#00E5FF', fontFamily: 'var(--font-mono)', lineHeight: 1 }}>
+                        {activeBots}
+                    </div>
+                </div>
+
+                <div style={{
+                    padding: '10px 12px', borderRadius: 12,
+                    background: 'rgba(0,229,255,0.04)',
+                    border: '1px solid rgba(0,229,255,0.08)',
+                    display: 'flex', flexDirection: 'column' as const,
+                    justifyContent: 'space-between',
+                }}>
+                    <div style={{ fontSize: '9px', color: '#4B6080', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase' as const }}>Active Trades</div>
+                    <div style={{ fontSize: '28px', fontWeight: 800, color: '#00E5FF', fontFamily: 'var(--font-mono)', lineHeight: 1 }}>
+                        {activeTrades}
+                    </div>
                 </div>
             </div>
         </div>
@@ -511,13 +623,9 @@ export function SignalSummaryTable({ coinStates, multi }: SignalSummaryProps) {
     };
 
     if (coins.length === 0) {
-        return (
-            <div className="card-gradient rounded-xl p-12 text-center">
-                <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(8,145,178,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: '20px' }}>📡</div>
-                <div style={{ color: '#9CA3AF', fontSize: '14px' }}>Waiting for engine analysis cycle...</div>
-            </div>
-        );
+        return null;
     }
+
 
     const filtered = selectedCoins.length > 0 ? coins.filter((c: any) => selectedCoins.includes(c.symbol)) : coins;
     const sorted = [...filtered].sort((a: any, b: any) => {
@@ -578,8 +686,8 @@ export function SignalSummaryTable({ coinStates, multi }: SignalSummaryProps) {
         <div>
             {/* Header */}
             <div style={{ marginBottom: '16px' }}>
-                <h2 style={{ fontSize: '22px', fontWeight: 700, color: '#06B6D4', margin: 0 }}>Bot Scan Summary <span style={{ fontSize: '14px', fontWeight: 600, color: '#6B7280' }}>· Cycle #{liveMulti?.cycle || 0}</span></h2>
-                <p style={{ fontSize: '13px', color: '#6B7280', marginTop: '4px' }}>Synaptic Adaptive · Auto-refreshes every {Math.round(refreshMs / 1000)}s</p>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: '#00E5FF', margin: 0, textShadow: '0 0 12px rgba(0,229,255,0.3)' }}>Bot Scan Summary <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(0,229,255,0.4)', fontFamily: 'var(--font-mono, monospace)' }}>· Cycle #{liveMulti?.cycle || 0}</span></h2>
+                <p style={{ fontSize: 12, color: 'rgba(0,229,255,0.25)', marginTop: 4, fontFamily: 'var(--font-mono, monospace)' }}>Synaptic Adaptive · Auto-refreshes every {Math.round(refreshMs / 1000)}s</p>
             </div>
 
             {/* Stats Bar */}
@@ -693,16 +801,19 @@ export function SignalSummaryTable({ coinStates, multi }: SignalSummaryProps) {
                                 else if (action.includes('SKIP') || action.includes('VETO') || action.includes('CONFLICT') || action.includes('CRASH')) { dLabel = 'NOT ELIGIBLE'; dColor = '#EF4444'; dBg = 'rgba(239,68,68,0.08)'; }
 
                                 return (
-                                    <tr key={c.symbol} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: isE ? 'rgba(34,197,94,0.04)' : 'transparent' }}>
-                                        <td style={{ padding: '8px 8px', color: '#4B5563', fontSize: '10px', fontWeight: 600 }}>{idx + 1}</td>
-                                        <td style={{ padding: '8px 8px' }}><span style={{ fontSize: '10px', color: '#06B6D4', fontWeight: 600 }}>Synaptic Adaptive</span></td>
-                                        <td style={{ padding: '8px 8px' }}><div style={{ fontWeight: 700, color: '#F0F4F8', fontSize: '15px' }}>{(c.symbol || '').replace('USDT', '')}</div></td>
-                                        <td style={{ padding: '8px 8px', textAlign: 'center' }}><span style={{ background: regBg, color: regColor(regime), padding: '3px 10px', borderRadius: '10px', fontSize: '11px', fontWeight: 700 }}>{regime}</span></td>
-                                        <td style={{ padding: '8px 8px', textAlign: 'center', fontWeight: 700, fontSize: '15px', color: conf > 80 ? '#22C55E' : conf > 60 ? '#0EA5E9' : conf > 40 ? '#F59E0B' : '#6B7280' }}>{conf.toFixed(1)}%</td>
-                                        <td style={{ padding: '8px 8px', textAlign: 'center' }}><span style={{ background: dBg, color: dColor, padding: '4px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: 700 }}>{dLabel}</span></td>
-                                        <td style={{ padding: '8px 8px', fontSize: '13px', color: '#9CA3AF', maxWidth: '200px' }}>{getReason(c)}</td>
-                                        <td style={{ padding: '8px 8px', textAlign: 'center', fontFamily: 'monospace', fontSize: '13px', fontWeight: 700, color: '#A78BFA' }}>{liveMulti?.cycle || '—'}</td>
-                                        <td style={{ padding: '8px 8px', textAlign: 'center', fontFamily: 'monospace', fontSize: '12px', color: '#6B7280' }}>{formatIST(lastCycle)}</td>
+                                    <tr key={c.symbol}
+                                        style={{ borderBottom: '1px solid rgba(0,229,255,0.04)', background: isE ? 'rgba(0,255,136,0.03)' : 'transparent', transition: 'background 0.2s, box-shadow 0.2s' }}
+                                        onMouseEnter={e => (e.currentTarget.style.background = isE ? 'rgba(0,255,136,0.06)' : 'rgba(0,229,255,0.04)')}
+                                        onMouseLeave={e => (e.currentTarget.style.background = isE ? 'rgba(0,255,136,0.03)' : 'transparent')}>
+                                        <td style={{ padding: '8px 8px', color: 'rgba(0,229,255,0.3)', fontSize: 10, fontWeight: 600, fontFamily: 'var(--font-mono, monospace)' }}>{idx + 1}</td>
+                                        <td style={{ padding: '8px 8px' }}><span style={{ fontSize: 10, color: '#00E5FF', fontWeight: 700 }}>Synaptic Adaptive</span></td>
+                                        <td style={{ padding: '8px 8px' }}><div style={{ fontWeight: 800, color: '#E8EDF5', fontSize: 14, fontFamily: 'var(--font-mono, monospace)', letterSpacing: '-0.3px' }}>{(c.symbol || '').replace('USDT', '')}</div></td>
+                                        <td style={{ padding: '8px 8px', textAlign: 'center' }}><span style={{ background: regBg, color: regColor(regime), padding: '3px 10px', borderRadius: 10, fontSize: 10, fontWeight: 700, textShadow: `0 0 6px ${regColor(regime)}66` }}>{regime}</span></td>
+                                        <td style={{ padding: '8px 8px', textAlign: 'center', fontWeight: 800, fontSize: 14, fontFamily: 'var(--font-mono, monospace)', color: conf > 80 ? '#00FF88' : conf > 60 ? '#00E5FF' : conf > 40 ? '#FFB300' : '#4B5563', textShadow: conf > 80 ? '0 0 8px rgba(0,255,136,0.4)' : undefined }}>{conf.toFixed(1)}%</td>
+                                        <td style={{ padding: '8px 8px', textAlign: 'center' }}><span style={{ background: dBg, color: dColor, padding: '3px 10px', borderRadius: 10, fontSize: 10, fontWeight: 700 }}>{dLabel}</span></td>
+                                        <td style={{ padding: '8px 8px', fontSize: 12, color: 'rgba(180,200,220,0.6)', maxWidth: 200 }}>{getReason(c)}</td>
+                                        <td style={{ padding: '8px 8px', textAlign: 'center', fontFamily: 'var(--font-mono, monospace)', fontSize: 12, fontWeight: 700, color: '#A78BFA' }}>{liveMulti?.cycle || '—'}</td>
+                                        <td style={{ padding: '8px 8px', textAlign: 'center', fontFamily: 'var(--font-mono, monospace)', fontSize: 11, color: 'rgba(0,229,255,0.3)' }}>{formatIST(lastCycle)}</td>
                                     </tr>
                                 );
                             })}

@@ -105,13 +105,22 @@ export function BotCard({ bot, onToggle, onDelete, liveTradeCount, trades = [], 
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       style={{
-        background: 'linear-gradient(145deg, var(--color-surface-2) 0%, var(--color-surface-3) 100%)',
-        border: `1px solid ${isRunning ? brain.color + '28' : 'var(--color-border)'}`,
+        background: 'rgba(8, 14, 26, 0.8)',
+        backdropFilter: 'blur(14px)',
+        WebkitBackdropFilter: 'blur(14px)',
+        border: `1px solid ${isRunning ? brain.color + '35' : 'rgba(0,229,255,0.08)'}`,
         borderRadius: 'var(--radius-lg)',
-        boxShadow: isRunning ? `0 0 24px ${brain.glow}, var(--shadow-card)` : 'var(--shadow-card)',
+        boxShadow: isRunning
+          ? `0 0 32px ${brain.glow}, 0 0 0 1px ${brain.color}15, var(--shadow-card)`
+          : 'var(--shadow-card)',
         overflow: 'hidden',
-        transition: 'border-color 0.3s, box-shadow 0.3s',
+        transition: 'border-color 0.3s, box-shadow 0.3s, transform 0.3s',
         position: 'relative',
+        animation: isRunning ? 'breatheBorder 3s ease-in-out infinite' : undefined,
+      }}
+      whileHover={{
+        boxShadow: `0 0 48px ${brain.glow}, 0 8px 40px rgba(0,0,0,0.7)`,
+        translateY: -2,
       }}
     >
       {/* ── Vertical accent bar ── */}
@@ -131,15 +140,31 @@ export function BotCard({ bot, onToggle, onDelete, liveTradeCount, trades = [], 
       >
         {/* Left: Bot identity */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, flex: '0 0 260px' }}>
-          {/* Brain icon */}
-          <div style={{
-            width: 46, height: 46, borderRadius: 'var(--radius-md)', flexShrink: 0,
-            background: `linear-gradient(135deg, ${brain.color}20, ${brain.color}10)`,
-            border: `1px solid ${brain.color}30`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 20,
-          }}>
-            {brain.icon}
+          {/* Avatar with rotating ring */}
+          <div style={{ position: 'relative', width: 54, height: 54, flexShrink: 0 }}>
+            {/* Rotating outer ring for running bots */}
+            {isRunning && (
+              <div style={{
+                position: 'absolute', inset: -3, borderRadius: '50%',
+                background: `conic-gradient(${brain.color} 0deg, ${brain.color}00 180deg, ${brain.color}88 360deg)`,
+                animation: 'radarSweep 3s linear infinite',
+              }} />
+            )}
+            {/* Avatar circle */}
+            <div style={{
+              position: 'relative', width: 54, height: 54, borderRadius: '50%',
+              background: `linear-gradient(135deg, ${brain.color}25, rgba(0,0,0,0.6))`,
+              border: `2px solid ${brain.color}40`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 22, zIndex: 1, overflow: 'hidden',
+            }}>
+              <img
+                src="/brain-circle.png"
+                alt="brain"
+                style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+              />
+
+            </div>
           </div>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 'var(--text-md)', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -169,31 +194,31 @@ export function BotCard({ bot, onToggle, onDelete, liveTradeCount, trades = [], 
         <div style={{ display: 'flex', gap: 24, flex: 1, alignItems: 'center' }}>
           {/* Active Trades */}
           <div style={{ textAlign: 'center', minWidth: 52 }}>
-            <div style={{ fontSize: 'var(--text-lg)', fontWeight: 800, color: activeTrades.length > 0 ? 'var(--color-info)' : 'var(--color-text)' }}>
+            <div style={{ fontSize: 20, fontWeight: 800, fontFamily: 'var(--font-mono)', color: activeTrades.length > 0 ? '#00E5FF' : 'var(--color-text)', textShadow: activeTrades.length > 0 ? '0 0 10px rgba(0,229,255,0.4)' : undefined }}>
               {activeTrades.length}
             </div>
             <div className="stat-label">Active</div>
           </div>
-          <div style={{ width: 1, height: 32, background: 'var(--color-border-subtle)' }} />
+          <div style={{ width: 1, height: 32, background: 'rgba(0,229,255,0.08)' }} />
           {/* Total PnL */}
           <div style={{ textAlign: 'center', minWidth: 80 }}>
-            <div style={{ fontSize: 'var(--text-md)', fontWeight: 800, fontFamily: 'monospace', color: pnlColor(totalPnl) }}>
+            <div style={{ fontSize: 'var(--text-md)', fontWeight: 800, fontFamily: 'var(--font-mono)', color: pnlColor(totalPnl), textShadow: totalPnl >= 0 ? '0 0 10px rgba(0,255,136,0.4)' : '0 0 10px rgba(255,59,92,0.4)' }}>
               {sign(totalPnl)}${Math.abs(totalPnl).toFixed(2)}
             </div>
             <div className="stat-label">Total PnL</div>
           </div>
-          <div style={{ width: 1, height: 32, background: 'var(--color-border-subtle)' }} />
+          <div style={{ width: 1, height: 32, background: 'rgba(0,229,255,0.08)' }} />
           {/* Win Rate */}
           <div style={{ textAlign: 'center', minWidth: 56 }}>
-            <div style={{ fontSize: 'var(--text-md)', fontWeight: 700, fontFamily: 'monospace', color: winRate !== null && winRate >= 50 ? 'var(--color-success)' : 'var(--color-text-secondary)' }}>
+            <div style={{ fontSize: 'var(--text-md)', fontWeight: 700, fontFamily: 'var(--font-mono)', color: winRate !== null && winRate >= 50 ? '#00FF88' : 'var(--color-text-secondary)', textShadow: winRate !== null && winRate >= 50 ? '0 0 8px rgba(0,255,136,0.35)' : undefined }}>
               {winRate !== null ? `${winRate.toFixed(0)}%` : '—'}
             </div>
             <div className="stat-label">Win Rate</div>
           </div>
-          <div style={{ width: 1, height: 32, background: 'var(--color-border-subtle)' }} />
+          <div style={{ width: 1, height: 32, background: 'rgba(0,229,255,0.08)' }} />
           {/* ROI */}
           <div style={{ textAlign: 'center', minWidth: 64 }}>
-            <div style={{ fontSize: 'var(--text-md)', fontWeight: 700, fontFamily: 'monospace', color: pnlColor(roiPct) }}>
+            <div style={{ fontSize: 'var(--text-md)', fontWeight: 700, fontFamily: 'var(--font-mono)', color: roiPct >= 0 ? '#00FF88' : '#FF3B5C', textShadow: roiPct >= 0 ? '0 0 8px rgba(0,255,136,0.35)' : '0 0 8px rgba(255,59,92,0.35)' }}>
               {sign(roiPct)}{roiPct.toFixed(1)}%
             </div>
             <div className="stat-label">ROI</div>
