@@ -232,6 +232,13 @@ CAPITAL_PER_COIN_PCT = 0.05     # 5% of balance per coin (max 15 = 75% deployed)
 SCAN_INTERVAL_CYCLES = 4        # Re-scan top coins every N analysis cycles (4 × 15m = 1h)
 MULTI_COIN_MODE = True          # Enable multi-coin scanning
 
+# ─── QuickScalper ──────────────────────────────────────────────────────────────────────────────────
+SCALPER_ENABLED = os.getenv("SCALPER_ENABLED", "true").lower() == "true"
+SCALPER_LEVERAGE = int(os.getenv("SCALPER_LEVERAGE", "20"))          # 20-50x; clipped in QuickScalperBrain
+SCALPER_CAPITAL = float(os.getenv("SCALPER_CAPITAL", "50"))          # Capital per scalp trade ($)
+SCALPER_MAX_POSITIONS = int(os.getenv("SCALPER_MAX_POSITIONS", "3")) # Max concurrent scalp trades
+
+
 # ─── Telegram Notifications ──────────────────────────────────────────────────────
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")

@@ -29,6 +29,7 @@ import sentiment_engine as _sent_mod
 import orderflow_engine as _of_mod
 import coindcx_client as cdx
 from llm_reasoning import AthenaEngine
+from scalper_brain import QuickScalperBrain
 
 # ─── Logging Setup ───────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -494,6 +495,68 @@ class RegimeMasterBot:
         raw_results.sort(key=lambda x: x.get("conviction", 0), reverse=True)
         logger.info("📋 Deployment pipeline: %d eligible coins after analysis: %s",
                     len(raw_results), [r['symbol'] for r in raw_results])
+
+        # ── 4b. QuickScalper parallel scan ────────────────────────────
+        # Runs alongside HMM on live coins — fires on 1m/5m exhaustion signals.
+        # Uses separate position cap (SCALPER_MAX_POSITIONS).
+        if config.SCALPER_ENABLED:
+            try:
+                from data_pipeline import _get_binance_client
+                scalper_client = _get_binance_client()
+                active_scalps = [t for t in tradebook.get_active_trades()
+                                 if t.get("bot_name", "").startswith("QuickScalper")]
+                scalp_slots = max(0, config.SCALPER_MAX_POSITIONS - len(active_scalps))
+
+                if scalp_slots > 0 and scalper_client:
+                    for sym in symbols[:config.SCALPER_MAX_POSITIONS + 2]:  # scan a few extra
+                        if scalp_slots <= 0:
+                            break
+                        # Skip if already in a scalp for this symbol
+                        if any(t["symbol"] == sym for t in active_scalps):
+                            continue
+                        try:
+                            brain = QuickScalperBrain(scalper_client, sym, config.SCALPER_LEVERAGE)
+                            result = brain.analyze()
+                            sig = result.get("signal", "VETO")
+                            conf = result.get("confidence", 0.0)
+                            if sig in ("BUY", "SELL") and conf >= 0.60:
+                                side = "BUY" if sig == "BUY" else "SELL"
+                                price = result["meta"].get("close", 0)
+                                if price <= 0:
+                                    continue
+                                # SL = 0.25% from entry, TP = 0.5% from entry (scalper targets)
+                                sl_pct = 0.0025 / config.SCALPER_LEVERAGE
+                                tp_pct = 0.005 / config.SCALPER_LEVERAGE
+                                if side == "BUY":
+                                    sl = round(price * (1 - sl_pct), 6)
+                                    tp = round(price * (1 + tp_pct), 6)
+                                else:
+                                    sl = round(price * (1 + sl_pct), 6)
+                                    tp = round(price * (1 - tp_pct), 6)
+                                qty = (config.SCALPER_CAPITAL * config.SCALPER_LEVERAGE) / price
+                                atr_est = price * 0.002  # 0.2% as proxy ATR for scalper
+                                user_id = _tick_active_bots[0]["user_id"] if _tick_active_bots else config.ENGINE_USER_ID
+                                tradebook.open_trade(
+                                    symbol=sym, side=side, leverage=config.SCALPER_LEVERAGE,
+                                    quantity=round(qty, 6), entry_price=price,
+                                    stop_loss=sl, take_profit=tp, atr=atr_est,
+                                    regime="SCALP", confidence=conf,
+                                    reason=result.get("reason", "QuickScalper"),
+                                    capital=config.SCALPER_CAPITAL,
+                                    mode="PAPER" if config.PAPER_TRADE else "LIVE",
+                                    user_id=user_id,
+                                    bot_name=f"QuickScalper {config.SCALPER_LEVERAGE}x",
+                                )
+                                logger.info(
+                                    "⚡ QuickScalper ENTRY: %s %s @ %.6f conf=%.2f SL=%.6f TP=%.6f",
+                                    sym, side, price, conf, sl, tp
+                                )
+                                scalp_slots -= 1
+                        except Exception as e:
+                            logger.debug("QuickScalper error for %s: %s", sym, e)
+            except Exception as e:
+                logger.warning("⚡ QuickScalper scan failed: %s", e)
+
 
         # ── Loss streak cooldown: pause 30 min after 5 consecutive losses ──
         LOSS_STREAK_LIMIT = 5
