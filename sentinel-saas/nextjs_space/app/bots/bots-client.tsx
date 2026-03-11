@@ -28,6 +28,14 @@ const BOT_MODELS = [
     tagline: 'HMM + Gemini AI · Contextual Reasoning',
     description: 'Every signal is validated by Gemini AI with real-time market context before execution.',
   },
+  {
+    id: 'quickscalper',
+    name: 'QuickScalper',
+    color: '#F59E0B',
+    icon: '⚡',
+    tagline: '1m/5m · VWAP + StochRSI · Micro-Momentum',
+    description: 'Ultra-fast scalper targeting 0.5% micro-moves using order book L2 spread, StochRSI exhaustion, and buy/sell tape analysis. 20x–50x virtual leverage.',
+  },
 ];
 
 interface BotsClientProps { bots: any[]; sessions?: any[]; perfSummary?: any; }
@@ -46,6 +54,7 @@ export function BotsClient({ bots: initialBots }: BotsClientProps) {
   const [deployMode, setDeployMode] = useState('paper');
   const [deployMaxTrades, setDeployMaxTrades] = useState(25);
   const [deployCapitalPerTrade, setDeployCapitalPerTrade] = useState(100);
+  const [deployLeverage, setDeployLeverage] = useState(20); // for quickscalper
   const [verifying, setVerifying] = useState(false);
   const [verifyStatus, setVerifyStatus] = useState<'idle' | 'ok' | 'fail'>('idle');
   const [verifyBalance, setVerifyBalance] = useState<number | null>(null);
@@ -456,6 +465,41 @@ export function BotsClient({ bots: initialBots }: BotsClientProps) {
                     </button>
                   </motion.div>
                 )}
+
+                {/* ── QuickScalper: high-leverage warning + leverage tier ── */}
+                {deployModel === 'quickscalper' && (
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
+                    style={{ marginBottom: 20, overflow: 'hidden' }}>
+                    <div style={{
+                      padding: '12px 14px', borderRadius: 'var(--radius-md)',
+                      background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)',
+                      fontSize: 'var(--text-xs)', color: '#FCD34D', lineHeight: 1.6, marginBottom: 12,
+                    }}>
+                      ⚡ <strong>QuickScalper uses 20x–50x virtual leverage.</strong> This brain targets
+                      0.5% micro-moves on 1m candles using VWAP, StochRSI and L2 order-book spread
+                      analysis. <strong>Paper mode is strongly recommended</strong> before going live.
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', marginBottom: 6, fontWeight: 600 }}>
+                        Leverage Tier
+                      </label>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        {[20, 30, 50].map(lev => (
+                          <button key={lev} onClick={() => setDeployLeverage(lev)} style={{
+                            flex: 1, padding: '8px 0', borderRadius: 'var(--radius-md)',
+                            background: deployLeverage === lev ? 'rgba(245,158,11,0.15)' : 'rgba(255,255,255,0.03)',
+                            border: `1.5px solid ${deployLeverage === lev ? '#F59E0B' : 'var(--color-border)'}`,
+                            color: deployLeverage === lev ? '#F59E0B' : 'var(--color-text-secondary)',
+                            fontSize: 'var(--text-sm)', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
+                          }}>
+                            {lev}×
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
 
                 {/* ── Capital Settings ── */}
                 <div style={{ marginBottom: 4 }}>

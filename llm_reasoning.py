@@ -26,7 +26,14 @@ from typing import Dict, Optional
 
 import config
 
+# Import QuickScalper prompt (optional — won't break if scalper_brain not present)
+try:
+    from scalper_brain import QUICKSCALPER_SYSTEM_PROMPT
+except ImportError:
+    QUICKSCALPER_SYSTEM_PROMPT = None
+
 logger = logging.getLogger("Athena")
+
 
 # ─── Output dataclass ────────────────────────────────────────────────────────
 
