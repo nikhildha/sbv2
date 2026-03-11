@@ -496,8 +496,9 @@ class RegimeMasterBot:
         logger.info("📋 Deployment pipeline: %d eligible coins after analysis: %s",
                     len(raw_results), [r['symbol'] for r in raw_results])
 
-        # ── 4b. QuickScalper parallel scan ────────────────────────────
-        # Runs alongside HMM on live coins — fires on 1m/5m exhaustion signals.
+        # ── 4b. QuickScalper — Gemini-powered execution specialist ────────
+        # Calls Gemini with L2 order book, VWAP, RSI, spread for EXECUTE/IGNORE.
+        # HMM state is passed as CONTEXT only — Gemini makes the full decision.
         # Uses separate position cap (SCALPER_MAX_POSITIONS).
         if config.SCALPER_ENABLED:
             try:
@@ -508,48 +509,67 @@ class RegimeMasterBot:
                 scalp_slots = max(0, config.SCALPER_MAX_POSITIONS - len(active_scalps))
 
                 if scalp_slots > 0 and scalper_client:
-                    for sym in symbols[:config.SCALPER_MAX_POSITIONS + 2]:  # scan a few extra
+                    # HMM brain name as context label for Gemini (not decision input)
+                    current_hmm_state = getattr(self._brain_switcher, "active_brain", "UNKNOWN")
+
+                    for sym in symbols[:config.SCALPER_MAX_POSITIONS + 2]:
                         if scalp_slots <= 0:
                             break
-                        # Skip if already in a scalp for this symbol
                         if any(t["symbol"] == sym for t in active_scalps):
                             continue
                         try:
-                            brain = QuickScalperBrain(scalper_client, sym, config.SCALPER_LEVERAGE)
+                            brain = QuickScalperBrain(
+                                exchange_client=scalper_client,
+                                symbol=sym,
+                                leverage=config.SCALPER_LEVERAGE,
+                                athena_engine=self._athena,   # Gemini decision engine
+                                hmm_state=current_hmm_state,  # Context-only (not decision)
+                            )
                             result = brain.analyze()
-                            sig = result.get("signal", "VETO")
+                            sig  = result.get("signal", "VETO")
                             conf = result.get("confidence", 0.0)
-                            if sig in ("BUY", "SELL") and conf >= 0.60:
-                                side = "BUY" if sig == "BUY" else "SELL"
-                                price = result["meta"].get("close", 0)
+                            meta = result.get("meta", {})
+
+                            if sig in ("BUY", "SELL") and conf >= 0.55:
+                                side  = "BUY" if sig == "BUY" else "SELL"
+                                price = meta.get("close", 0)
                                 if price <= 0:
                                     continue
-                                # SL = 0.25% from entry, TP = 0.5% from entry (scalper targets)
-                                sl_pct = 0.0025 / config.SCALPER_LEVERAGE
-                                tp_pct = 0.005 / config.SCALPER_LEVERAGE
-                                if side == "BUY":
-                                    sl = round(price * (1 - sl_pct), 6)
-                                    tp = round(price * (1 + tp_pct), 6)
-                                else:
-                                    sl = round(price * (1 + sl_pct), 6)
-                                    tp = round(price * (1 - tp_pct), 6)
-                                qty = (config.SCALPER_CAPITAL * config.SCALPER_LEVERAGE) / price
-                                atr_est = price * 0.002  # 0.2% as proxy ATR for scalper
+
+                                # Use Gemini's computed sl/tp prices directly
+                                sl = meta.get("sl_price")
+                                tp = meta.get("tp_price")
+
+                                # Fallback if Gemini didn't provide valid prices
+                                if not sl or float(sl) <= 0:
+                                    sl_pct = 0.004  # 0.4% max stop (from system prompt)
+                                    sl = price * (1 - sl_pct) if side == "BUY" else price * (1 + sl_pct)
+                                if not tp or float(tp) <= 0:
+                                    tp_pct = 0.007  # 0.7% target (mid 0.6-1.0% range)
+                                    tp = price * (1 + tp_pct) if side == "BUY" else price * (1 - tp_pct)
+
+                                qty     = (config.SCALPER_CAPITAL * config.SCALPER_LEVERAGE) / price
+                                atr_est = price * meta.get("atr_pct", 0.002)
                                 user_id = _tick_active_bots[0]["user_id"] if _tick_active_bots else config.ENGINE_USER_ID
+                                entry_type = meta.get("entry_type", "MARKET")
+
                                 tradebook.open_trade(
                                     symbol=sym, side=side, leverage=config.SCALPER_LEVERAGE,
                                     quantity=round(qty, 6), entry_price=price,
-                                    stop_loss=sl, take_profit=tp, atr=atr_est,
-                                    regime="SCALP", confidence=conf,
-                                    reason=result.get("reason", "QuickScalper"),
+                                    stop_loss=round(float(sl), 6), take_profit=round(float(tp), 6),
+                                    atr=atr_est,
+                                    regime="SCALP",
+                                    confidence=conf,
+                                    reason=result.get("reason", "QuickScalper/Gemini"),
                                     capital=config.SCALPER_CAPITAL,
                                     mode="PAPER" if config.PAPER_TRADE else "LIVE",
                                     user_id=user_id,
                                     bot_name=f"QuickScalper {config.SCALPER_LEVERAGE}x",
                                 )
                                 logger.info(
-                                    "⚡ QuickScalper ENTRY: %s %s @ %.6f conf=%.2f SL=%.6f TP=%.6f",
-                                    sym, side, price, conf, sl, tp
+                                    "⚡ QuickScalper ENTRY [Gemini]: %s %s @ %.6f "
+                                    "conf=%.0f%% entry=%s SL=%.6f TP=%.6f",
+                                    sym, side, price, conf * 100, entry_type, float(sl), float(tp)
                                 )
                                 scalp_slots -= 1
                         except Exception as e:
