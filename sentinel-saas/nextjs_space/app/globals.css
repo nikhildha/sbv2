@@ -658,3 +658,14 @@
 [data-hydration-error] {
   display: none !important;
 }
+
+@keyframes blink {
+  0%, 100% {
+    opacity: 1;
+    filter: drop-shadow(0 0 4px rgba(240,185,11,0.8));
+  }
+  50% {
+    opacity: 0.2;
+    filter: none;
+  }
+}

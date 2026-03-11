@@ -52,8 +52,8 @@ export function Header() {
             <Link href={session ? '/dashboard' : '/'} className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
               <Shield className="w-7 h-7 text-[var(--color-primary)]" />
               <div>
-                <span className="text-2xl font-bold text-gradient">Synaptic</span>
-                <div style={{ fontSize: '8px', fontWeight: 700, letterSpacing: '2.5px', textTransform: 'uppercase' as any, color: '#F0B90B', marginTop: '-2px', animation: 'blink 2s ease-in-out infinite' }}>AI · Crypto · Bots</div>
+                <span className="text-2xl font-bold" style={{ color: '#00E5FF', textShadow: '0 0 12px rgba(0,229,255,0.4)' }}>Synaptic</span>
+                <div style={{ fontSize: '8px', fontWeight: 700, letterSpacing: '2.5px', textTransform: 'uppercase', color: '#F0B90B', marginTop: '-2px', animation: 'blink 2.5s ease-in-out infinite' }}>AI · Crypto · Bots</div>
               </div>
             </Link>
 
@@ -61,13 +61,13 @@ export function Header() {
             <nav className="hidden md:flex items-center space-x-6">
               {session ? (
                 <>
-                  <Link href="/dashboard" className="text-[15px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors">
+                  <Link href="/dashboard" className="text-[17px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors">
                     Cockpit
                   </Link>
-                  <Link href="/bots" className="text-[15px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors">
+                  <Link href="/bots" className="text-[17px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors">
                     Bots
                   </Link>
-                  <Link href="/trades" className="text-[15px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors">
+                  <Link href="/trades" className="text-[17px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors">
                     Trade Book
                   </Link>
                   {/* Intelligence page disabled for now
@@ -75,10 +75,10 @@ export function Header() {
                   Intelligence
                 </Link>
                 */}
-                  <Link href="/howto" className="text-[15px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors">
+                  <Link href="/howto" className="text-[17px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors">
                     How To?
                   </Link>
-                  <Link href="/account" className="text-[15px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors">
+                  <Link href="/account" className="text-[17px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors">
                     Account
                   </Link>
                   {(session.user as any)?.role === 'admin' && (
@@ -110,13 +110,20 @@ export function Header() {
                       )}
                     </button>
                   )}
-                  <button
-                    onClick={handleSignOut}
-                    className="flex items-center space-x-1 px-4 py-2 bg-[var(--color-danger)] text-white rounded-lg hover:opacity-90 transition-opacity"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    <span>Logout</span>
-                  </button>
+                  {session && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '12px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 600, color: '#00E5FF' }}>
+                        {(session.user as any)?.name || 'User'} {((session.user as any)?.role === 'admin') ? '(Admin)' : ''}
+                      </span>
+                      <button
+                        onClick={handleSignOut}
+                        className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 rounded-lg transition-all"
+                        title="Logout"
+                      >
+                        <LogOut size={18} />
+                      </button>
+                    </div>
+                  )}
                 </>
               ) : (
                 <>

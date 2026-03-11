@@ -724,7 +724,7 @@ class RegimeMasterBot:
                 tradebook_active_keys.add(pos_key)
                 self._trade_count += 1
                 deployed += 1
-                profile_deployed += 1
+                bot_deployed += 1
 
                 # Collect trade info for batch alert
                 deployed_trades.append({
@@ -739,8 +739,8 @@ class RegimeMasterBot:
                     "profile": profile["label"],
                 })
 
-            if profile_deployed:
-                logger.info("   [%s] deployed %d trades", profile["label"], profile_deployed)
+            if bot_deployed:
+                logger.info("   [%s] deployed %d trades", bot_name, bot_deployed)
 
         # ── Batch Telegram notification for all deployed trades ──
         if deployed_trades:
