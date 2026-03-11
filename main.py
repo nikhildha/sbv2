@@ -93,7 +93,7 @@ class RegimeMasterBot:
         self._multi_tf_brains = {}   # symbol → MultiTFHMMBrain (3 TFs per coin)
         self._coin_states = {}       # symbol → latest state dict (for dashboard)
         self._live_prices = {}       # symbol → {ls, fr, ...} (fetched each cycle)
-        self._BRAIN_CACHE_MAX = 40   # LRU eviction cap (15 coins × 3 TFs = 45, tight to prevent OOM)
+        self._BRAIN_CACHE_MAX = 20   # LRU eviction cap (15 coins × 3 TFs = 45 max; cap at 20 prevents OOM)
 
         # Adaptive Brain Switcher
         self._brain_switcher = BrainSwitcher()
