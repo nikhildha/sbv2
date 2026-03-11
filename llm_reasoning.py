@@ -122,24 +122,15 @@ class AthenaEngine:
         self._decision_log = []  # In-memory log (last 50)
 
     def _ensure_initialized(self):
-        """Lazy-init the Gemini client (new google.genai SDK)."""
+        """Lazy-init the Gemini REST client."""
         if self._initialized:
             return True
-        try:
-            from google import genai
-            if not config.LLM_API_KEY:
-                logger.warning("🏛️ Athena disabled — no GEMINI_API_KEY configured")
-                return False
-            self._client = genai.Client(api_key=config.LLM_API_KEY)
-            self._initialized = True
-            logger.info("🏛️ Athena initialized — model: %s (google.genai SDK)", config.LLM_MODEL)
-            return True
-        except ImportError:
-            logger.warning("🏛️ Athena disabled — google-genai not installed")
+        if not config.LLM_API_KEY:
+            logger.warning("🏛️ Athena disabled — no GEMINI_API_KEY configured")
             return False
-        except Exception as e:
-            logger.warning("🏛️ Athena init failed: %s", e)
-            return False
+        self._initialized = True
+        logger.info("🏛️ Athena initialized — model: %s (REST API)", config.LLM_MODEL)
+        return True
 
     def reset_cycle(self):
         """Call at the start of each analysis cycle to reset rate limiting."""
@@ -186,44 +177,41 @@ class AthenaEngine:
             return self._default_execute(symbol, reason=f"API error: {str(e)[:100]}")
 
     def _call_gemini(self, symbol: str, ctx: dict) -> AthenaDecision:
-        """Make the actual Gemini API call with Google Search grounding."""
-        from google.genai import types
-
-        # Build the prompt with signal context
+        """Make the actual Gemini API call using REST."""
+        import requests
+        
         prompt = self._build_prompt(ctx)
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{config.LLM_MODEL}:generateContent?key={config.LLM_API_KEY}"
+        
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "systemInstruction": {"parts": [{"text": ATHENA_SYSTEM_PROMPT}]},
+            "tools": [{"googleSearch": {}}],
+            "generationConfig": {
+                "temperature": 0.3,
+                "maxOutputTokens": 4096,
+            }
+        }
 
         start = time.time()
-        response = self._client.models.generate_content(
-            model=config.LLM_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=ATHENA_SYSTEM_PROMPT,
-                temperature=0.3,
-                max_output_tokens=4096,
-                # NOTE: response_mime_type incompatible with google_search tool
-                tools=[types.Tool(google_search=types.GoogleSearch())],
-            ),
-        )
-        latency_ms = int((time.time() - start) * 1000)
+        try:
+            resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
+            resp.raise_for_status()
+            resp_data = resp.json()
+        except Exception as e:
+            logger.warning("🏛️ Athena [%s] REST error (fail-open): %s", symbol, e)
+            return self._default_execute(symbol, reason=f"REST API error: {str(e)[:80]}")
 
+        latency_ms = int((time.time() - start) * 1000)
         self._cycle_call_count += 1
 
-        # Extract text from response (new SDK response object)
         raw = ""
         try:
-            # Primary: response.text (new SDK property)
-            if hasattr(response, 'text') and response.text:
-                raw = response.text.strip()
-            # Fallback: candidates → parts → text
-            elif hasattr(response, 'candidates') and response.candidates:
-                for candidate in response.candidates:
-                    if hasattr(candidate, 'content') and candidate.content:
-                        for part in candidate.content.parts:
-                            if hasattr(part, 'text') and part.text:
-                                raw = part.text.strip()
-                                break
-                    if raw:
-                        break
+            candidates = resp_data.get("candidates", [])
+            if candidates:
+                parts = candidates[0].get("content", {}).get("parts", [])
+                if parts:
+                    raw = parts[0].get("text", "").strip()
 
             if not raw:
                 logger.warning("🏛️ Athena [%s] empty response (latency=%dms)", symbol, latency_ms)
