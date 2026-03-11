@@ -342,7 +342,7 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-3xl font-bold mb-1">
-                  Welcome, <span className="text-gradient">{user?.name ?? 'Trader'}</span>
+                  Welcome, <span style={{ color: '#ffffff' }}>{user?.name ?? 'Trader'}</span>
                 </h1>
                 <p className="text-[var(--color-text-secondary)] text-sm">
                   AI Crypto Trading Cockpit — Monitor your bots and market signals

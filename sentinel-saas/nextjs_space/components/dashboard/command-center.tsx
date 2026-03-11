@@ -231,11 +231,11 @@ export function RegimeCard({ regime, confidence, symbol, macroRegime, trend15m, 
                 <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ marginBottom: '4px' }}>
                         <span style={{
-                            fontSize: '10px', fontWeight: 700, letterSpacing: '1.5px',
+                            fontSize: '20px', fontWeight: 700, letterSpacing: '1.5px',
                             color: '#4B6080', textTransform: 'uppercase' as const,
                         }}>Regime: </span>
                         <span style={{
-                            fontSize: '10px', fontWeight: 800, letterSpacing: '1.5px',
+                            fontSize: '20px', fontWeight: 800, letterSpacing: '1.5px',
                             color: info.color, textTransform: 'uppercase' as const,
                             textShadow: `0 0 8px ${info.color}88`,
                         }}>{displayRegime}</span>
