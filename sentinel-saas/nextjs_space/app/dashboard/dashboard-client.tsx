@@ -509,74 +509,21 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
                 );
               })()}
 
-              <PnlCard trades={trades} binanceBalance={walletBalance.binance} coinDcxBalance={walletBalance.coindcx} />
+              <PnlCard
+                trades={trades}
+                binanceBalance={walletBalance.binance}
+                coinDcxBalance={walletBalance.coindcx}
+                paperPnl={liveStats.paperTotalPnl}
+                livePnl={liveStats.liveTotalPnl}
+                paperPct={liveStats.paperPnlPct}
+                livePct={liveStats.livePnlPct}
+                activeBots={liveStats.activeBots}
+                activeTrades={liveStats.activeTrades}
+              />
             </div>
           </motion.div>
 
 
-
-          {/* ═══ Row 2: Quick SaaS Stats ═══ */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-            className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6 mb-8"
-          >
-            <StatsCard
-              title="Active Bots"
-              value={liveStats.activeBots}
-              animated
-            />
-            <StatsCard
-              title="Active Trades"
-              value={`${liveStats.activeTrades} · $${liveStats.usedCapital}${MAX_CAPITAL > 0 ? ` of $${MAX_CAPITAL}` : ''}`}
-              animated
-            />
-            {/* Capital Deployed — wider card with paper/live emphasized */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="card-gradient rounded-xl p-5 glow-hover hover-lift lg:col-span-2"
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
-                <h3 className="text-sm text-[var(--color-text-secondary)]">Capital Deployed</h3>
-                <span style={{ fontSize: '11px', color: '#6B7280', fontFamily: 'monospace' }}>
-                  ${liveStats.totalCapitalDeployed}{MAX_CAPITAL > 0 ? ` / $${MAX_CAPITAL}` : ''}
-                </span>
-              </div>
-              {/* Paper / Live split — used/max format */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '12px' }}>🟢</span>
-                  <span style={{ fontSize: '12px', color: '#9CA3AF' }}>Paper</span>
-                  <span style={{ fontSize: '16px', fontWeight: 700, color: '#22C55E', fontFamily: 'monospace' }}>
-                    ${liveStats.paperCapitalDeployed}
-                    {liveStats.paperMaxCapital > 0 && <span style={{ color: '#6B7280', fontWeight: 400, fontSize: '12px' }}>/{liveStats.paperMaxCapital}</span>}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '16px', fontWeight: 700, color: '#EF4444', fontFamily: 'monospace' }}>
-                    ${liveStats.liveCapitalDeployed}
-                    {liveStats.liveMaxCapital > 0 && <span style={{ color: '#6B7280', fontWeight: 400, fontSize: '12px' }}>/{liveStats.liveMaxCapital}</span>}
-                  </span>
-                  <span style={{ fontSize: '12px', color: '#9CA3AF' }}>Live</span>
-                  <span style={{ fontSize: '12px' }}>🔴</span>
-                </div>
-              </div>
-            </motion.div>
-            <StatsCard
-              title="Total Paper PnL"
-              value={formatCurrency(liveStats.paperTotalPnl)}
-              trend={liveStats.paperTotalPnl >= 0 ? 'up' : 'down'}
-              trendValue={`${liveStats.paperPnlPct >= 0 ? '+' : ''}${liveStats.paperPnlPct.toFixed(1)}%`}
-            />
-            <StatsCard
-              title="Total Live PnL"
-              value={formatCurrency(liveStats.liveTotalPnl)}
-              trend={liveStats.liveTotalPnl >= 0 ? 'up' : 'down'}
-              trendValue={`${liveStats.livePnlPct >= 0 ? '+' : ''}${liveStats.livePnlPct.toFixed(1)}%`}
-            />
-          </motion.div>
 
           {/* ═══ Row 3: Bots Section ═══ */}
           <motion.div

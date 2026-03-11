@@ -142,14 +142,7 @@ export function BotCard({ bot, onToggle, onDelete, liveTradeCount, trades = [], 
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, flex: '0 0 260px' }}>
           {/* Avatar with rotating ring */}
           <div style={{ position: 'relative', width: 54, height: 54, flexShrink: 0 }}>
-            {/* Rotating outer ring for running bots */}
-            {isRunning && (
-              <div style={{
-                position: 'absolute', inset: -3, borderRadius: '50%',
-                background: `conic-gradient(${brain.color} 0deg, ${brain.color}00 180deg, ${brain.color}88 360deg)`,
-                animation: 'radarSweep 3s linear infinite',
-              }} />
-            )}
+
             {/* Avatar circle */}
             <div style={{
               position: 'relative', width: 54, height: 54, borderRadius: '50%',

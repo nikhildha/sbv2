@@ -311,36 +311,7 @@ export function RegimeCard({ regime, confidence, symbol, macroRegime, trend15m, 
                 )}
             </div>
 
-            {/* TF breakdown chips — compact row */}
-            {tfEntries.length > 0 && (
-                <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', marginTop: '14px', flexWrap: 'wrap' as const }}>
-                    {tfEntries.map(e => (
-                        <div key={e.tf} style={{
-                            display: 'flex', alignItems: 'center', gap: '4px',
-                            padding: '3px 8px', borderRadius: '8px',
-                            background: 'rgba(255,255,255,0.03)',
-                            border: `1px solid ${getTfColor(e.regime)}18`,
-                        }}>
-                            <span style={{ fontSize: '9px', fontWeight: 700, color: '#4B6080', letterSpacing: '0.5px' }}>{e.tf}</span>
-                            <span style={{ fontSize: '10px', fontWeight: 700, color: getTfColor(e.regime) }}>{e.regime.slice(0, 4)}</span>
-                            <span style={{ fontSize: '9px', color: '#4B6080', fontFamily: 'monospace' }}>{(e.conf * 100).toFixed(0)}%</span>
-                        </div>
-                    ))}
-                </div>
-            )}
 
-            {/* Coin regime breakdown — very compact */}
-            {categories.length > 0 && (
-                <div style={{ display: 'flex', gap: '8px', marginTop: '10px', justifyContent: 'center', flexWrap: 'wrap' as const }}>
-                    {categories.slice(0, 3).map(cat => (
-                        <div key={cat.label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <span style={{ fontSize: '10px' }}>{cat.emoji}</span>
-                            <span style={{ fontSize: '10px', color: cat.color, fontWeight: 700 }}>{cat.coins.length}</span>
-                            <span style={{ fontSize: '9px', color: '#4B5563' }}>{cat.label.slice(0, 4)}</span>
-                        </div>
-                    ))}
-                </div>
-            )}
         </div>
     );
 }

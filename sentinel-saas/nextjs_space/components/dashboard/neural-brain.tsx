@@ -58,7 +58,7 @@ export function NeuralBrain({ isOn, cycle }: NeuralBrainProps) {
         const draw = (t: number) => {
             ctx.clearRect(0, 0, W, H);
 
-            const R = 88; // brain sphere radius
+            const R = 62; // brain sphere radius (reduced 30%)
 
             // ── Outer atmospheric halo ──
             const halo = ctx.createRadialGradient(cx, cy, R * 0.6, cx, cy, R * 2);
