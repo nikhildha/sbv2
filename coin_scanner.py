@@ -32,7 +32,7 @@ COIN_EXCLUDE = {
 # ─── Minimum 24h quote volume to qualify (reduces from 50 → 15 high-liquid coins) ─
 # $200M ensures only genuinely liquid, tight-spread futures qualify.
 # This cuts HMM training time by ~70% vs scanning 50 coins.
-MIN_QUOTE_VOLUME_USD = 200_000_000  # $200 million per 24h
+MIN_QUOTE_VOLUME_USD = 200_000_000 if not config.TESTNET else 0  # Ignore volume limit on testnet
 
 # ─── Dynamic exclusion list (auto-learned from insufficient data) ───────────
 COIN_EXCLUSION_FILE = os.path.join(config.DATA_DIR, "coin_exclusions.json")
