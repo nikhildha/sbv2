@@ -181,7 +181,7 @@ export async function GET() {
                 timestamp: lastAnalysis,
             },
             scanner: { coins: Object.keys(coinStates) },
-            athena: engineData?.athena || { enabled: false, recent_decisions: [] },
+            athena: engineData?.athena || { enabled: true, recent_decisions: [], model: 'gemini-2.5-flash' },
             perBot,
 
             tradebook: {

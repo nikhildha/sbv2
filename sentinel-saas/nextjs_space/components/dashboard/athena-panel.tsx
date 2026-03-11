@@ -63,9 +63,8 @@ function parseReasoning(r: string) {
 }
 
 export function AthenaPanel({ athena }: Props) {
-    if (!athena?.enabled) return null;
-
-    const decisions = (athena.recent_decisions || []).slice().reverse();
+    const enabled = !!athena?.enabled;
+    const decisions = (athena?.recent_decisions || []).slice().reverse();
     const hasData = decisions.length > 0;
 
     return (
@@ -96,12 +95,12 @@ export function AthenaPanel({ athena }: Props) {
                         fontSize: 10, padding: '3px 10px', borderRadius: 20,
                         background: 'rgba(255,179,0,0.10)', color: '#FFB300', fontWeight: 700,
                         border: '1px solid rgba(255,179,0,0.20)', letterSpacing: '0.5px',
-                    }}>○ STANDBY</span>
+                    }}>○ {enabled ? 'STANDBY' : 'OFFLINE'}</span>
                     <span style={{
                         fontSize: 10, color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)',
                         padding: '2px 7px', borderRadius: 6, background: 'rgba(255,255,255,0.03)',
                         border: '1px solid rgba(255,255,255,0.05)',
-                    }}>{athena.model || 'gemini-2.5-flash'}</span>
+                    }}>{athena?.model || 'gemini-2.5-flash'}</span>
                     {(athena.cycle_calls ?? 0) > 0 && (
                         <span style={{ fontSize: 10, color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
                             {athena.cycle_calls} calls
