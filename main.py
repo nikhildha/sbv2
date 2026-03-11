@@ -1615,12 +1615,14 @@ class RegimeMasterBot:
             cdx_prices = {sym: pos["mark_price"] for sym, pos in cdx_active.items()}
             tradebook.update_unrealized(prices=cdx_prices)
 
-        # ── 4. Save multi_bot_state for dashboard ──────────────────
-        # Keeps the dashboard positions card in sync with CoinDCX
+        # ── 4. MERGE active-trade data into multi_bot_state for dashboard ──
+        # CRITICAL: Read existing state first, then merge — do NOT overwrite.
+        # _save_multi_state() writes full analysis coin_states (all scanned coins
+        # with confidence + regime). This sync only updates active-trade entries.
         try:
             active_trades = tradebook.get_active_trades()
             positions_dict = {}
-            coin_states_dict = {}
+            trade_coin_updates = {}
             for t in active_trades:
                 sym = t["symbol"]
                 positions_dict[sym] = {
@@ -1636,31 +1638,39 @@ class RegimeMasterBot:
                     "unrealized_pnl_pct": t.get("unrealized_pnl_pct", 0),
                     "current_price": t.get("current_price", 0),
                 }
-                coin_states_dict[sym] = {
+                trade_coin_updates[sym] = {
                     "regime": t.get("regime", "UNKNOWN"),
                     "confidence": t.get("confidence", 0),
                     "action": f'{"LONG" if t.get("position") == "LONG" else "SHORT"} ACTIVE',
                     "side": t.get("side", "SELL"),
                     "leverage": t.get("leverage", 1),
+                    "deploy_status": "ACTIVE",
                 }
-            multi_state = {
-                "timestamp": datetime.now(IST).replace(tzinfo=None).isoformat(),
-                "cycle": getattr(self, "_cycle_count", 0),
-                "coins_scanned": len(cdx_active),
-                "eligible_count": len(cdx_active),
-                "deployed_count": len(positions_dict),
-                "total_trades": getattr(self, "_trade_count", len(positions_dict)),
-                "active_positions": positions_dict,
-                "positions": positions_dict,
-                "max_concurrent_positions": config.MAX_CONCURRENT_POSITIONS,
-                "coin_states": coin_states_dict,
-                "source_stats":     self._sentiment.get_source_stats() if self._sentiment else {},
-                "orderflow_stats":  self._get_orderflow_stats(),
-                "paper_mode": config.PAPER_TRADE,
-                "cycle_execution_time_seconds": 0,
-            }
+
+            # Read existing multi_bot_state (preserves analysis coin_states)
+            existing = {}
+            if os.path.exists(config.MULTI_STATE_FILE):
+                try:
+                    with open(config.MULTI_STATE_FILE, "r") as f:
+                        existing = json.load(f)
+                except Exception:
+                    existing = {}
+
+            # Merge: keep all existing coin_states, overlay active-trade updates
+            merged_coin_states = existing.get("coin_states", {})
+            merged_coin_states.update(trade_coin_updates)
+
+            # Update only the fields this sync is responsible for
+            existing["active_positions"] = positions_dict
+            existing["positions"] = positions_dict
+            existing["deployed_count"] = len(positions_dict)
+            existing["coin_states"] = merged_coin_states
+            existing["timestamp"] = datetime.now(IST).replace(tzinfo=None).isoformat()
+            # Preserve: cycle, coins_scanned, eligible_count, timing fields
+            # (those are written by _save_multi_state and should not be touched)
+
             with open(config.MULTI_STATE_FILE, "w") as f:
-                json.dump(multi_state, f, indent=2)
+                json.dump(existing, f, indent=2)
         except Exception as e:
             logger.debug("Failed to save multi_bot_state during sync: %s", e)
 
