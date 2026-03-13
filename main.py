@@ -569,9 +569,13 @@ class RegimeMasterBot:
                 if _use_athena:
                     try:
                         llm_ctx = {
-                            "symbol": sym, "side": trade["side"], "leverage": trade["leverage"],
-                            "confidence": trade["confidence"], "regime": trade["regime"],
-                            "price": self._coin_states.get(sym, {}).get("price", 0),
+                            "ticker": sym,
+                            "side": trade["side"],
+                            "leverage": trade["leverage"],
+                            "hmm_confidence": trade["confidence"],
+                            "hmm_regime": trade["regime_name"],
+                            "conviction": trade["conviction"],
+                            "current_price": self._coin_states.get(sym, {}).get("price", 0),
                             "atr": trade["atr"],
                             "atr_pct": (trade["atr"] / self._coin_states.get(sym, {}).get("price", 1)) * 100,
                             "trend": self._coin_states.get(sym, {}).get("context", {}).get("trend_alignment", "UNKNOWN")
