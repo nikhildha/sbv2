@@ -30,6 +30,8 @@ class ExchangeClient(ABC):
         t1_price: Optional[float] = None,
         t2_price: Optional[float] = None,
         t3_price: Optional[float] = None,
+        order_type: str = "MARKET",
+        limit_price: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Open a futures position with SL/TP bracket.
@@ -43,6 +45,8 @@ class ExchangeClient(ABC):
         sl_price : float — initial stop loss price
         tp_price : float — initial take profit price (T3 for multi-target)
         t1_price, t2_price, t3_price : optional target prices
+        order_type : str — 'MARKET' or 'LIMIT'
+        limit_price : float — required if order_type is 'LIMIT'
 
         Returns
         -------

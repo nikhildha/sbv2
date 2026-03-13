@@ -157,8 +157,8 @@ def check_p4_exchange_sync() -> dict:
 
 def check_p5_bot_id() -> dict:
     """P5: bot_id stamping on all tradebook trades."""
-    expected_bot_id   = config.ENGINE_BOT_ID
-    expected_bot_name = config.ENGINE_BOT_NAME
+    active_bot_ids = {bot["bot_id"] for bot in config.ENGINE_ACTIVE_BOTS} if config.ENGINE_ACTIVE_BOTS else {config.ENGINE_BOT_ID}
+    
     tradebook = _read_json_safe(os.path.join(config.DATA_DIR, "tradebook.json"))
     trades = tradebook.get("trades", [])
 
@@ -167,7 +167,7 @@ def check_p5_bot_id() -> dict:
 
     missing_id   = [t.get("trade_id", "?") for t in trades if not t.get("bot_id")]
     wrong_id     = [t.get("trade_id", "?") for t in trades
-                    if t.get("bot_id") and expected_bot_id and t.get("bot_id") != expected_bot_id]
+                    if t.get("bot_id") and t.get("bot_id") not in active_bot_ids]
     missing_name = [t.get("trade_id", "?") for t in trades if not t.get("bot_name")]
 
     issues = []
@@ -184,8 +184,8 @@ def check_p5_bot_id() -> dict:
                        {"missing_id": missing_id[:5], "wrong_id": wrong_id[:5], "missing_name": missing_name[:5]})
 
     return _result("P5", "PASS",
-                   f"All {len(trades)} trades stamped correctly",
-                   {"engine_bot_id": expected_bot_id, "engine_bot_name": expected_bot_name})
+                   f"All {len(trades)} trades stamped correctly across {len(active_bot_ids)} active bot(s)",
+                   {"active_bot_ids": list(active_bot_ids)})
 
 
 def check_p7_api_health() -> dict:
@@ -301,24 +301,24 @@ def check_p12_log_quality() -> dict:
 
 
 def check_i2_bot_id_env() -> dict:
-    """I2: ENGINE_BOT_ID and ENGINE_BOT_NAME env vars set."""
+    """I2: ENGINE_BOT_ID/NAME env vars set OR multi-bots active."""
     bot_id   = config.ENGINE_BOT_ID
     bot_name = config.ENGINE_BOT_NAME
+    active_bots = config.ENGINE_ACTIVE_BOTS
 
-    missing = []
-    if not bot_id:
-        missing.append("ENGINE_BOT_ID")
-    if not bot_name:
-        missing.append("ENGINE_BOT_NAME")
+    if not bot_id and not active_bots:
+        return _result("I2", "WARN",
+                       "Missing ENGINE_BOT_ID and no active bots found in memory — engine may be idle",
+                       {"missing": ["ENGINE_BOT_ID"]})
 
-    if missing:
-        return _result("I2", "FAIL",
-                       f"Missing Railway env vars: {', '.join(missing)} — trade isolation broken",
-                       {"missing": missing})
-
-    return _result("I2", "PASS",
-                   f"bot_id={bot_id[:12]}… bot_name={bot_name}",
-                   {"bot_id": bot_id, "bot_name": bot_name})
+    if bot_id:
+        return _result("I2", "PASS",
+                       f"bot_id={bot_id[:12]}… bot_name={bot_name}",
+                       {"bot_id": bot_id, "bot_name": bot_name})
+    else:
+        return _result("I2", "PASS",
+                       f"{len(active_bots)} active dynamic bot(s) registered",
+                       {"active_bots_count": len(active_bots)})
 
 
 def check_i4_trade_count() -> dict:

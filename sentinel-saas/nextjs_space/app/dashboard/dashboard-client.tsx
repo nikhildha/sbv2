@@ -8,6 +8,8 @@ import { RegimeCard, PnlCard, ActivePositionsCard, SignalSummaryTable } from '@/
 import { EngineConsole } from '@/components/dashboard/engine-console';
 import { AthenaPanel } from '@/components/dashboard/athena-panel';
 import { TerminalFeed } from '@/components/dashboard/terminal-feed';
+import { SegmentHeatmap } from '@/components/dashboard/segment-heatmap';
+import { VirtualLimitTracker } from '@/components/dashboard/virtual-limit-tracker';
 import { Bot, TrendingUp, Activity, DollarSign, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -44,6 +46,19 @@ interface BotState {
     timestamp: string | null;
   };
   tradebook: { trades: any[]; summary: any };
+  engine?: {
+    status: string;
+    macro?: {
+      btc_action: string;
+      btc_regime_name: string;
+      confidence: number;
+    }
+  };
+  heatmap?: {
+    timestamp?: string;
+    btc_24h?: number;
+    segments?: any[];
+  };
   athena?: {
     enabled: boolean;
     model?: string;
@@ -532,7 +547,19 @@ export function DashboardClient({ user, stats, bots, recentTrades }: DashboardCl
           </motion.div>
 
 
-          {/* ═══ Row 3: Bots Section ═══ */}
+          {/* ═══ Row 3: Institutional Segment Heatmap ═══ */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="mb-8"
+          >
+            <SegmentHeatmap heatmapData={botState?.heatmap || null} loading={isRefreshing && !botState?.heatmap} />
+          </motion.div>
+
+          <VirtualLimitTracker trades={allTrades} />
+
+          {/* ═══ Row 4: Bots Section ═══ */}
 
           <motion.div
             initial={{ opacity: 0, y: 20 }}

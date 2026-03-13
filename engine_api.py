@@ -230,11 +230,13 @@ def api_all():
         tb._save_book(book)
         tradebook = book
     engine = _read_json("engine_state.json", {"status": "running"})
+    heatmap = _read_json("segment_heatmap.json", {"segments": []})
 
     return jsonify({
         "multi": multi,
         "tradebook": tradebook,
         "engine": engine,
+        "heatmap": heatmap,
         # Athena LLM Reasoning Layer state (from live bot object, not disk)
         "athena": _engine_bot._athena.get_state() if _engine_bot and hasattr(_engine_bot, '_athena') and _engine_bot._athena else {"enabled": False},
     })
@@ -792,7 +794,8 @@ def api_set_bot_id():
     data = request.get_json() or {}
     bot_id = data.get("bot_id", "")
     bot_name = data.get("bot_name", "")
-    brain_type = data.get("brain_type", "adaptive")
+    brain_type = data.get("brain_type", "athena")
+    segment_filter = data.get("segment_filter", "ALL")
     user_id = data.get("user_id", "")
 
     if not bot_id:
@@ -801,9 +804,9 @@ def api_set_bot_id():
     old_id = config.ENGINE_BOT_ID
     config.ENGINE_BOT_ID = bot_id
 
-    # Set brain type (adaptive = HMM-only, athena = HMM + Gemini AI, quickscalper = Fast Scalps)
+    # Set brain type (athena = HMM + Gemini AI, hmm = HMM only)
     old_brain = config.ENGINE_BRAIN_TYPE
-    config.ENGINE_BRAIN_TYPE = brain_type if brain_type in ("adaptive", "athena", "quickscalper") else "adaptive"
+    config.ENGINE_BRAIN_TYPE = brain_type if brain_type in ("athena", "hmm") else "athena"
 
     # Also update user_id if provided
     if user_id:
@@ -818,6 +821,7 @@ def api_set_bot_id():
         "bot_name": bot_name,
         "user_id": user_id or config.ENGINE_USER_ID,
         "brain_type": config.ENGINE_BRAIN_TYPE,
+        "segment_filter": segment_filter,
     })
 
     logger.info(

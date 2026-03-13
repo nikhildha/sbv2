@@ -26,11 +26,6 @@ from typing import Dict, Optional
 
 import config
 
-# Import QuickScalper prompt (optional — won't break if scalper_brain not present)
-try:
-    from scalper_brain import QUICKSCALPER_SYSTEM_PROMPT
-except ImportError:
-    QUICKSCALPER_SYSTEM_PROMPT = None
 
 logger = logging.getLogger("Athena")
 
@@ -466,124 +461,6 @@ Return your analysis as a JSON object (single object, not array)."""
         except Exception as e:
             logger.debug("Athena log write failed: %s", e)
 
-    # ─── QuickScalper Gemini Decision ─────────────────────────────────────────
-
-    def validate_scalper_signal(self, scalper_ctx: dict) -> dict:
-        """
-        Call Gemini to decide on a scalp trade using the Project Sentinel
-        QuickScalper system prompt. No Google Search — purely technical/L2 data.
-
-        Parameters
-        ----------
-        scalper_ctx : dict
-            Keys: symbol, proposed_direction, hmm_state, vwap, close, rsi,
-                  spread_pct, ob_bids (top 10), ob_asks (top 10), buy_ratio,
-                  ob_imbalance, atr_pct
-
-        Returns
-        -------
-        dict with keys: decision, confidence, entry_type, sl_price, tp_price, reasoning
-        """
-        if not self._ensure_initialized():
-            return {"decision": "IGNORE", "confidence": 0, "reasoning": "Gemini not available", "entry_type": "MARKET", "sl_price": None, "tp_price": None}
-
-        # Import prompt from scalper_brain
-        try:
-            from scalper_brain import QUICKSCALPER_SYSTEM_PROMPT as scalper_prompt
-        except ImportError:
-            return {"decision": "IGNORE", "confidence": 0, "reasoning": "scalper_brain not importable", "entry_type": "MARKET", "sl_price": None, "tp_price": None}
-
-        symbol = scalper_ctx.get("symbol", "UNKNOWN")
-        close  = scalper_ctx.get("close", 0)
-
-        # Build JSON input for Gemini
-        payload = {
-            "symbol":             symbol,
-            "proposed_direction": scalper_ctx.get("proposed_direction", "LONG"),
-            "hmm_state":          scalper_ctx.get("hmm_state", "UNKNOWN"),
-            "current_price":      round(close, 6),
-            "vwap":               round(scalper_ctx.get("vwap", 0), 6),
-            "vwap_dist_pct":      round(scalper_ctx.get("vwap_dist_pct", 0), 4),
-            "rsi_1m":             round(scalper_ctx.get("rsi", 50), 2),
-            "stoch_rsi":          round(scalper_ctx.get("stoch_rsi", 50), 2),
-            "spread_pct":         round(scalper_ctx.get("spread_pct", 0), 5),
-            "spread_bps":         round(scalper_ctx.get("spread_pct", 0) * 10000, 2),
-            "ob_imbalance":       round(scalper_ctx.get("ob_imbalance", 0.5), 3),
-            "buy_ratio_60s":      round(scalper_ctx.get("buy_ratio", 0.5), 3),
-            "top_bid_levels":     scalper_ctx.get("ob_bids", [])[:10],
-            "top_ask_levels":     scalper_ctx.get("ob_asks", [])[:10],
-            "atr_pct":            round(scalper_ctx.get("atr_pct", 0.002), 5),
-        }
-
-        user_prompt = (
-            f"Analyze this scalp setup for {symbol} and return your decision as strict JSON.\n\n"
-            f"Market Data:\n{json.dumps(payload, indent=2)}\n\n"
-            f"Return ONLY a JSON object with keys: decision, confidence, entry_type, sl_price, tp_price, reasoning."
-        )
-
-        try:
-            from google.genai import types
-            start = time.time()
-            response = self._client.models.generate_content(
-                model=config.LLM_MODEL,
-                contents=user_prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=scalper_prompt,
-                    temperature=0.1,   # Low temp — deterministic execution decision
-                    max_output_tokens=512,
-                    # NO google_search tool — pure technical, no grounding needed
-                ),
-            )
-            latency_ms = int((time.time() - start) * 1000)
-            self._cycle_call_count += 1
-
-            raw = ""
-            if hasattr(response, "text") and response.text:
-                raw = response.text.strip()
-            elif hasattr(response, "candidates") and response.candidates:
-                for cand in response.candidates:
-                    if hasattr(cand, "content") and cand.content:
-                        for part in cand.content.parts:
-                            if hasattr(part, "text") and part.text:
-                                raw = part.text.strip()
-                                break
-                    if raw:
-                        break
-
-            if raw.startswith("```"):
-                raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-
-            data = self._extract_json(raw)
-            if not data or not isinstance(data, dict):
-                logger.warning("⚡ ScalperGemini [%s] bad JSON (%dms): %s", symbol, latency_ms, repr(raw[:200]))
-                return {"decision": "IGNORE", "confidence": 0, "reasoning": "Bad JSON from Gemini", "entry_type": "MARKET", "sl_price": None, "tp_price": None}
-
-            decision = str(data.get("decision", "IGNORE")).upper()
-            if decision not in ("EXECUTE", "IGNORE"):
-                decision = "IGNORE"
-
-            confidence = int(data.get("confidence", 0))
-            entry_type = str(data.get("entry_type", "MARKET")).upper()
-            sl_price   = data.get("sl_price")
-            tp_price   = data.get("tp_price")
-            reasoning  = str(data.get("reasoning", ""))
-
-            logger.info(
-                "⚡ ScalperGemini [%s] → %s (conf=%d, %dms) — %s",
-                symbol, decision, confidence, latency_ms, reasoning[:80],
-            )
-            return {
-                "decision":   decision,
-                "confidence": confidence,
-                "entry_type": entry_type,
-                "sl_price":   float(sl_price) if sl_price is not None else None,
-                "tp_price":   float(tp_price) if tp_price is not None else None,
-                "reasoning":  reasoning,
-            }
-
-        except Exception as e:
-            logger.warning("⚡ ScalperGemini [%s] API error: %s", symbol, e)
-            return {"decision": "IGNORE", "confidence": 0, "reasoning": f"API error: {str(e)[:80]}", "entry_type": "MARKET", "sl_price": None, "tp_price": None}
 
     # ─── Dashboard State ──────────────────────────────────────────────────────
 

@@ -65,7 +65,7 @@ def _compute_summary(book):
     """Compute aggregate portfolio stats."""
     trades = book["trades"]
     total = len(trades)
-    active = [t for t in trades if t["status"] == "ACTIVE"]
+    active = [t for t in trades if t["status"] in ("ACTIVE", "OPEN")]
     closed = [t for t in trades if t["status"] == "CLOSED"]
     wins = [t for t in closed if t.get("realized_pnl", 0) > 0]
     losses = [t for t in closed if t.get("realized_pnl", 0) < 0]
@@ -103,7 +103,7 @@ def open_trade(symbol, side, leverage, quantity, entry_price, atr,
                regime, confidence, reason="", capital=100.0, mode=None, user_id=None,
                profile_id="standard", bot_name="Synaptic Adaptive",
                exchange=None, pair=None, position_id=None, bot_id=None, all_bot_ids=None,
-               rm_id=None, override_sl=None, override_tp=None):
+               rm_id=None, override_sl=None, override_tp=None, status="ACTIVE"):
     """
     Record a new trade entry in the tradebook.
 
@@ -130,7 +130,7 @@ def open_trade(symbol, side, leverage, quantity, entry_price, atr,
     existing = [t for t in book["trades"]
                 if t["symbol"] == symbol
                 and t.get("profile_id", "standard") == profile_id
-                and t["status"] == "ACTIVE"]
+                and t["status"] in ("ACTIVE", "OPEN")]
     if existing:
         logger.warning("⚠️ Skipping duplicate trade for %s [%s] — already have ACTIVE trade %s",
                        symbol, bot_name, existing[0]["trade_id"])
@@ -213,7 +213,7 @@ def open_trade(symbol, side, leverage, quantity, entry_price, atr,
         "t2_hit":           False,
         "original_qty":     round(quantity, 6),
         "original_capital": capital,
-        "status":           "ACTIVE",
+        "status":           status,
         "exit_reason":      None,
         "realized_pnl":     0,
         "realized_pnl_pct": 0,
@@ -270,7 +270,7 @@ def close_trade(trade_id=None, symbol=None, exit_price=None, reason="MANUAL", ex
     # Find target trade(s)
     targets = []
     for trade in book["trades"]:
-        if trade["status"] != "ACTIVE":
+        if trade["status"] not in ("ACTIVE", "OPEN"):
             continue
         if trade_id and trade["trade_id"] == trade_id:
             targets = [trade]
@@ -350,6 +350,72 @@ def close_trade(trade_id=None, symbol=None, exit_price=None, reason="MANUAL", ex
     _save_book(book)
 
     return closed[0] if len(closed) == 1 else closed
+
+
+def cancel_trade(trade_id, reason="CANCELLED"):
+    """Cancel an OPEN limit order without recording P&L."""
+    book = _load_book()
+    cancelled = None
+    for trade in book["trades"]:
+        if trade["status"] == "OPEN" and trade["trade_id"] == trade_id:
+            trade["status"] = "CANCELLED"
+            trade["exit_reason"] = reason
+            trade["exit_timestamp"] = datetime.utcnow().isoformat()
+            logger.info("🚫 Tradebook CANCEL: %s [%s]", trade_id, reason)
+            cancelled = trade
+            break
+    if cancelled:
+        _save_book(book)
+    return cancelled
+
+
+def activate_limit_order(trade_id, fill_price, fill_qty):
+    """Transition an OPEN limit order to ACTIVE state upon fill."""
+    book = _load_book()
+    activated = None
+    for trade in book["trades"]:
+        if trade["status"] == "OPEN" and trade["trade_id"] == trade_id:
+            trade["status"] = "ACTIVE"
+            
+            # Update actual fill details
+            trade["entry_price"] = round(fill_price, 6)
+            trade["current_price"] = round(fill_price, 6)
+            trade["peak_price"] = round(fill_price, 6)
+            trade["quantity"] = round(fill_qty, 6)
+            trade["original_qty"] = round(fill_qty, 6)
+            
+            # Recalculate capital based on actual fill
+            trade["capital"] = round(fill_qty * fill_price / trade["leverage"], 4)
+            trade["original_capital"] = trade["capital"]
+            
+            # Shift entry timestamp to when it actually filled
+            trade["entry_timestamp"] = datetime.utcnow().isoformat()
+
+            logger.info("🟢 Tradebook ACTIVATE: %s filled @ %.6f (qty: %.6f) — now ACTIVE", 
+                        trade_id, fill_price, fill_qty)
+            activated = trade
+            break
+            
+    if activated:
+        _compute_summary(book)
+        _save_book(book)
+    return activated
+
+
+def update_trade(trade_id, updates):
+    """Update fields of an existing trade."""
+    book = _load_book()
+    updated = False
+    for trade in book["trades"]:
+        if trade["trade_id"] == trade_id:
+            for k, v in updates.items():
+                if v is not None:
+                    trade[k] = v
+            updated = True
+            break
+    if updated:
+        _save_book(book)
+    return updated
 
 
 def _book_partial_inline(trade, book, exit_price, qty_frac, reason):
@@ -527,7 +593,7 @@ def update_unrealized(prices=None, funding_rates=None):
     changed = False
 
     for trade in book["trades"]:
-        if trade["status"] != "ACTIVE":
+        if trade["status"] not in ("ACTIVE", "OPEN"):
             continue
 
         symbol = trade["symbol"]
@@ -846,7 +912,7 @@ def get_tradebook():
 def get_active_trades():
     """Return only active trades."""
     book = _load_book()
-    return [t for t in book["trades"] if t["status"] == "ACTIVE"]
+    return [t for t in book["trades"] if t["status"] in ("ACTIVE", "OPEN")]
 
 
 def get_closed_trades():

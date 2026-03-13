@@ -132,6 +132,9 @@ model BotConfig {
   
   // Brain selection (adaptive = HMM-only, athena = HMM + Gemini AI)
   brainType         String    @default("adaptive") // adaptive, athena
+  
+  // Segment routing logic
+  segment           String    @default("ALL")    // "ALL" (Athena Router), "DeFi", "L1", etc.
 
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt

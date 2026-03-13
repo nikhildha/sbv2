@@ -145,6 +145,177 @@ def _save_rotation_state(state):
     except Exception as e:
         logger.error("Failed to save rotation state: %s", e)
 
+def get_hottest_segments(segment_limit=2):
+    """
+    Evaluate the pulse/momentum of all crypto segments via the 3-Pillar Institutional method:
+    Pillar 1: Volume-Weighted Relative Return (VW-RR)
+    Pillar 2: Benchmark Alpha (vs BTC)
+    Pillar 3: Participation Breadth
+    
+    Returns the top 'segment_limit' segments.
+    """
+    try:
+        client = _get_binance_client()
+        tickers = client.get_ticker()
+        ticker_map = {t["symbol"]: t for t in tickers}
+    except Exception as e:
+        logger.error("Failed to fetch tickers for segment heatmap: %s", e)
+        return list(config.CRYPTO_SEGMENTS.keys())[:segment_limit]
+
+    # Get Benchmark (BTC) 24h Return
+    btc_return = 0.0
+    if "BTCUSDT" in ticker_map:
+        try:
+            btc_return = float(ticker_map["BTCUSDT"]["priceChangePercent"])
+        except:
+            pass
+
+    segment_data = []
+    for segment, coins in config.CRYPTO_SEGMENTS.items():
+        valid_coins = []
+        for symbol in coins:
+            t = ticker_map.get(symbol)
+            if t:
+                try:
+                    change = float(t["priceChangePercent"])
+                    volume = float(t.get("quoteVolume", 0))
+                    valid_coins.append({"symbol": symbol, "change": change, "volume": volume})
+                except (ValueError, TypeError):
+                    pass
+        
+        if not valid_coins:
+            continue
+
+        total_vol = sum(c["volume"] for c in valid_coins)
+        
+        # Pillar 1: VW-RR (Volume-Weighted Relative Return)
+        vw_rr = sum(c["change"] * (c["volume"] / total_vol) for c in valid_coins) if total_vol > 0 else 0.0
+        
+        # Pillar 2: Benchmark Alpha
+        alpha = vw_rr - btc_return
+        
+        # Pillar 3: Participation Breadth (% of coins participating in the direction of the segment)
+        if vw_rr >= 0:
+            participating = sum(1 for c in valid_coins if c["change"] > 0)
+        else:
+            participating = sum(1 for c in valid_coins if c["change"] < 0)
+            
+        breadth_pct = (participating / len(valid_coins)) * 100 if valid_coins else 0.0
+        
+        # Composite Score: VW-RR absolute magnitude scaled by breadth
+        # Example: A 10% move with 20% breadth is weak. A 5% move with 100% breadth is strong.
+        composite_score = vw_rr * (breadth_pct / 100.0)
+
+        segment_data.append({
+            "segment": segment,
+            "vw_rr": round(vw_rr, 2),
+            "btc_alpha": round(alpha, 2),
+            "breadth_pct": round(breadth_pct, 1),
+            "composite_score": round(composite_score, 2),
+            "is_positive": composite_score >= 0,
+            "abs_score": abs(composite_score)
+        })
+        
+    # Rank by hottest absolute composite score (fastest movers)
+    segment_data.sort(key=lambda x: x["abs_score"], reverse=True)
+    
+    # Save the heatmap to disk for the dashboard to read
+    try:
+        heatmap_file = os.path.join(config.DATA_DIR, "segment_heatmap.json")
+        with open(heatmap_file, "w") as f:
+            json.dump({
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "btc_24h": round(btc_return, 2),
+                "segments": segment_data
+            }, f, indent=2)
+    except Exception as e:
+        logger.error("Failed to save segment heatmap: %s", e)
+    
+    logger.info("🔥 Institutional Segment Heatmap (Composite):")
+    for i, seg in enumerate(segment_data):
+        logger.info("   #%d %-8s : VW-RR %+.2f%% | Alpha %+.2f%% | Breadth %.0f%% -> Score: %.2f", 
+                    i+1, seg["segment"], seg["vw_rr"], seg["btc_alpha"], seg["breadth_pct"], seg["composite_score"])
+        
+    return [seg["segment"] for seg in segment_data[:segment_limit]]
+
+def get_active_bot_segment_pool(active_bots):
+    """
+    Builds the coin scan pool based on the segment_filter of all active bots.
+    If any bot has segment_filter == "ALL", it dynamically fetches the Top 2 hottest segments.
+    For all other bots, it appends the coins from their specific mapped segments.
+    """
+    logger.info("🔍 Compiling segment scan pool for %d active bots...", len(active_bots))
+    
+    target_segments = set()
+    needs_dynamic_all = False
+    
+    for bot in active_bots:
+        seg = bot.get("segment_filter", "ALL")
+        if seg == "ALL":
+            needs_dynamic_all = True
+        elif seg in config.CRYPTO_SEGMENTS:
+            target_segments.add(seg)
+            
+    if needs_dynamic_all:
+        segment_limit = getattr(config, "SEGMENT_SCAN_LIMIT", 2)
+        top_segments = get_hottest_segments(segment_limit)
+        logger.info("🎯 Bot requested 'ALL' segments. dynamically selected Top %d: %s", segment_limit, ", ".join(top_segments))
+        for t_seg in top_segments:
+            target_segments.add(t_seg)
+            
+    # Compile the final unique list of coins from exactly these target segments
+    candidates = set()
+    for seg in target_segments:
+        coins = config.CRYPTO_SEGMENTS.get(seg, [])
+        candidates.update(coins)
+        
+    # Clean out exclusions
+    exclusions = get_all_exclusions()
+    candidates = [c for c in candidates if c not in exclusions]
+    
+    logger.info("💎 Final Segment Pool: %d segments targeted -> %d total unique coins", len(target_segments), len(candidates))
+    
+    # Fallback if somehow empty
+    if not candidates:
+        return [config.PRIMARY_SYMBOL]
+        
+    # Sort them for consistency
+    return sorted(list(candidates))
+
+def get_top_segment_candidates():
+    """
+    Gets the symbols belonging to the top hottest segments.
+    This replaces the retail 'top 50 volume' approach.
+    """
+    segment_limit = getattr(config, "SEGMENT_SCAN_LIMIT", 2)
+    top_segments = get_hottest_segments(segment_limit)
+    
+    logger.info("🏆 Selected Top Segments for this cycle: %s", ", ".join(top_segments))
+    
+    candidates = []
+    for seg in top_segments:
+        # Get all mapped coins for this segment
+        coins = config.CRYPTO_SEGMENTS.get(seg, [])
+        candidates.extend(coins)
+        
+    # Clean out exclusions
+    exclusions = get_all_exclusions()
+    candidates = [c for c in candidates if c not in exclusions]
+    
+    return candidates
+
+def get_top_coins_by_volume(limit=50):
+    """Legacy retail backward-compatibility function."""
+    try:
+        client = _get_binance_client()
+        tickers = client.get_ticker()
+        tickers.sort(key=lambda x: float(x.get("quoteVolume", 0)), reverse=True)
+        exclusions = get_all_exclusions()
+        valid = [t["symbol"] for t in tickers if "USDT" in t["symbol"] and t["symbol"] not in exclusions and "UP" not in t["symbol"] and "DOWN" not in t["symbol"]]
+        return valid[:limit]
+    except Exception:
+        return [config.PRIMARY_SYMBOL]
+
 def _get_segment_coins_binance(segment_coins, limit=5):
     """Fetch top coins for a specific segment from Binance by 24h volume."""
     client = _get_binance_client()

@@ -111,10 +111,13 @@ def _assign_tier(sharpe: float) -> str:
 
 
 def load_coin_universe() -> list:
-    """Read coin universe from existing coin_tiers.csv."""
+    """Read coin universe from existing coin_tiers.csv or config.CRYPTO_SEGMENTS."""
     if not os.path.exists(config.COIN_TIER_FILE):
-        logger.error("coin_tiers.csv not found at %s", config.COIN_TIER_FILE)
-        return []
+        logger.warning("coin_tiers.csv not found, dynamically building initial universe from config.CRYPTO_SEGMENTS...")
+        all_coins = set()
+        for coins in config.CRYPTO_SEGMENTS.values():
+            all_coins.update(coins)
+        return sorted(list(all_coins))
     return pd.read_csv(config.COIN_TIER_FILE)["symbol"].tolist()
 
 

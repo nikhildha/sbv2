@@ -78,6 +78,12 @@ def run_coin_analysis():
     all_coins = list(set(all_coins))
     all_coins.sort()
     
+    from segment_features import COIN_FEATURES
+    existing_coins = COIN_FEATURES.keys()
+    new_coins = [c for c in all_coins if c not in existing_coins]
+    print(f"Skipping {len(all_coins) - len(new_coins)} existing coins. Processing {len(new_coins)} new coins.")
+    all_coins = new_coins
+    
     for coin in all_coins:
         print(f"=== Analyzing Coin: {coin} ===")
         

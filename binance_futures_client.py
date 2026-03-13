@@ -149,6 +149,8 @@ class BinanceFuturesClient(ExchangeClient):
         t1_price: Optional[float] = None,
         t2_price: Optional[float] = None,
         t3_price: Optional[float] = None,
+        order_type: str = "MARKET",
+        limit_price: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Open a futures position with SL/TP bracket orders.
@@ -165,29 +167,42 @@ class BinanceFuturesClient(ExchangeClient):
             sl = self._round_price(symbol, sl_price)
             tp = self._round_price(symbol, tp_price)
 
-            # 2. Market order
-            result = self._client.futures_create_order(
-                symbol=symbol,
-                side=side,
-                type="MARKET",
-                quantity=qty,
-            )
-            order_id = result["orderId"]
-            avg_price = float(result.get("avgPrice", 0))
+            # 2. Market or Limit order
+            if order_type.upper() == "LIMIT":
+                if limit_price is None:
+                    raise ValueError("limit_price must be provided for LIMIT orders")
+                lp = self._round_price(symbol, limit_price)
+                result = self._client.futures_create_order(
+                    symbol=symbol,
+                    side=side,
+                    type="LIMIT",
+                    timeInForce="GTC",
+                    quantity=qty,
+                    price=str(lp)
+                )
+                order_id = result["orderId"]
+                avg_price = 0  # Not filled yet
+                logger.info("⏳ Binance OPEN LIMIT %s %s @ %.4f | %dx | qty=%.6f", side, symbol, lp, leverage, qty)
+            else:
+                result = self._client.futures_create_order(
+                    symbol=symbol,
+                    side=side,
+                    type="MARKET",
+                    quantity=qty,
+                )
+                order_id = result["orderId"]
+                avg_price = float(result.get("avgPrice", 0))
 
-            # Wait for fill
-            time.sleep(0.3)
+                # Wait for fill
+                time.sleep(0.3)
 
-            # Read back actual fill
-            if avg_price == 0:
-                pos = self.get_position(symbol)
-                if pos:
-                    avg_price = pos["entry_price"]
+                # Read back actual fill
+                if avg_price == 0:
+                    pos = self.get_position(symbol)
+                    if pos:
+                        avg_price = pos["entry_price"]
 
-            logger.info(
-                "✅ Binance OPEN %s %s @ %.4f | %dx | qty=%.6f",
-                side, symbol, avg_price, leverage, qty,
-            )
+                logger.info("✅ Binance OPEN %s %s @ %.4f | %dx | qty=%.6f", side, symbol, avg_price, leverage, qty)
 
             # 3. Place SL order
             close_side = "SELL" if side == "BUY" else "BUY"
@@ -219,13 +234,15 @@ class BinanceFuturesClient(ExchangeClient):
                 logger.info("   TP order placed @ %.4f", tp)
             except Exception as e:
                 logger.warning("   Failed to place TP for %s: %s", symbol, e)
+                
+            status_val = "OPEN" if order_type.upper() == "LIMIT" else "FILLED"
 
             return {
                 "order_id": order_id,
                 "position_id": None,
-                "filled_qty": qty,
-                "avg_price": avg_price,
-                "status": "FILLED",
+                "filled_qty": qty if status_val == "FILLED" else 0,
+                "avg_price": avg_price if status_val == "FILLED" else limit_price,
+                "status": status_val,
                 "sl_order_id": self._sl_orders.get(symbol),
                 "tp_order_id": self._tp_orders.get(symbol),
             }

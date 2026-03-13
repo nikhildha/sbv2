@@ -199,6 +199,7 @@ export async function POST(request: Request) {
             bot_name: bot.name,
             user_id: session.user.id,
             brain_type: (bot.config as any)?.brainType || 'adaptive',
+            segment_filter: (bot.config as any)?.segment || 'ALL',
           }),
           signal: AbortSignal.timeout(5000),
         });

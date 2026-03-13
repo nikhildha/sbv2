@@ -194,6 +194,204 @@ COIN_FEATURES = {
         "volume_trend_intensity",
         "amihud_illiquidity",
         "exhaustion_tail"
+    ],
+    "AKTUSDT": [
+        "rel_strength_btc",
+        "log_return",
+        "vol_zscore",
+        "volume_trend_intensity",
+        "exhaustion_tail",
+        "liquidity_vacuum",
+        "amihud_illiquidity"
+    ],
+    "API3USDT": [
+        "vol_zscore",
+        "log_return",
+        "rel_strength_btc",
+        "volume_trend_intensity",
+        "liquidity_vacuum",
+        "exhaustion_tail",
+        "volume_change"
+    ],
+    "AVAXUSDT": [
+        "vol_zscore",
+        "liquidity_vacuum",
+        "volume_trend_intensity",
+        "amihud_illiquidity",
+        "exhaustion_tail",
+        "volume_change",
+        "log_return"
+    ],
+    "AXSUSDT": [
+        "vol_zscore",
+        "log_return",
+        "rel_strength_btc",
+        "volume_trend_intensity",
+        "exhaustion_tail",
+        "liquidity_vacuum",
+        "volume_change"
+    ],
+    "BNBUSDT": [
+        "vol_zscore",
+        "volume_trend_intensity",
+        "exhaustion_tail",
+        "volume_change",
+        "liquidity_vacuum",
+        "volatility",
+        "log_return"
+    ],
+    "CRVUSDT": [
+        "amihud_illiquidity",
+        "exhaustion_tail",
+        "vol_zscore",
+        "log_return",
+        "rel_strength_btc",
+        "volume_trend_intensity",
+        "liquidity_vacuum"
+    ],
+    "DYMUSDT": [
+        "vol_zscore",
+        "log_return",
+        "rel_strength_btc",
+        "volume_trend_intensity",
+        "exhaustion_tail",
+        "liquidity_vacuum",
+        "volume_change"
+    ],
+    "INJUSDT": [
+        "vol_zscore",
+        "volume_trend_intensity",
+        "liquidity_vacuum",
+        "amihud_illiquidity",
+        "log_return",
+        "rel_strength_btc",
+        "exhaustion_tail"
+    ],
+    "IOTXUSDT": [
+        "vol_zscore",
+        "log_return",
+        "rel_strength_btc",
+        "volume_trend_intensity",
+        "exhaustion_tail",
+        "volatility",
+        "volume_change"
+    ],
+    "JUPUSDT": [
+        "vol_zscore",
+        "volume_trend_intensity",
+        "liquidity_vacuum",
+        "amihud_illiquidity",
+        "log_return",
+        "rel_strength_btc",
+        "exhaustion_tail"
+    ],
+    "PIXELUSDT": [
+        "log_return",
+        "rel_strength_btc",
+        "vol_zscore",
+        "volume_trend_intensity",
+        "exhaustion_tail",
+        "volatility",
+        "liquidity_vacuum"
+    ],
+    "POLUSDT": [
+        "vol_zscore",
+        "liquidity_vacuum",
+        "volume_trend_intensity",
+        "amihud_illiquidity",
+        "log_return",
+        "rel_strength_btc",
+        "exhaustion_tail"
+    ],
+    "POLYXUSDT": [
+        "vol_zscore",
+        "volume_trend_intensity",
+        "exhaustion_tail",
+        "log_return",
+        "rel_strength_btc",
+        "volume_change",
+        "liquidity_vacuum"
+    ],
+    "PYTHUSDT": [
+        "vol_zscore",
+        "log_return",
+        "rel_strength_btc",
+        "volume_trend_intensity",
+        "liquidity_vacuum",
+        "amihud_illiquidity",
+        "exhaustion_tail"
+    ],
+    "RONINUSDT": [
+        "vol_zscore",
+        "log_return",
+        "rel_strength_btc",
+        "liquidity_vacuum",
+        "volume_trend_intensity",
+        "exhaustion_tail",
+        "amihud_illiquidity"
+    ],
+    "STRKUSDT": [
+        "vol_zscore",
+        "volume_trend_intensity",
+        "liquidity_vacuum",
+        "amihud_illiquidity",
+        "exhaustion_tail",
+        "log_return",
+        "rel_strength_btc"
+    ],
+    "SUIUSDT": [
+        "vol_zscore",
+        "liquidity_vacuum",
+        "volume_trend_intensity",
+        "log_return",
+        "amihud_illiquidity",
+        "rel_strength_btc",
+        "exhaustion_tail"
+    ],
+    "TAOUSDT": [
+        "vol_zscore",
+        "liquidity_vacuum",
+        "log_return",
+        "rel_strength_btc",
+        "amihud_illiquidity",
+        "volume_trend_intensity",
+        "exhaustion_tail"
+    ],
+    "TIAUSDT": [
+        "vol_zscore",
+        "amihud_illiquidity",
+        "liquidity_vacuum",
+        "volume_trend_intensity",
+        "log_return",
+        "rel_strength_btc",
+        "exhaustion_tail"
+    ],
+    "TRBUSDT": [
+        "vol_zscore",
+        "liquidity_vacuum",
+        "amihud_illiquidity",
+        "volume_trend_intensity",
+        "log_return",
+        "rel_strength_btc",
+        "exhaustion_tail"
+    ],
+    "TRUUSDT": [
+        "vol_zscore",
+        "rel_strength_btc",
+        "volume_trend_intensity",
+        "log_return",
+        "exhaustion_tail",
+        "volume_change",
+        "liquidity_vacuum"
+    ],
+    "WLDUSDT": [
+        "vol_zscore",
+        "liquidity_vacuum",
+        "volume_trend_intensity",
+        "amihud_illiquidity",
+        "exhaustion_tail",
+        "log_return",
+        "volume_change"
     ]
 }
 

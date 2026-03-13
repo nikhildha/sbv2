@@ -135,6 +135,8 @@ class CoinDCXExchangeClient(ExchangeClient):
         t1_price: Optional[float] = None,
         t2_price: Optional[float] = None,
         t3_price: Optional[float] = None,
+        order_type: str = "MARKET",
+        limit_price: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Open a futures position on CoinDCX with SL/TP."""
         pair = cdx.to_coindcx_pair(symbol)
@@ -165,11 +167,14 @@ class CoinDCXExchangeClient(ExchangeClient):
             sl = self._price_round(sl_price)
             tp = self._price_round(tp_price)
 
+            ord_type_cdx = "limit_order" if order_type.upper() == "LIMIT" else "market_order"
+            lp = self._price_round(limit_price) if limit_price else None
+
             # Place order with retry on qty step error
             try:
                 result = cdx.create_order(
-                    pair=pair, side=coindcx_side, order_type="market_order",
-                    quantity=quantity, leverage=leverage,
+                    pair=pair, side=coindcx_side, order_type=ord_type_cdx,
+                    quantity=quantity, leverage=leverage, price=lp,
                     take_profit_price=tp, stop_loss_price=sl,
                 )
             except Exception as ord_err:
@@ -178,8 +183,8 @@ class CoinDCXExchangeClient(ExchangeClient):
                     real_step = float(m.group(1))
                     quantity = self._round_to_step(self.COINDCX_MIN_NOTIONAL / price, real_step)
                     result = cdx.create_order(
-                        pair=pair, side=coindcx_side, order_type="market_order",
-                        quantity=quantity, leverage=leverage,
+                        pair=pair, side=coindcx_side, order_type=ord_type_cdx,
+                        quantity=quantity, leverage=leverage, price=lp,
                         take_profit_price=tp, stop_loss_price=sl,
                     )
                 else:
@@ -206,12 +211,14 @@ class CoinDCXExchangeClient(ExchangeClient):
                 side, symbol, confirmed.get("avg_price", price), leverage, quantity,
             )
 
+            status_val = "OPEN" if order_type.upper() == "LIMIT" else "FILLED"
+
             return {
                 "order_id": str(result) if result else None,
                 "position_id": confirmed.get("position_id"),
-                "filled_qty": confirmed.get("filled_qty", quantity),
-                "avg_price": confirmed.get("avg_price", price),
-                "status": "FILLED",
+                "filled_qty": confirmed.get("filled_qty", quantity) if status_val == "FILLED" else 0,
+                "avg_price": confirmed.get("avg_price", price) if status_val == "FILLED" else lp,
+                "status": status_val,
             }
 
         except Exception as e:

@@ -14,13 +14,12 @@ IST = timezone(timedelta(hours=5, minutes=30))
 
 import config
 from hmm_brain import HMMBrain, MultiTFHMMBrain
-from brain_switcher import BrainSwitcher
 from data_pipeline import fetch_klines, get_multi_timeframe_data, _get_binance_client
 from feature_engine import compute_all_features, compute_hmm_features, compute_trend, compute_support_resistance, compute_sr_position, compute_ema
 from execution_engine import ExecutionEngine
 from risk_manager import RiskManager
 from sideways_strategy import evaluate_mean_reversion
-from coin_scanner import get_top_coins_by_volume, reload_coin_tiers
+from coin_scanner import get_top_coins_by_volume, get_active_bot_segment_pool, reload_coin_tiers
 from tools.weekly_reclassify import needs_reclassify, run_reclassify
 import threading
 import tradebook
@@ -29,8 +28,6 @@ import sentiment_engine as _sent_mod
 import orderflow_engine as _of_mod
 import coindcx_client as cdx
 from llm_reasoning import AthenaEngine
-from scalper_brain import QuickScalperBrain
-
 # ─── Logging Setup ───────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -103,8 +100,6 @@ class RegimeMasterBot:
         self._SCAN_BATCH_SIZE: int = config.TOP_COINS_LIMIT
         self._SCAN_POOL_SIZE: int = config.TOP_COINS_LIMIT
 
-        # Adaptive Brain Switcher
-        self._brain_switcher = BrainSwitcher()
 
         # Weekly tier re-classification state
         self._reclassify_thread: threading.Thread | None = None
@@ -225,6 +220,9 @@ class RegimeMasterBot:
         # Always: sync positions (detect SL/TP auto-closes)
         self._sync_positions()
 
+        # Always: manage OPEN limit orders (Expiry, Escape Hatch, Paper Fills)
+        self._manage_limit_orders()
+
         # Always: update unrealized P&L + trailing SL/TP (with live funding rates)
         try:
             # Build funding rates dict from live CoinDCX prices
@@ -344,16 +342,17 @@ class RegimeMasterBot:
 
         # ── 1. Coin scan pool ─────────
         if config.MULTI_COIN_MODE:
-            num_rotations = max(1, self._SCAN_POOL_SIZE // self._SCAN_BATCH_SIZE)
-
             # Refresh the full coin pool every N cycles (or on first run)
-            if not self._full_coin_pool or self._cycle_count % max(1, config.SCAN_INTERVAL_CYCLES * num_rotations) == 1:
-                logger.info("🔄 Refreshing full coin pool (%d coins) from Binance...", self._SCAN_POOL_SIZE)
-                self._full_coin_pool = get_top_coins_by_volume(limit=self._SCAN_POOL_SIZE)
+            refresh_rotations = max(1, self._SCAN_POOL_SIZE // self._SCAN_BATCH_SIZE)
+            if not self._full_coin_pool or self._cycle_count % max(1, config.SCAN_INTERVAL_CYCLES * refresh_rotations) == 1:
+                logger.info("🔄 Refreshing Segment-First coin pool based on %d active bots...", len(config.ENGINE_ACTIVE_BOTS))
+                self._full_coin_pool = get_active_bot_segment_pool(config.ENGINE_ACTIVE_BOTS)
                 logger.info("📋 Full pool (%d coins): %s ...",
                             len(self._full_coin_pool), ", ".join(self._full_coin_pool[:8]))
 
             # Determine slice based on rotation
+            actual_pool_size = max(1, len(self._full_coin_pool))
+            num_rotations = max(1, (actual_pool_size + self._SCAN_BATCH_SIZE - 1) // self._SCAN_BATCH_SIZE)
             self._scan_rotation = (self._cycle_count - 1) % num_rotations
             batch_start = self._scan_rotation * self._SCAN_BATCH_SIZE
             batch_end   = batch_start + self._SCAN_BATCH_SIZE
@@ -383,11 +382,8 @@ class RegimeMasterBot:
             # Keep _coin_list for dashboard / health endpoint compatibility
             self._coin_list = symbols
 
-            # Brain scan limit (conservative brain caps at 15 anyway)
-            brain_scan_limit = config.BRAIN_PROFILES.get(
-                self._brain_switcher.active_brain, {}
-            ).get("scan_limit", self._SCAN_BATCH_SIZE)
-            symbols = symbols[:brain_scan_limit]
+            # Fallback to standard tracking limit
+            symbols = symbols[:self._SCAN_BATCH_SIZE]
         else:
             symbols = [config.PRIMARY_SYMBOL]
 
@@ -476,9 +472,25 @@ class RegimeMasterBot:
                     len(scan_symbols), len(deployed_symbols),
                     ", ".join(s.replace("USDT", "") for s in scan_symbols[:8]))
 
+        # ── 4b. Macro Veto Overlay (BTC Flash Crash Detection) ──
+        btc_flash_crash = False
+        try:
+            btc_df = fetch_klines("BTCUSDT", "15m", limit=3)
+            if btc_df is not None and len(btc_df) >= 2:
+                btc_latest = float(btc_df["close"].iloc[-1])
+                btc_prev = float(btc_df["close"].iloc[-2])
+                btc_15m_return = (btc_latest - btc_prev) / btc_prev
+                # Block LONGS if BTC dropped more than configured threshold in the last 15m candle
+                threshold_pct = getattr(config, "MACRO_VETO_BTC_DROP_PCT", 1.5) / 100.0
+                if btc_15m_return < -threshold_pct:
+                    btc_flash_crash = True
+                    logger.warning("🚨 MACRO VETO: BTCUSDT Flash Crash! (15m return: %.2f%%) — Blocking all long setups.", btc_15m_return * 100)
+        except Exception as e:
+            logger.debug("Failed to fetch BTC macro context: %s", e)
+
         for symbol in scan_symbols:
             try:
-                result = self._analyze_coin(symbol, balance)
+                result = self._analyze_coin(symbol, balance, btc_flash_crash=btc_flash_crash)
                 if result:
                     raw_results.append(result)
             except Exception as e:
@@ -490,7 +502,7 @@ class RegimeMasterBot:
         raw_results.sort(key=lambda x: x.get("conviction", 0), reverse=True)
         # Note: If no bots exist in config.ENGINE_ACTIVE_BOTS, fall back to self._active_profiles
         eval_targets = _tick_active_bots if _tick_active_bots else [
-            {"bot_id": config.ENGINE_BOT_ID, "bot_name": p["label"], "user_id": config.ENGINE_USER_ID, "brain_type": "adaptive"} 
+            {"bot_id": config.ENGINE_BOT_ID, "bot_name": p["label"], "user_id": config.ENGINE_USER_ID, "brain_type": "athena"} 
             for pid, p in self._active_profiles.items()
         ]
         
@@ -503,14 +515,10 @@ class RegimeMasterBot:
 
         for target in eval_targets:
             bot_id = target.get("bot_id", config.ENGINE_BOT_ID)
-            bot_name = target.get("bot_name", "Adaptive Bot")
+            bot_name = target.get("bot_name", "Athena Bot")
             user_id = target.get("user_id", config.ENGINE_USER_ID)
-            brain_type = target.get("brain_type", "adaptive")
+            brain_type = target.get("brain_type", "athena")
             
-            # Skip scalper in this traditional loop (already handled above)
-            if brain_type == "quickscalper":
-                continue
-                
             # Match the Next.js profile string to the engine's internal configuration
             profile_name = bot_name.lower()
             if "conservative" in profile_name:
@@ -524,6 +532,15 @@ class RegimeMasterBot:
                 profile_id = "balanced"
                 
             bot_deployed = 0
+
+            # --- Correlation Control: Track Active Segments for this bot ---
+            from segment_features import get_segment_for_coin
+            active_segments = {} # segment -> count
+            for key in tradebook_active_keys:
+                if key.startswith(f"{bot_id}:"):
+                    _, act_sym = key.split(":", 1)
+                    seg_name = get_segment_for_coin(act_sym)
+                    active_segments[seg_name] = active_segments.get(seg_name, 0) + 1
 
             for raw in raw_results:
                 sym = raw["symbol"]
@@ -555,6 +572,16 @@ class RegimeMasterBot:
                         bot_name, current_total, max_pos, trade["side"], sym, trade["leverage"])
                     self._coin_states.setdefault(sym, {})["deploy_status"] = f"FILTERED: overall max pos ({current_total}/{max_pos})"
                     continue
+                
+                # --- Segment Correlation Check ---
+                seg_name = get_segment_for_coin(sym)
+                max_seg = getattr(config, "MAX_ACTIVE_PER_SEGMENT", 1)
+                if active_segments.get(seg_name, 0) >= max_seg:
+                    logger.warning("   ⛔ [%s] %s: FILTERED segment %s max reached (%d/%d) — Correlation Control", 
+                        bot_name, sym, seg_name, active_segments.get(seg_name, 0), max_seg)
+                    self._coin_states.setdefault(sym, {})["deploy_status"] = f"FILTERED: segment limit ({seg_name})"
+                    continue
+
                 logger.info("   ✅ [%s] %s: PASSED evaluation — preparing to deploy", profile_id, sym)
 
                 # Track eligible trades before max position cap
@@ -665,6 +692,7 @@ class RegimeMasterBot:
                     leverage=trade["leverage"],
                     quantity=trade["quantity"],
                     atr=trade["atr"],
+                    ema_15m_20=trade.get("ema_15m_20"),
                     regime=trade["regime"],
                     confidence=trade["confidence"],
                     reason=trade["reason"],
@@ -723,7 +751,7 @@ class RegimeMasterBot:
 
                 self._active_positions[pos_key] = {
                     "profile_id": profile_id,
-                    "bot_name": profile["label"],
+                    "bot_name": active_profile.get("label", "Athena Bot"),
                     "regime": trade["regime_name"],
                     "confidence": trade["confidence"],
                     "side": trade["side"],
@@ -738,6 +766,7 @@ class RegimeMasterBot:
                 self._trade_count += 1
                 deployed += 1
                 bot_deployed += 1
+                active_segments[seg_name] = active_segments.get(seg_name, 0) + 1
 
                 # Collect trade info for batch alert
                 deployed_trades.append({
@@ -749,8 +778,9 @@ class RegimeMasterBot:
                     "entry_price": entry_price,
                     "stop_loss": fill_sl,
                     "take_profit": fill_tp,
-                    "profile": profile["label"],
+                    "profile": active_profile.get("label", profile_id),
                 })
+
 
             if bot_deployed:
                 logger.info("   [%s] deployed %d trades", bot_name, bot_deployed)
@@ -780,7 +810,7 @@ class RegimeMasterBot:
 
     # ─── Per-Coin Analysis ───────────────────────────────────────────────────
 
-    def _analyze_coin(self, symbol, balance):
+    def _analyze_coin(self, symbol, balance, btc_flash_crash=False):
         """
         Analyze a single coin. Returns a trade dict if eligible, else None.
         Uses multi-timeframe analysis: 1h (primary) + 4h (macro confirmation).
@@ -861,6 +891,14 @@ class RegimeMasterBot:
                 }
                 return None
 
+            # Macro Veto Block
+            if side == "BUY" and btc_flash_crash:
+                self._coin_states[symbol] = {
+                    "symbol": symbol, "regime": regime_summary,
+                    "confidence": 0, "price": 0, "action": "MACRO_VETO_BTC_CRASH",
+                }
+                return None
+
             # Use 1H data for trade execution params (ATR, price, etc.)
             # 1H should always be available since it's in MULTI_TF_TIMEFRAMES
             df_1h_feat = tf_data.get("1h")
@@ -897,16 +935,9 @@ class RegimeMasterBot:
                         btc_regime_str = "BEAR"
                     btc_margin = btc_m
 
-            # Brain switcher: select optimal brain config
-            vol_pct = (current_atr / current_price / 0.03) if current_price > 0 else 0.5
-            vol_pct = max(0.0, min(1.0, vol_pct))
-            brain_id = self._brain_switcher.select_brain(
-                btc_regime=btc_regime_str,
-                btc_margin=btc_margin,
-                vol_percentile=vol_pct,
-                tf_agreement=tf_agreement,
-            )
-            brain_cfg = BrainSwitcher.get_brain_config(brain_id)
+            # Fallback active brain profile
+            brain_id = "balanced"
+            brain_cfg = config.BRAIN_PROFILES.get(brain_id, {})
 
             # Weekend skip
             if config.WEEKEND_SKIP_ENABLED:
@@ -938,11 +969,12 @@ class RegimeMasterBot:
                     return None
 
             # Conviction threshold check (brain-specific)
-            if conviction < brain_cfg["conviction_min"]:
+            conv_min = brain_cfg.get("conviction_min", 60)
+            if conviction < conv_min:
                 self._coin_states[symbol] = {
                     "symbol": symbol, "regime": regime_summary,
                     "confidence": round(conf, 4), "price": current_price,
-                    "action": f"LOW_CONVICTION:{conviction:.1f}<{brain_cfg['conviction_min']}",
+                    "action": f"LOW_CONVICTION:{conviction:.1f}<{conv_min}",
                     "brain": brain_id,
                 }
                 return None
@@ -1206,6 +1238,10 @@ class RegimeMasterBot:
         else:
             return None
 
+        if side == "BUY" and btc_flash_crash:
+            self._coin_states[symbol]["action"] = "MACRO_VETO_BTC_CRASH"
+            return None
+
         current_atr   = df_1h_feat["atr"].iloc[-1]   if "atr"   in df_1h_feat.columns else 0.0
         current_price = float(df_1h_feat["close"].iloc[-1])
         current_swing_l = float(df_1h_feat["swing_l"].iloc[-1]) if "swing_l" in df_1h_feat.columns else None
@@ -1244,13 +1280,14 @@ class RegimeMasterBot:
         # 4. 15m momentum filter + order flow (fetch df_15m once for both)
         df_15m = None
         orderflow_score = None
+        ema_15m_20 = None
         try:
             df_15m = fetch_klines(symbol, config.TIMEFRAME_EXECUTION, limit=50)
             if df_15m is not None and len(df_15m) >= 5:
                 df_15m_feat = compute_all_features(df_15m)
                 price_now   = float(df_15m_feat["close"].iloc[-1])
                 price_5_ago = float(df_15m_feat["close"].iloc[-5])
-                # Momentum check moved after Order Flow to ensure data visibility
+                ema_15m_20  = float(compute_ema(df_15m_feat["close"], 20).iloc[-1])
                 pass
         except Exception:
             pass
@@ -1341,6 +1378,7 @@ class RegimeMasterBot:
             "symbol": symbol,
             "side": side,
             "atr": current_atr,
+            "ema_15m_20": ema_15m_20,
             "swing_l": current_swing_l,
             "swing_h": current_swing_h,
             "regime": regime,
@@ -1408,6 +1446,24 @@ class RegimeMasterBot:
             self._coin_states.setdefault(symbol, {})["deploy_status"] = "FILTERED: no price data"
             return None
 
+        # ── Dynamic Leverage Selection (Execution Alpha) ──
+        if getattr(config, 'EXECUTION_DYNAMIC_LEVERAGE', True):
+            atr_pct = raw["atr"] / current_price
+            min_lev = getattr(config, 'EXECUTION_MIN_LEVERAGE', 10)
+            max_lev = getattr(config, 'EXECUTION_MAX_LEVERAGE', 25)
+            
+            # Linear scaling: 0.5% ATR (low vol) = 25x, 1.5% ATR (high vol) = 10x
+            if atr_pct >= 0.015:
+                dyn_leverage = min_lev
+            elif atr_pct <= 0.005:
+                dyn_leverage = max_lev
+            else:
+                ratio = (0.015 - atr_pct) / 0.010
+                dyn_leverage = int(min_lev + ratio * (max_lev - min_lev))
+            
+            # Limit strictly to the [min_lev, max_lev] boundaries
+            leverage = max(min_lev, min(dyn_leverage, max_lev))
+
         quantity, final_leverage = self.risk.calculate_margin_first_position(
             margin, current_price, raw["atr"], leverage
         )
@@ -1433,6 +1489,7 @@ class RegimeMasterBot:
             "leverage": leverage,
             "quantity": quantity,
             "atr": raw["atr"],
+            "ema_15m_20": raw.get("ema_15m_20"),
             "swing_l": raw.get("swing_l"),
             "swing_h": raw.get("swing_h"),
             "regime": raw["regime"],
@@ -1490,6 +1547,122 @@ class RegimeMasterBot:
                 )
         except Exception as e:
             logger.warning("Could not load tradebook positions on startup: %s", e)
+
+    def _manage_limit_orders(self):
+        """Manage 'OPEN' limit orders (Paper Fills, TIF expiry & Escape Hatch)."""
+        open_trades = [t for t in tradebook.get_active_trades() if t["status"] == "OPEN"]
+        if not open_trades:
+            return
+            
+        import coindcx_client as cdx
+        from data_pipeline import get_current_price
+
+        for trade in open_trades:
+            try:
+                sym = trade["symbol"]
+                trade_id = trade["trade_id"]
+                entry_time = datetime.fromisoformat(trade["entry_timestamp"].replace("Z", "+00:00")).replace(tzinfo=None)
+                elapsed_min = (datetime.utcnow() - entry_time).total_seconds() / 60.0
+                is_live = (trade.get("mode") or "").upper().startswith("LIVE")
+                
+                # 1. Check TIF Expiry
+                if elapsed_min > config.EXECUTION_TIF_MINUTES:
+                    logger.info("⏳ Limit Order %s (%s) expired after %.1fm (TIF). Cancelling.", trade_id, sym, elapsed_min)
+                    if is_live and trade.get("position_id"):
+                        try:
+                            # Note: CoinDCX expects order_id, we saved it as position_id
+                            cdx.cancel_order(trade["position_id"])
+                        except Exception as e:
+                            logger.error("Failed to cancel CoinDCX order %s: %s", trade["position_id"], e)
+                    tradebook.cancel_trade(trade_id, reason="TIF_EXPIRED")
+                    continue
+                    
+                # 2. Get current price
+                current_price = get_current_price(sym)
+                if not current_price:
+                    continue
+                    
+                # 3. Paper Mode: Simulated Fill
+                if not is_live:
+                    if (trade["side"] == "BUY" and current_price <= trade["entry_price"]) or \
+                       (trade["side"] == "SELL" and current_price >= trade["entry_price"]):
+                        logger.info("🟢 PAPER Limit Order %s (%s) FILLED at %.6f. Transitioning to ACTIVE.", trade_id, sym, current_price)
+                        tradebook.activate_limit_order(trade_id, trade["entry_price"], trade["quantity"])
+                        self._active_positions[f"{trade.get('profile_id', 'standard')}:{sym}"] = {
+                            "regime": trade.get("regime", "UNKNOWN"),
+                            "confidence": trade.get("confidence", 0),
+                            "side": trade.get("side", "BUY"),
+                            "entry_time": datetime.now(IST).replace(tzinfo=None).isoformat(),
+                            "leverage": trade.get("leverage", 1),
+                            "entry_price": trade["entry_price"],
+                            "quantity": trade["quantity"]
+                        }
+                        continue
+                        
+                # 4. LIVE Virtual Limit Orders: Real Execution Fill
+                elif is_live and trade.get("order_type") == "VIRTUAL_LIMIT":
+                    if (trade["side"] == "BUY" and current_price <= trade["entry_price"]) or \
+                       (trade["side"] == "SELL" and current_price >= trade["entry_price"]):
+                        logger.info("🟢 LIVE VIRTUAL Limit %s (%s) Triggered at %.6f! Executing Market Order.", trade_id, sym, current_price)
+                        
+                        rev_regimes = {v: k for k, v in config.REGIME_NAMES.items()}
+                        reg_id = rev_regimes.get(trade.get("regime", "UNKNOWN"), 1)
+                        
+                        # Use self.executor to place a fallback market order
+                        result = self.executor.execute_trade(
+                            symbol=sym,
+                            side=trade["side"],
+                            leverage=trade["leverage"],
+                            quantity=trade["quantity"],
+                            atr=trade.get("atr", trade.get("atr_at_entry", 0.01)),
+                            ema_15m_20=None,  # Force MARKET
+                            regime=reg_id,
+                            confidence=trade.get("confidence", 0),
+                            reason=f"Ghost Limit Trigger: {trade.get('reason', '')}"
+                        )
+                        
+                        if result and result.get("entry_price", 0) > 0:
+                            # Activate the virtual limit in the tradebook & attach exchange info
+                            tradebook.activate_limit_order(trade_id, result["entry_price"], result.get("quantity", trade["quantity"]))
+                            tradebook.update_trade(trade_id, {
+                                "position_id": result.get("position_id"),
+                                "exchange": result.get("exchange", "coindcx")
+                            })
+                            # Add to active positions tracker
+                            self._active_positions[f"{trade.get('bot_id', config.ENGINE_BOT_ID)}:{sym}"] = {
+                                "profile_id": trade.get("profile_id", "standard"),
+                                "bot_name": trade.get("bot_name", "Athena Bot"),
+                                "regime": trade.get("regime", "UNKNOWN"),
+                                "confidence": trade.get("confidence", 0),
+                                "side": trade["side"],
+                                "entry_time": datetime.now(IST).replace(tzinfo=None).isoformat(),
+                                "leverage": result.get("leverage", trade.get("leverage", 1)),
+                                "entry_price": result["entry_price"],
+                                "quantity": result.get("quantity", trade["quantity"]),
+                                "exchange": result.get("exchange", "coindcx"),
+                                "position_id": result.get("position_id")
+                            }
+                        else:
+                            logger.error("🔴 LIVE VIRTUAL Limit %s (%s) Market Execution FAIL! Canceling.", trade_id, sym)
+                            tradebook.cancel_trade(trade_id, reason="EXCHANGE_MARKET_FAIL")
+                        continue
+
+                # 4. Check Escape Hatch
+                atr_at_entry = trade.get("atr_at_entry", 0)
+                if atr_at_entry > 0:
+                    dist = abs(current_price - trade["entry_price"])
+                    if dist > config.EXECUTION_ESCAPE_ATR * atr_at_entry:
+                        logger.info("🏃 Escape Hatch triggered for %s (%s) | Dist: %.4f > Threshold: %.4f. Cancelling.", 
+                                    trade_id, sym, dist, config.EXECUTION_ESCAPE_ATR * atr_at_entry)
+                        if is_live and trade.get("position_id"):
+                            try:
+                                cdx.cancel_order(trade["position_id"])
+                            except Exception as e:
+                                logger.error("Failed to cancel CoinDCX order %s: %s", trade["position_id"], e)
+                        tradebook.cancel_trade(trade_id, reason="ESCAPE_HATCH")
+
+            except Exception as e:
+                logger.error("Error managing limit order %s: %s", trade.get("trade_id", "unknown"), e)
 
     def _sync_positions(self):
         """
@@ -1551,12 +1724,35 @@ class RegimeMasterBot:
         tb_active = tradebook.get_active_trades()
         tb_symbols = {t["symbol"] for t in tb_active}
 
-        # ── 1. Detect exchange-side closures ────────────────────────
+        # ── 1. Detect exchange-side closures / Fills ────────────────────────
         # If tradebook has an ACTIVE LIVE trade but CoinDCX doesn't → closed on exchange
         for trade in tb_active:
             sym = trade["symbol"]
-            if not (trade.get("mode") or "").upper().startswith("LIVE"):
+            is_live = (trade.get("mode") or "").upper().startswith("LIVE")
+            if not is_live:
                 continue
+
+            # Handle Limit Orders getting FILLED
+            if trade.get("status") == "OPEN":
+                # Check if it was filled by checking cdx_active
+                if sym in cdx_active:
+                    # Transition to ACTIVE!
+                    logger.info("🟢 Limit Order %s (%s) was FILLED on CoinDCX. Transitioning to ACTIVE.", trade["trade_id"], sym)
+                    tradebook.activate_limit_order(trade["trade_id"], cdx_active[sym]["avg_price"], cdx_active[sym]["active_pos"])
+                    # Also update internal execution state layer
+                    self._active_positions[f"{trade.get('profile_id', 'standard')}:{sym}"] = {
+                        "regime": trade.get("regime", "UNKNOWN"),
+                        "confidence": trade.get("confidence", 0),
+                        "side": trade.get("side", "BUY"),
+                        "entry_time": datetime.now(IST).replace(tzinfo=None).isoformat(),
+                        "leverage": trade.get("leverage", 1),
+                        "entry_price": cdx_active[sym]["avg_price"],
+                        "quantity": abs(cdx_active[sym]["active_pos"]),
+                        "exchange": "coindcx",
+                        "position_id": cdx_active[sym]["position_id"],
+                    }
+                continue
+
             if sym not in cdx_active:
                 # Fetch actual exit price + fee from CoinDCX trade history (LIVE only)
                 exit_price = None

@@ -38,14 +38,16 @@ SECONDARY_SYMBOLS = ["ETHUSDT"]
 
 # ─── Crypto Segments (for Segment-Level Analysis) ───────────────────────────────
 CRYPTO_SEGMENTS = {
-    "L1": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
-    "L2": ["ARBUSDT", "OPUSDT", "MATICUSDT"],
-    "DeFi": ["UNIUSDT", "AAVEUSDT", "LDOUSDT"],
-    "AI": ["FETUSDT", "RNDRUSDT", "OCEANUSDT"],
-    "Meme": ["DOGEUSDT", "PEPEUSDT", "WIFUSDT"],
-    "RWA": ["ONDOUSDT", "PENDLEUSDT", "LINKUSDT"],
-    "Gaming": ["GALAUSDT", "IMXUSDT", "SANDUSDT"],
-    "DePIN": ["FILUSDT", "ARUSDT", "RUNEUSDT"]
+    "L1": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "AVAXUSDT", "SUIUSDT"],
+    "L2": ["ARBUSDT", "OPUSDT", "POLUSDT", "MNTUSDT", "STRKUSDT"],
+    "DeFi": ["UNIUSDT", "AAVEUSDT", "CRVUSDT", "JUPUSDT", "RUNEUSDT"],
+    "AI": ["TAOUSDT", "FETUSDT", "INJUSDT", "WLDUSDT", "AKTUSDT"],
+    "Meme": ["DOGEUSDT", "SHIBUSDT", "PEPEUSDT", "WIFUSDT", "BONKUSDT"],
+    "RWA": ["ONDOUSDT", "PENDLEUSDT", "LINKUSDT", "POLYXUSDT", "TRUUSDT"],
+    "Gaming": ["IMXUSDT", "AXSUSDT", "SANDUSDT", "RONINUSDT", "PIXELUSDT"],
+    "DePIN": ["FILUSDT", "ARUSDT", "HNTUSDT", "IOTXUSDT"],
+    "Modular": ["TIAUSDT", "DYMUSDT"],
+    "Oracles": ["PYTHUSDT", "TRBUSDT", "API3USDT"]
 }
 
 # ─── Timeframes ─────────────────────────────────────────────────────────────────
@@ -61,14 +63,17 @@ MULTI_TF_WEIGHTS = {"1d": 40, "1h": 35, "15m": 25}  # Conviction weights (sum=10
 MULTI_TF_MIN_AGREEMENT = 2            # Minimum TFs agreeing on direction (2 of 3)
 MULTI_TF_MIN_MODELS = 2               # Minimum trained models required
 
+# ─── Macro Overlay Settings ───────────
+MACRO_VETO_BTC_DROP_PCT = 1.5           # Veto longs if BTC drops > 1.5% in 15m (flash crash)
+
 # ─── Optimal Risk Managers per Segment ──────────────────────────────────────────
 OPTIMAL_RISK_MANAGERS = {
     "AI": "RM3_Swing",
     "Meme": "RM3_Swing",
     "L2": "RM3_Swing",
     "DePIN": "RM3_Swing",
-    "Gaming": "RM5_Trailing",
-    "RWA": "RM5_Trailing",
+    "Gaming": "RM3_Swing",
+    "RWA": "RM3_Swing",
     "L1": "RM2_ATR",
     "DeFi": "RM3_Swing"
 }
@@ -130,46 +135,39 @@ STRATEGY_PROFILES = {
         "mt_rr_ratio": 3,
     },
 }
-ACTIVE_PROFILES = ["standard"]
 
-# ─── Brain Profiles (Adaptive Switcher — replaces static strategy profiles) ────
-# Each brain has its own leverage, conviction threshold, and SL/TP params.
-# The BrainSwitcher selects the active brain based on market conditions.
+# ─── Static Bot Profiles ────────────────────────────────────────────────────────
+# Maps the UI bot string ("conservative", "aggressive") to its static configuration.
 BRAIN_PROFILES = {
     "conservative": {
         "label": "🟢 Conservative",
         "leverage": 4,
-        "conviction_min": 70,
-        "atr_sl_mult": 1.5,
-        "atr_tp_mult": 3.0,
         "max_loss_pct": 20,
         "max_positions": 10,
         "capital_per_trade": 100,
-        "scan_limit": 15,             # Fewer coins = highest liquidity only
     },
     "balanced": {
         "label": "🟡 Balanced",
         "leverage": 8,
-        "conviction_min": 60,
-        "atr_sl_mult": 2.0,
-        "atr_tp_mult": 4.0,
         "max_loss_pct": 20,
         "max_positions": 10,
         "capital_per_trade": 100,
-        "scan_limit": 30,             # Mid-range scan for normal conditions
     },
     "aggressive": {
         "label": "🔴 Aggressive",
         "leverage": 10,
-        "conviction_min": 50,
-        "atr_sl_mult": 2.0,
-        "atr_tp_mult": 3.0,
         "max_loss_pct": 25,
         "max_positions": 10,
         "capital_per_trade": 100,
-        "scan_limit": 50,             # Wide net during strong trends
     },
 }
+# ─── Execution Engine (Alpha) ──────────────────────────────────────────────────
+EXECUTION_ATR_PULLBACK = True       # Wait for limit order at EMA20 if price > EMA20 + 0.5 ATR
+EXECUTION_TIF_MINUTES = 60          # Time-In-Force: Max lifespan of limit order before cancellation
+EXECUTION_ESCAPE_ATR = 2.0          # Escape Hatch: Cancel if price moves this many ATRs away
+EXECUTION_DYNAMIC_LEVERAGE = True   # Select leverage (10x-25x) based on current ATR%
+EXECUTION_MIN_LEVERAGE = 10         # Used when ATR volatility is high (>= 1.5%)
+EXECUTION_MAX_LEVERAGE = 25         # Used when ATR volatility is low (<= 0.5%)
 
 # ─── Risk Management ────────────────────────────────────────────────────────────
 RISK_PER_TRADE = 0.04
@@ -266,12 +264,18 @@ MULTI_COIN_MODE = True          # Enable multi-coin scanning
 # ─── Dynamic Segment Scanner ─────────────────────────────────────────────────────
 SCANNER_SEGMENT_ROTATION = True     # Rotate market segments every hour
 SCANNER_COINS_PER_SEGMENT = 5       # Scan top 5 highest-volume coins within the active segment
+SEGMENT_SCAN_LIMIT = 2              # Focus on the Top 2 hottest segments
+MAX_ACTIVE_PER_SEGMENT = 1          # Correlation control: max 1 trade per segment
 
-# ─── QuickScalper ──────────────────────────────────────────────────────────────────────────────────
-SCALPER_ENABLED = os.getenv("SCALPER_ENABLED", "true").lower() == "true"
-SCALPER_LEVERAGE = int(os.getenv("SCALPER_LEVERAGE", "20"))          # 20-50x; clipped in QuickScalperBrain
-SCALPER_CAPITAL = float(os.getenv("SCALPER_CAPITAL", "50"))          # Capital per scalp trade ($)
-SCALPER_MAX_POSITIONS = int(os.getenv("SCALPER_MAX_POSITIONS", "3")) # Max concurrent scalp trades
+# ─── Institutional Execution Alpha ───────────────────────────────────────────────
+EXECUTION_ATR_PULLBACK = True       # Wait for Limit Order at 20-EMA instead of market buying
+EXECUTION_TIF_MINUTES = 60          # Max lifespan of a pending limit order (1 hour)
+EXECUTION_ESCAPE_ATR = 2.0          # Cancel pending order if market price moves > 2.0 ATR away
+EXECUTION_VIRTUAL_LIMITS = True     # Use Virtual Ghost Limits (held locally) to prevent margin deadlock
+EXECUTION_TOXIC_FLOW_ATR = 1.0      # Cancel limit if trigger candle closes > 1.0 ATR against trend
+EXECUTION_MAX_LEVERAGE = 25         # Max leverage limit to avoid wicks
+EXECUTION_MIN_LEVERAGE = 10         # Min leverage floor
+
 
 
 # ─── Telegram Notifications ──────────────────────────────────────────────────────
